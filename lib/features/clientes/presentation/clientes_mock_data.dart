@@ -1,0 +1,225 @@
+import 'package:flutter/material.dart';
+
+enum ResponsibleRole { supervisor, gerente }
+
+ResponsibleRole responsibleRoleFromCode(String code) {
+  switch (code) {
+    case 'gerente':
+      return ResponsibleRole.gerente;
+    case 'supervisor':
+    default:
+      return ResponsibleRole.supervisor;
+  }
+}
+
+extension ResponsibleRoleX on ResponsibleRole {
+  String get code => switch (this) {
+        ResponsibleRole.supervisor => 'supervisor',
+        ResponsibleRole.gerente => 'gerente',
+      };
+
+  String get label => switch (this) {
+        ResponsibleRole.supervisor => 'Supervisor',
+        ResponsibleRole.gerente => 'Gerente',
+      };
+}
+
+class ClientResponsibleRecord {
+  const ClientResponsibleRecord({
+    required this.id,
+    required this.role,
+    required this.title,
+    required this.position,
+    required this.fullName,
+    required this.phone,
+    required this.email,
+    required this.contactNotes,
+  });
+
+  final String id;
+  final ResponsibleRole role;
+  final String title;
+  final String position;
+  final String fullName;
+  final String phone;
+  final String email;
+  final String contactNotes;
+
+  ClientResponsibleRecord copyWith({
+    String? id,
+    ResponsibleRole? role,
+    String? title,
+    String? position,
+    String? fullName,
+    String? phone,
+    String? email,
+    String? contactNotes,
+  }) {
+    return ClientResponsibleRecord(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      title: title ?? this.title,
+      position: position ?? this.position,
+      fullName: fullName ?? this.fullName,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      contactNotes: contactNotes ?? this.contactNotes,
+    );
+  }
+}
+
+class ClientRecord {
+  const ClientRecord({
+    required this.id,
+    required this.name,
+    required this.sector,
+    required this.badge,
+    required this.activeProjects,
+    required this.months,
+    required this.icon,
+    required this.contactEmail,
+    required this.phone,
+    required this.address,
+    required this.responsibles,
+  });
+
+  final String id;
+  final String name;
+  final String sector;
+  final String badge;
+  final String activeProjects;
+  final String months;
+  final IconData icon;
+  final String contactEmail;
+  final String phone;
+  final String address;
+  final List<ClientResponsibleRecord> responsibles;
+}
+
+ClientRecord? findClientById(String clientId) {
+  for (final client in mockClients) {
+    if (client.id == clientId) {
+      return client;
+    }
+  }
+  return null;
+}
+
+const mockClients = <ClientRecord>[
+  ClientRecord(
+    id: 'hotel-live-aqua',
+    name: 'Hotel Live Aqua',
+    sector: 'Sector Hospitalidad',
+    badge: 'Premium',
+    activeProjects: '03',
+    months: '12',
+    icon: Icons.apartment,
+    contactEmail: 'operaciones@liveaqua.mx',
+    phone: '+52 81 5555 1001',
+    address: 'Av. Lazaro Cardenas 2400, Monterrey, NL',
+    responsibles: [
+      ClientResponsibleRecord(
+        id: 'hla-supervisor',
+        role: ResponsibleRole.supervisor,
+        title: 'Arq.',
+        position: 'Supervisor de obra',
+        fullName: 'Roberto Mendez',
+        phone: '+52 81 5555 2001',
+        email: 'roberto.mendez@liveaqua.mx',
+        contactNotes: 'Firma actas de entrega y valida avances en sitio.',
+      ),
+      ClientResponsibleRecord(
+        id: 'hla-gerente',
+        role: ResponsibleRole.gerente,
+        title: 'Ing.',
+        position: 'Gerente de mantenimiento',
+        fullName: 'Laura Campos',
+        phone: '+52 81 5555 2002',
+        email: 'laura.campos@liveaqua.mx',
+        contactNotes: 'Aprueba cierres y coordina accesos con operaciones.',
+      ),
+    ],
+  ),
+  ClientRecord(
+    id: 'residencia-valle-alto',
+    name: 'Residencia Valle Alto',
+    sector: 'Sector Privado',
+    badge: 'Residencial',
+    activeProjects: '01',
+    months: '04',
+    icon: Icons.foundation,
+    contactEmail: 'contacto@vallealto.mx',
+    phone: '+52 81 5555 1002',
+    address: 'Bosques del Valle 804, San Pedro Garza Garcia, NL',
+    responsibles: [
+      ClientResponsibleRecord(
+        id: 'rva-supervisor',
+        role: ResponsibleRole.supervisor,
+        title: 'Arq.',
+        position: 'Supervisor de proyecto',
+        fullName: 'Daniela Flores',
+        phone: '+52 81 5555 2101',
+        email: 'daniela.flores@vallealto.mx',
+        contactNotes: 'Revisa acabados y entrega tecnica.',
+      ),
+    ],
+  ),
+  ClientRecord(
+    id: 'plaza-san-jeronimo',
+    name: 'Plaza San Jeronimo',
+    sector: 'Sector Retail',
+    badge: 'Comercial',
+    activeProjects: '02',
+    months: '08',
+    icon: Icons.storefront,
+    contactEmail: 'administracion@plazasanjeronimo.mx',
+    phone: '+52 81 5555 1003',
+    address: 'Blvd. Puerta del Sol 150, Monterrey, NL',
+    responsibles: [
+      ClientResponsibleRecord(
+        id: 'psj-gerente',
+        role: ResponsibleRole.gerente,
+        title: 'Lic.',
+        position: 'Gerente de plaza',
+        fullName: 'Alfredo Torres',
+        phone: '+52 81 5555 2201',
+        email: 'alfredo.torres@plazasanjeronimo.mx',
+        contactNotes: 'Centraliza firmas administrativas del cliente.',
+      ),
+    ],
+  ),
+  ClientRecord(
+    id: 'corporativo-gdi',
+    name: 'Corporativo GDI',
+    sector: 'Sector Corporativo',
+    badge: 'Activo',
+    activeProjects: '05',
+    months: '18',
+    icon: Icons.domain,
+    contactEmail: 'facilities@gdi.mx',
+    phone: '+52 81 5555 1004',
+    address: 'Av. Fundadores 900, Monterrey, NL',
+    responsibles: [
+      ClientResponsibleRecord(
+        id: 'gdi-supervisor',
+        role: ResponsibleRole.supervisor,
+        title: 'Ing.',
+        position: 'Supervisor de facilities',
+        fullName: 'Mariana Ruiz',
+        phone: '+52 81 5555 2301',
+        email: 'mariana.ruiz@gdi.mx',
+        contactNotes: 'Coordina liberacion de areas y cierre de servicios.',
+      ),
+      ClientResponsibleRecord(
+        id: 'gdi-gerente',
+        role: ResponsibleRole.gerente,
+        title: 'Lic.',
+        position: 'Gerente administrativo',
+        fullName: 'Jorge Medina',
+        phone: '+52 81 5555 2302',
+        email: 'jorge.medina@gdi.mx',
+        contactNotes: 'Firma final de entrega y aprobacion documental.',
+      ),
+    ],
+  ),
+];
