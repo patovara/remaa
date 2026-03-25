@@ -14,6 +14,7 @@ Aplicacion Flutter multiplataforma (iOS, Android y Web) para flujo de levantamie
 1. Editar .env con tus valores reales:
 	- SUPABASE_URL
 	- SUPABASE_ANON_KEY
+	- ENABLE_BILLING=false (por defecto apagado)
 2. Instalar dependencias:
 
 ```bash

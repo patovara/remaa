@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rema_app/app/app.dart';
 import 'package:rema_app/app/router.dart';
@@ -21,7 +22,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const RemaApp());
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
     expect(find.text('Levantamiento de Proyecto'), findsOneWidget);

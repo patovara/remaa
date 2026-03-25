@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
@@ -83,7 +84,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
     }
 
     try {
-      await client.from('clients').insert({
+      final inserted = await client.from('clients').insert({
         'business_name': _businessNameController.text.trim(),
         'rfc': _rfcController.text.trim(),
         'phone': _phoneController.text.trim(),
@@ -91,7 +92,12 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         'address_line': _addressController.text.trim(),
         'city': _cityController.text.trim(),
         'notes': 'Contacto principal: ${_nameController.text.trim()}',
-      });
+      }).select('id').single();
+
+      final clientId = inserted['id'] as String?;
+      if (clientId != null && _documents.isNotEmpty) {
+        await _uploadDocuments(client, clientId);
+      }
 
       if (!mounted) {
         return;
@@ -111,6 +117,53 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         context,
         'No se pudo guardar el cliente. Revisa permisos RLS o datos requeridos.',
       );
+    }
+  }
+
+  Future<void> _uploadDocuments(dynamic supabase, String clientId) async {
+    for (final doc in _documents) {
+      final bytes = doc.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        continue;
+      }
+      try {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final safeName = doc.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+        final objectPath = '$clientId/${timestamp}_$safeName';
+        final mime = _mimeFromName(doc.name);
+
+        await supabase.storage.from('client-documents').uploadBinary(
+          objectPath,
+          bytes,
+          fileOptions: FileOptions(contentType: mime, upsert: false),
+        );
+
+        await supabase.from('documents').insert({
+          'client_id': clientId,
+          'bucket_name': 'client-documents',
+          'object_path': objectPath,
+          'mime_type': mime,
+          'file_size_bytes': doc.size,
+          'original_name': doc.name,
+        });
+      } catch (_) {
+        // Continue uploading remaining documents even if one fails
+      }
+    }
+  }
+
+  String _mimeFromName(String name) {
+    final ext = name.toLowerCase().split('.').last;
+    switch (ext) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'png':
+        return 'image/png';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      default:
+        return 'application/octet-stream';
     }
   }
 

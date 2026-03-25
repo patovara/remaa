@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
@@ -8,6 +9,8 @@ import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import 'client_responsibles_controller.dart';
 import 'clientes_mock_data.dart';
+import '../../cotizaciones/domain/quote_models.dart';
+import '../../cotizaciones/presentation/quotes_controller.dart';
 
 class ClienteDetallePage extends ConsumerStatefulWidget {
   const ClienteDetallePage({super.key, required this.clientId});
@@ -21,6 +24,7 @@ class ClienteDetallePage extends ConsumerStatefulWidget {
 class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
   ClientRecord? _resolvedClient;
   late final Future<ClientRecord?> _clientFuture = _resolveClient();
+  ClientRecord? _editedClient;
 
   bool _isUuid(String value) {
     final uuidPattern = RegExp(
@@ -243,12 +247,16 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 1080;
-              final responsibleItems = _sorted(responsiblesState.valueOrNull ?? client.responsibles);
-              final summary = _ClientSummaryPanel(client: client);
+              final effectiveClient = _editedClient ?? client;
+              final responsibleItemsFinal = _sorted(responsiblesState.valueOrNull ?? effectiveClient.responsibles);
+              final summary = _ClientSummaryPanel(
+                client: effectiveClient,
+                onClientUpdated: (updated) => setState(() => _editedClient = updated),
+              );
               final responsiblesPanel = _ResponsiblesPanel(
-                responsibles: responsibleItems,
+                responsibles: responsibleItemsFinal,
                 isLoading: responsiblesState.isLoading && !responsiblesState.hasValue,
-                canAddMore: responsibleItems.length < ResponsibleRole.values.length,
+                canAddMore: responsibleItemsFinal.length < ResponsibleRole.values.length,
                 onAdd: _addResponsible,
                 onEdit: _editResponsible,
                 onDelete: _deleteResponsible,
@@ -260,7 +268,19 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 5, child: summary),
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        children: [
+                          summary,
+                          const SizedBox(height: 24),
+                          _ClientQuotesPanel(
+                            clientId: widget.clientId,
+                            onCreateQuote: () => context.go('/cotizaciones'),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 24),
                     Expanded(flex: 7, child: responsiblesPanel),
                   ],
@@ -272,6 +292,11 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                   summary,
                   const SizedBox(height: 20),
                   responsiblesPanel,
+                  const SizedBox(height: 20),
+                  _ClientQuotesPanel(
+                    clientId: widget.clientId,
+                    onCreateQuote: () => context.go('/cotizaciones'),
+                  ),
                 ],
               );
             },
@@ -282,13 +307,78 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
   }
 }
 
-class _ClientSummaryPanel extends StatelessWidget {
-  const _ClientSummaryPanel({required this.client});
+class _ClientSummaryPanel extends StatefulWidget {
+  const _ClientSummaryPanel({required this.client, required this.onClientUpdated});
 
   final ClientRecord client;
+  final ValueChanged<ClientRecord> onClientUpdated;
+
+  @override
+  State<_ClientSummaryPanel> createState() => _ClientSummaryPanelState();
+}
+
+class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
+  bool _isEditing = false;
+  bool _isSaving = false;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _addressCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCtrl = TextEditingController(text: widget.client.contactEmail);
+    _phoneCtrl = TextEditingController(text: widget.client.phone);
+    _addressCtrl = TextEditingController(text: widget.client.address);
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  static final _uuidRe = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+  );
+
+  Future<void> _save() async {
+    setState(() => _isSaving = true);
+    try {
+      final updated = ClientRecord(
+        id: widget.client.id,
+        name: widget.client.name,
+        sector: widget.client.sector,
+        badge: widget.client.badge,
+        activeProjects: widget.client.activeProjects,
+        months: widget.client.months,
+        icon: widget.client.icon,
+        contactEmail: _emailCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+        address: _addressCtrl.text.trim(),
+        responsibles: widget.client.responsibles,
+      );
+      if (_uuidRe.hasMatch(widget.client.id) && SupabaseBootstrap.client != null) {
+        await SupabaseBootstrap.client!.from('clients').update({
+          'email': updated.contactEmail,
+          'phone': updated.phone,
+          'address_line': updated.address,
+        }).eq('id', updated.id);
+      }
+      widget.onClientUpdated(updated);
+      if (mounted) setState(() => _isEditing = false);
+    } catch (_) {
+      // keep editing on error
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final client = widget.client;
     return Column(
       children: [
         RemaPanel(
@@ -339,14 +429,73 @@ class _ClientSummaryPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const RemaSectionHeader(title: 'Ficha del cliente', icon: Icons.badge_outlined),
+              RemaSectionHeader(
+                title: 'Ficha del cliente',
+                icon: Icons.badge_outlined,
+                trailing: _isEditing
+                    ? null
+                    : TextButton.icon(
+                        onPressed: () => setState(() => _isEditing = true),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('Editar'),
+                      ),
+              ),
               const SizedBox(height: 24),
-              _SummaryRow(label: 'Correo principal', value: client.contactEmail),
-              const SizedBox(height: 16),
-              _SummaryRow(label: 'Telefono', value: client.phone),
-              const SizedBox(height: 16),
-              _SummaryRow(label: 'Direccion', value: client.address),
-              const SizedBox(height: 16),
+              if (_isEditing) ...[
+                TextField(
+                  controller: _emailCtrl,
+                  decoration: const InputDecoration(labelText: 'Correo principal'),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _phoneCtrl,
+                  decoration: const InputDecoration(labelText: 'Telefono'),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _addressCtrl,
+                  decoration: const InputDecoration(labelText: 'Direccion'),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isSaving
+                          ? null
+                          : () {
+                              _emailCtrl.text = widget.client.contactEmail;
+                              _phoneCtrl.text = widget.client.phone;
+                              _addressCtrl.text = widget.client.address;
+                              setState(() => _isEditing = false);
+                            },
+                      child: const Text('Cancelar'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _isSaving ? null : _save,
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Guardar'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ] else ...[
+                _SummaryRow(label: 'Correo principal', value: client.contactEmail),
+                const SizedBox(height: 16),
+                _SummaryRow(label: 'Telefono', value: client.phone),
+                const SizedBox(height: 16),
+                _SummaryRow(label: 'Direccion', value: client.address),
+                const SizedBox(height: 16),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -804,5 +953,99 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
       return 'Ingresa un correo valido.';
     }
     return null;
+  }
+}
+
+// ─── Client quotes panel ──────────────────────────────────────────────────────
+
+class _ClientQuotesPanel extends ConsumerWidget {
+  const _ClientQuotesPanel({required this.clientId, required this.onCreateQuote});
+
+  final String clientId;
+  final VoidCallback onCreateQuote;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quotesAsync = ref.watch(quotesProvider);
+    final projectsAsync = ref.watch(quoteProjectsProvider);
+
+    final projectIds = projectsAsync.valueOrNull
+            ?.where((p) => p.clientId == clientId)
+            .map((p) => p.id)
+            .toSet() ??
+        const <String>{};
+
+    final clientQuotes = quotesAsync.valueOrNull
+            ?.where((q) => projectIds.contains(q.projectId))
+            .toList() ??
+        const <QuoteRecord>[];
+
+    return RemaPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RemaSectionHeader(
+            title: 'Cotizaciones',
+            icon: Icons.request_quote_outlined,
+            trailing: FilledButton.icon(
+              onPressed: onCreateQuote,
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (quotesAsync.isLoading || projectsAsync.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (clientQuotes.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Sin cotizaciones registradas para este cliente.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+              ),
+            )
+          else
+            for (final q in clientQuotes) ...[
+              _QuoteRow(quote: q),
+              if (q != clientQuotes.last) const Divider(height: 1),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _QuoteRow extends StatelessWidget {
+  const _QuoteRow({required this.quote});
+
+  final QuoteRecord quote;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatter = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.description_outlined),
+      title: Text(quote.quoteNumber),
+      subtitle: Text(_statusLabel(quote.status)),
+      trailing: Text(formatter.format(quote.total)),
+    );
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'approved':
+        return 'Aprobada';
+      case 'declined':
+        return 'Declinada';
+      default:
+        return 'Pendiente';
+    }
   }
 }

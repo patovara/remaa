@@ -91,4 +91,20 @@ void main() {
     expect(find.text('Actas de Entrega'), findsOneWidget);
     expect(find.text('Cuerpo Acta'), findsOneWidget);
   });
+
+  testWidgets('navega a catalogo desde menu', (tester) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Catalogo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Administración de universos, tipos, conceptos, atributos y carga masiva CSV.'), findsOneWidget);
+    expect(find.text('Importador CSV'), findsOneWidget);
+  });
 }

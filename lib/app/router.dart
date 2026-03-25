@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../core/widgets/rema_shell.dart';
 import '../features/ajustes/presentation/ajustes_page.dart';
 import '../features/actas/presentation/actas_page.dart';
+import '../features/catalogo/presentation/catalogo_page.dart';
 import '../features/clientes/presentation/cliente_detalle_page.dart';
 import '../features/clientes/presentation/clientes_page.dart';
 import '../features/cotizaciones/presentation/cotizaciones_page.dart';
@@ -28,6 +29,12 @@ final appRouter = GoRouter(
           path: '/cotizaciones',
           pageBuilder: (context, state) => const NoTransitionPage(
             child: CotizacionesPage(),
+          ),
+        ),
+        GoRoute(
+          path: '/catalogo',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: CatalogoPage(),
           ),
         ),
         GoRoute(

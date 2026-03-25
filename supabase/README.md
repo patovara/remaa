@@ -33,6 +33,17 @@ Nota:
 - generated_data guarda el contexto de generacion (tipo de proyecto, accion, universo, atributos, unidad y precio base).
 - El precio final se persiste en unit_price y line_total; no se recalcula historicos si cambia el catalogo.
 
+### Seguridad del catalogo
+
+- `rls.sql` define lectura de catalogo para `anon` y `authenticated`.
+- Escritura de catalogo (`universes`, `project_types`, `concept_templates`, `concept_attributes`, `attribute_options`, `concept_closures`) es solo para usuarios `authenticated` con rol admin en JWT (`app_metadata.role`, `user_metadata.role` o arrays `roles`).
+
+### Importador CSV (módulo Catálogo)
+
+- Obligatorias: `universe`, `concept`, `unit`, `base_price`, `attribute`, `option`
+- Opcionales: `project_type`, `base_description`
+- Si `project_type` viene en la fila, reemplaza el tipo destino seleccionado en UI.
+
 ## Storage
 
 - Bucket privado: client-documents

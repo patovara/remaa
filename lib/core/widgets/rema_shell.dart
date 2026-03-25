@@ -1,8 +1,10 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/admin_access.dart';
 import '../theme/rema_colors.dart';
 
 class _NavItem {
@@ -18,24 +20,30 @@ const _navItems = <_NavItem>[
   _NavItem('Cotizacion', Icons.request_quote, '/cotizaciones'),
   _NavItem('Actas', Icons.description, '/actas'),
   _NavItem('Clientes', Icons.group, '/clientes'),
+  _NavItem('Catalogo', Icons.inventory_2, '/catalogo'),
   _NavItem('Ajustes', Icons.settings, '/ajustes'),
 ];
 
-class RemaShell extends StatelessWidget {
+class RemaShell extends ConsumerWidget {
   const RemaShell({super.key, required this.location, required this.child});
 
   final String location;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = MediaQuery.sizeOf(context).width >= 1024;
+    final isAdmin = ref.watch(isAdminProvider);
+    final navItems = [
+      for (final item in _navItems)
+        if (item.route != '/catalogo' || isAdmin) item,
+    ];
 
     if (isDesktop) {
       return Scaffold(
         body: Row(
           children: [
-            _DesktopNav(location: location),
+            _DesktopNav(location: location, navItems: navItems),
             Expanded(child: child),
           ],
         ),
@@ -44,7 +52,7 @@ class RemaShell extends StatelessWidget {
 
     return Scaffold(
       body: child,
-      bottomNavigationBar: _MobileNav(location: location),
+      bottomNavigationBar: _MobileNav(location: location, navItems: navItems),
       floatingActionButton: location == '/clientes'
           ? FloatingActionButton(
               onPressed: () => context.go('/nuevo-cliente'),
@@ -61,9 +69,10 @@ class RemaShell extends StatelessWidget {
 }
 
 class _DesktopNav extends StatelessWidget {
-  const _DesktopNav({required this.location});
+  const _DesktopNav({required this.location, required this.navItems});
 
   final String location;
+  final List<_NavItem> navItems;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +96,7 @@ class _DesktopNav extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 28),
-          for (final item in _navItems)
+          for (final item in navItems)
             _DesktopNavTile(
               item: item,
               isActive: location.startsWith(item.route),
@@ -153,9 +162,10 @@ class _DesktopNavTile extends StatelessWidget {
 }
 
 class _MobileNav extends StatelessWidget {
-  const _MobileNav({required this.location});
+  const _MobileNav({required this.location, required this.navItems});
 
   final String location;
+  final List<_NavItem> navItems;
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +178,7 @@ class _MobileNav extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              for (final item in _navItems)
+              for (final item in navItems)
                 _MobileNavTile(
                   item: item,
                   isActive: location.startsWith(item.route),

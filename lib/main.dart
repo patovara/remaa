@@ -21,6 +21,7 @@ Future<void> main() async {
   AppLogger.info('app_start', data: {
     'env': Env.appEnv,
     'supabase': SupabaseBootstrap.isInitialized ? 'enabled' : 'disabled',
+    'billing': Env.billingEnabled ? 'enabled' : 'disabled',
   });
 
   runApp(const ProviderScope(child: RemaApp()));
