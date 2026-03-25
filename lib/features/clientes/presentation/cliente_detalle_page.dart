@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
@@ -18,7 +19,69 @@ class ClienteDetallePage extends ConsumerStatefulWidget {
 }
 
 class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
-  late final ClientRecord? _client = findClientById(widget.clientId);
+  ClientRecord? _resolvedClient;
+  late final Future<ClientRecord?> _clientFuture = _resolveClient();
+
+  bool _isUuid(String value) {
+    final uuidPattern = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    );
+    return uuidPattern.hasMatch(value);
+  }
+
+  Future<ClientRecord?> _resolveClient() async {
+    final local = findClientById(widget.clientId);
+    if (local != null) {
+      _resolvedClient = local;
+      return local;
+    }
+
+    if (!_isUuid(widget.clientId) || SupabaseBootstrap.client == null) {
+      return null;
+    }
+
+    try {
+      final row = await SupabaseBootstrap.client!
+          .from('clients')
+          .select('id, business_name, email, phone, address_line, city')
+          .eq('id', widget.clientId)
+          .maybeSingle();
+
+      if (row == null) {
+        return null;
+      }
+
+      final businessName = (row['business_name'] as String? ?? '').trim();
+      if (businessName.isEmpty) {
+        return null;
+      }
+
+      final addressLine = (row['address_line'] as String? ?? '').trim();
+      final city = (row['city'] as String? ?? '').trim();
+      final fullAddress = [
+        if (addressLine.isNotEmpty) addressLine,
+        if (city.isNotEmpty) city,
+      ].join(', ');
+
+      final remote = ClientRecord(
+        id: row['id'] as String? ?? widget.clientId,
+        name: businessName,
+        sector: 'Sector cliente',
+        badge: 'Activo',
+        activeProjects: '00',
+        months: '--',
+        icon: Icons.apartment,
+        contactEmail: (row['email'] as String? ?? 'sin-correo@cliente.com').trim(),
+        phone: (row['phone'] as String? ?? 'Sin telefono').trim(),
+        address: fullAddress.isEmpty ? 'Sin direccion registrada' : fullAddress,
+        responsibles: const [],
+      );
+      _resolvedClient = remote;
+      return remote;
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<ClientResponsibleRecord> _sorted(List<ClientResponsibleRecord> input) {
     final items = [...input];
@@ -28,7 +91,7 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
 
   List<ClientResponsibleRecord> get _currentResponsibles {
     final currentState = ref.read(clientResponsiblesProvider(widget.clientId));
-    return _sorted(currentState.valueOrNull ?? _client?.responsibles ?? const []);
+    return _sorted(currentState.valueOrNull ?? _resolvedClient?.responsibles ?? const []);
   }
 
   Future<void> _addResponsible() async {
@@ -141,67 +204,80 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
 
   @override
   Widget build(BuildContext context) {
-    final client = _client;
     final responsiblesState = ref.watch(clientResponsiblesProvider(widget.clientId));
-    if (client == null) {
-      return PageFrame(
-        title: 'Cliente no encontrado',
-        subtitle: 'El expediente solicitado no existe en este prototipo.',
-        trailing: TextButton.icon(
-          onPressed: () => context.go('/clientes'),
-          icon: const Icon(Icons.arrow_back),
-          label: const Text('Volver'),
-        ),
-        child: const RemaPanel(
-          child: Text('Revisa el listado de clientes y vuelve a abrir el expediente desde ahi.'),
-        ),
-      );
-    }
-
-    return PageFrame(
-      title: client.name,
-      subtitle: 'Expediente del cliente y administracion de responsables para firmas.',
-      trailing: TextButton.icon(
-        onPressed: () => context.go('/clientes'),
-        icon: const Icon(Icons.arrow_back),
-        label: const Text('Clientes'),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 1080;
-          final responsibleItems = _sorted(responsiblesState.valueOrNull ?? client.responsibles);
-          final summary = _ClientSummaryPanel(client: client);
-          final responsiblesPanel = _ResponsiblesPanel(
-            responsibles: responsibleItems,
-            isLoading: responsiblesState.isLoading && !responsiblesState.hasValue,
-            canAddMore: responsibleItems.length < ResponsibleRole.values.length,
-            onAdd: _addResponsible,
-            onEdit: _editResponsible,
-            onDelete: _deleteResponsible,
-            onRetry: () => ref.read(clientResponsiblesProvider(widget.clientId).notifier).reload(),
-            hasError: responsiblesState.hasError && !responsiblesState.hasValue,
+    return FutureBuilder<ClientRecord?>(
+      future: _clientFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const PageFrame(
+            title: 'Cargando cliente',
+            subtitle: 'Obteniendo informacion del expediente...',
+            child: Center(child: CircularProgressIndicator()),
           );
+        }
 
-          if (isWide) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 5, child: summary),
-                const SizedBox(width: 24),
-                Expanded(flex: 7, child: responsiblesPanel),
-              ],
-            );
-          }
-
-          return Column(
-            children: [
-              summary,
-              const SizedBox(height: 20),
-              responsiblesPanel,
-            ],
+        final client = snapshot.data;
+        if (client == null) {
+          return PageFrame(
+            title: 'Cliente no encontrado',
+            subtitle: 'El expediente solicitado no existe en este prototipo.',
+            trailing: TextButton.icon(
+              onPressed: () => context.go('/clientes'),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Volver'),
+            ),
+            child: const RemaPanel(
+              child: Text('Revisa el listado de clientes y vuelve a abrir el expediente desde ahi.'),
+            ),
           );
-        },
-      ),
+        }
+
+        return PageFrame(
+          title: client.name,
+          subtitle: 'Expediente del cliente y administracion de responsables para firmas.',
+          trailing: TextButton.icon(
+            onPressed: () => context.go('/clientes'),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Clientes'),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 1080;
+              final responsibleItems = _sorted(responsiblesState.valueOrNull ?? client.responsibles);
+              final summary = _ClientSummaryPanel(client: client);
+              final responsiblesPanel = _ResponsiblesPanel(
+                responsibles: responsibleItems,
+                isLoading: responsiblesState.isLoading && !responsiblesState.hasValue,
+                canAddMore: responsibleItems.length < ResponsibleRole.values.length,
+                onAdd: _addResponsible,
+                onEdit: _editResponsible,
+                onDelete: _deleteResponsible,
+                onRetry: () => ref.read(clientResponsiblesProvider(widget.clientId).notifier).reload(),
+                hasError: responsiblesState.hasError && !responsiblesState.hasValue,
+              );
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 5, child: summary),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 7, child: responsiblesPanel),
+                  ],
+                );
+              }
+
+              return Column(
+                children: [
+                  summary,
+                  const SizedBox(height: 20),
+                  responsiblesPanel,
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
