@@ -8,10 +8,12 @@ import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
+import '../../../core/config/supabase_bootstrap.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../../cotizaciones/domain/quote_models.dart';
 import '../../cotizaciones/presentation/concepts_catalog_controller.dart';
 import '../../cotizaciones/presentation/quotes_controller.dart';
+import '../../clientes/presentation/clientes_mock_data.dart';
 import 'levantamiento_state.dart';
 
 class LevantamientoPage extends ConsumerStatefulWidget {
@@ -22,7 +24,13 @@ class LevantamientoPage extends ConsumerStatefulWidget {
 }
 
 class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
-  final _projectKeyController = TextEditingController(text: 'P-001');
+  static const List<String> _defaultResponsibles = [
+    'Arq. Daniel M.',
+    'Arq. Sofia R.',
+    'Arq. Elena G.',
+  ];
+
+  final _projectKeyController = TextEditingController();
   final _projectNameController = TextEditingController(text: 'Residencia Olivos');
   final _clientController = TextEditingController(text: 'Ing. Roberto Mendez');
   final _addressController = TextEditingController(
@@ -32,15 +40,22 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     text: 'Describa el estado actual del terreno, accesos, servicios disponibles y requerimientos especificos del cliente detectados durante la visita.',
   );
 
-  DateTime _selectedDate = DateTime(2024, 10, 24);
-  String _selectedArchitect = 'Arq. Daniel M.';
+  DateTime _selectedDate = DateTime.now();
+  String _selectedArchitect = _defaultResponsibles.first;
+  List<String> _responsibleOptions = List<String>.from(_defaultResponsibles);
+  String? _selectedClientId;
+  String? _boundProjectId;
   String? _selectedProjectId;
   String? _selectedUniverseId;
   String? _selectedProjectTypeId;
   bool _isCreatingQuote = false;
-  bool _topographicSurvey = true;
-  bool _specialPermits = false;
+  bool _isCreatingProject = false;
   final List<_PickedMedia> _photos = [];
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
@@ -119,10 +134,26 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
     setState(() => _isCreatingQuote = true);
     try {
+      final projectName = _projectNameController.text.trim();
+      final manager = _selectedArchitect.trim();
+      final address = _addressController.text.trim();
+      final notes = _notesController.text.trim();
+      final projectKey = await _ensureProjectKey();
+
+      await ref.read(quotesProvider.notifier).updateProjectContext(
+            projectId: selectedProjectId,
+            name: projectName.isEmpty ? 'Proyecto sin nombre' : projectName,
+            managerName: manager,
+            address: address,
+            description: notes,
+            clientId: _selectedClientId,
+          );
+
       final quote = await ref.read(quotesProvider.notifier).createDraft(
             projectId: selectedProjectId,
             universeId: selectedUniverseId,
             projectTypeId: selectedProjectTypeId,
+            projectKey: projectKey,
           );
 
       if (!mounted) {
@@ -143,6 +174,222 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         setState(() => _isCreatingQuote = false);
       }
     }
+  }
+
+  Future<String> _ensureProjectKey() async {
+    final current = _projectKeyController.text.trim().toUpperCase();
+    if (current.startsWith('PRJ')) {
+      return current;
+    }
+
+    try {
+      final key = await ref.read(quotesProvider.notifier).reserveProjectKey();
+      if (!mounted) {
+        return key;
+      }
+      _projectKeyController.text = key;
+      return key;
+    } catch (_) {
+      const fallback = 'PRJ001';
+      if (mounted && _projectKeyController.text.trim().isEmpty) {
+        _projectKeyController.text = fallback;
+      }
+      return fallback;
+    }
+  }
+
+  Future<void> _openClientSelector() async {
+    final selected = await showDialog<ClientRecord>(
+      context: context,
+      builder: (_) => const _ClientSelectorDialog(),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _clientController.text = selected.name;
+        _selectedClientId = selected.id;
+      });
+      await _loadResponsiblesForClient(
+        clientId: selected.id,
+        localFallback: selected.responsibles,
+      );
+    }
+  }
+
+  Future<void> _loadResponsiblesForClient({
+    required String? clientId,
+    List<ClientResponsibleRecord> localFallback = const [],
+  }) async {
+    final localNames = [
+      for (final record in localFallback)
+        if (record.fullName.trim().isNotEmpty) record.fullName.trim(),
+    ];
+
+    if (localNames.isNotEmpty || clientId == null || clientId.isEmpty) {
+      _applyResponsibles(localNames);
+      return;
+    }
+
+    if (!_isUuid(clientId) || SupabaseBootstrap.client == null) {
+      _applyResponsibles(const []);
+      return;
+    }
+
+    try {
+      final rows = await SupabaseBootstrap.client!
+          .from('client_responsibles')
+          .select('full_name')
+          .eq('client_id', clientId)
+          .order('created_at', ascending: true);
+      final names = [
+        for (final row in rows)
+          ((row['full_name'] as String?) ?? '').trim(),
+      ].where((item) => item.isNotEmpty).toList();
+      _applyResponsibles(names);
+    } catch (_) {
+      _applyResponsibles(const []);
+    }
+  }
+
+  void _applyResponsibles(List<String> values) {
+    final next = values.isEmpty ? List<String>.from(_defaultResponsibles) : values;
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _responsibleOptions = next;
+      if (!next.contains(_selectedArchitect)) {
+        _selectedArchitect = next.first;
+      }
+    });
+  }
+
+  Future<void> _handleProjectChanged(String projectId, List<ProjectLookup> projects) async {
+    setState(() => _selectedProjectId = projectId);
+    await _bindProjectDetails(projectId, projects);
+  }
+
+  Future<void> _bindProjectDetails(String? projectId, List<ProjectLookup> projects) async {
+    if (projectId == null || _boundProjectId == projectId) {
+      return;
+    }
+    _boundProjectId = projectId;
+
+    ProjectLookup? selected;
+    for (final project in projects) {
+      if (project.id == projectId) {
+        selected = project;
+        break;
+      }
+    }
+    if (selected == null) {
+      return;
+    }
+    final selectedProject = selected;
+
+    if (mounted) {
+      setState(() {
+        if (selectedProject.name.trim().isNotEmpty) {
+          _projectNameController.text = selectedProject.name;
+        }
+        if ((selectedProject.siteAddress ?? '').trim().isNotEmpty) {
+          _addressController.text = selectedProject.siteAddress!.trim();
+        }
+        if ((selectedProject.description ?? '').trim().isNotEmpty) {
+          _notesController.text = selectedProject.description!.trim();
+        }
+        if ((selectedProject.managerName ?? '').trim().isNotEmpty) {
+          _selectedArchitect = selectedProject.managerName!.trim();
+        }
+        _selectedClientId = selectedProject.clientId;
+      });
+    }
+
+    if (_selectedClientId == null || _selectedClientId!.isEmpty) {
+      _applyResponsibles(const []);
+      return;
+    }
+
+    await _bindClientById(_selectedClientId!);
+  }
+
+  Future<void> _bindClientById(String clientId) async {
+    final local = findClientById(clientId);
+    if (local != null) {
+      if (mounted) {
+        setState(() => _clientController.text = local.name);
+      }
+      await _loadResponsiblesForClient(clientId: clientId, localFallback: local.responsibles);
+      return;
+    }
+
+    if (!_isUuid(clientId) || SupabaseBootstrap.client == null) {
+      await _loadResponsiblesForClient(clientId: clientId);
+      return;
+    }
+
+    try {
+      final row = await SupabaseBootstrap.client!
+          .from('clients')
+          .select('business_name')
+          .eq('id', clientId)
+          .maybeSingle();
+      final name = ((row?['business_name'] as String?) ?? '').trim();
+      if (mounted && name.isNotEmpty) {
+        setState(() => _clientController.text = name);
+      }
+    } catch (_) {}
+
+    await _loadResponsiblesForClient(clientId: clientId);
+  }
+
+  Future<void> _createProjectFromCurrentData() async {
+    if (_selectedClientId == null || _selectedClientId!.trim().isEmpty) {
+      showRemaMessage(context, 'Selecciona un cliente antes de crear el proyecto.');
+      return;
+    }
+
+    setState(() => _isCreatingProject = true);
+    try {
+      final code = await _ensureProjectKey();
+      final project = await ref.read(quotesProvider.notifier).createProject(
+            input: NewProjectInput(
+              code: code,
+              name: _projectNameController.text.trim().isEmpty
+                  ? 'Proyecto sin nombre'
+                  : _projectNameController.text.trim(),
+              clientId: _selectedClientId,
+              siteAddress: _addressController.text.trim(),
+              description: _notesController.text.trim(),
+              managerName: _selectedArchitect.trim(),
+            ),
+          );
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedProjectId = project.id;
+        _boundProjectId = project.id;
+      });
+      ref.invalidate(quoteProjectsProvider);
+      showRemaMessage(context, 'Proyecto ${project.code} creado y seleccionado.');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, 'No se pudo crear el proyecto: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingProject = false);
+      }
+    }
+  }
+
+  bool _isUuid(String value) {
+    final uuidPattern = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    );
+    return uuidPattern.hasMatch(value);
   }
 
   void _finishSurvey() {
@@ -218,6 +465,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         _selectedUniverseId = nextUniverseId;
         _selectedProjectTypeId = nextProjectTypeId;
       });
+      _bindProjectDetails(nextProjectId, projects);
     });
   }
 
@@ -250,17 +498,20 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           final isWide = constraints.maxWidth >= 1120;
           final details = _ProjectDetailsPanel(
             selectedDate: _selectedDate,
-            onDateChanged: (value) => setState(() => _selectedDate = value),
             projectKeyController: _projectKeyController,
             selectedArchitect: _selectedArchitect,
+            responsibleOptions: _responsibleOptions,
             onArchitectChanged: (value) => setState(() => _selectedArchitect = value),
             projectNameController: _projectNameController,
             clientController: _clientController,
+            onClientTap: _openClientSelector,
             projects: projects,
             selectedProjectId: _selectedProjectId,
             onProjectChanged: universeLocked
                 ? null
-                : (value) => setState(() => _selectedProjectId = value),
+              : (value) => _handleProjectChanged(value, projects),
+            onCreateProject: _isCreatingProject ? null : _createProjectFromCurrentData,
+            creatingProject: _isCreatingProject,
             universes: universes,
             selectedUniverseId: _selectedUniverseId,
             onUniverseChanged: universeLocked
@@ -297,10 +548,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           );
           final notes = _DescriptionPanel(
             notesController: _notesController,
-            topographicSurvey: _topographicSurvey,
-            onTopographicChanged: (value) => setState(() => _topographicSurvey = value),
-            specialPermits: _specialPermits,
-            onSpecialPermitsChanged: (value) => setState(() => _specialPermits = value),
           );
 
           return Column(
@@ -358,15 +605,18 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 class _ProjectDetailsPanel extends StatelessWidget {
   const _ProjectDetailsPanel({
     required this.selectedDate,
-    required this.onDateChanged,
     required this.projectKeyController,
     required this.selectedArchitect,
+    required this.responsibleOptions,
     required this.onArchitectChanged,
     required this.projectNameController,
     required this.clientController,
+    required this.onClientTap,
     required this.projects,
     required this.selectedProjectId,
     required this.onProjectChanged,
+    required this.onCreateProject,
+    required this.creatingProject,
     required this.universes,
     required this.selectedUniverseId,
     required this.onUniverseChanged,
@@ -379,15 +629,18 @@ class _ProjectDetailsPanel extends StatelessWidget {
   });
 
   final DateTime selectedDate;
-  final ValueChanged<DateTime> onDateChanged;
   final TextEditingController projectKeyController;
   final String selectedArchitect;
+  final List<String> responsibleOptions;
   final ValueChanged<String> onArchitectChanged;
   final TextEditingController projectNameController;
   final TextEditingController clientController;
+  final VoidCallback onClientTap;
   final List<ProjectLookup> projects;
   final String? selectedProjectId;
   final ValueChanged<String>? onProjectChanged;
+  final VoidCallback? onCreateProject;
+  final bool creatingProject;
   final List<UniverseCatalogItem> universes;
   final String? selectedUniverseId;
   final ValueChanged<String>? onUniverseChanged;
@@ -408,12 +661,25 @@ class _ProjectDetailsPanel extends StatelessWidget {
           const SizedBox(height: 24),
           const _FieldLabel(label: 'Fecha de registro'),
           const SizedBox(height: 8),
-          InputDatePickerFormField(
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2035),
-            initialDate: selectedDate,
-            onDateSubmitted: onDateChanged,
-            onDateSaved: onDateChanged,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              border: Border.all(color: RemaColors.surfaceLow),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined, size: 18, color: RemaColors.primaryDark),
+                const SizedBox(width: 10),
+                Text(_formatDate(selectedDate)),
+                const Spacer(),
+                Text(
+                  'Bloqueada',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 20),
           Row(
@@ -429,7 +695,7 @@ class _ProjectDetailsPanel extends StatelessWidget {
                 child: _DropdownField(
                   label: 'Responsable',
                   value: selectedArchitect,
-                  items: const ['Arq. Daniel M.', 'Arq. Sofia R.', 'Arq. Elena G.'],
+                  items: responsibleOptions,
                   onChanged: onArchitectChanged,
                 ),
               ),
@@ -445,25 +711,44 @@ class _ProjectDetailsPanel extends StatelessWidget {
             label: 'Cliente',
             controller: clientController,
             suffixIcon: Icons.person_search,
+            onSuffixTap: onClientTap,
           ),
           const SizedBox(height: 20),
-          DropdownButtonFormField<String>(
-            initialValue: selectedProjectId,
-            decoration: const InputDecoration(labelText: 'Proyecto de levantamiento'),
-            items: [
-              for (final project in projects)
-                DropdownMenuItem<String>(
-                  value: project.id,
-                  child: Text(project.label),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: selectedProjectId,
+                  decoration: const InputDecoration(labelText: 'Proyecto de levantamiento'),
+                  items: [
+                    for (final project in projects)
+                      DropdownMenuItem<String>(
+                        value: project.id,
+                        child: Text(project.label),
+                      ),
+                  ],
+                  onChanged: onProjectChanged == null
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            onProjectChanged!(value);
+                          }
+                        },
                 ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: onCreateProject,
+                icon: creatingProject
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_business_outlined),
+                label: const Text('Nuevo proyecto'),
+              ),
             ],
-            onChanged: onProjectChanged == null
-                ? null
-                : (value) {
-                    if (value != null) {
-                      onProjectChanged!(value);
-                    }
-                  },
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
@@ -518,6 +803,13 @@ class _ProjectDetailsPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatDate(DateTime value) {
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  final year = value.year.toString();
+  return '$day/$month/$year';
 }
 
 class _EvidencePanel extends StatelessWidget {
@@ -672,17 +964,9 @@ class _LocationPanel extends StatelessWidget {
 class _DescriptionPanel extends StatelessWidget {
   const _DescriptionPanel({
     required this.notesController,
-    required this.topographicSurvey,
-    required this.onTopographicChanged,
-    required this.specialPermits,
-    required this.onSpecialPermitsChanged,
   });
 
   final TextEditingController notesController;
-  final bool topographicSurvey;
-  final ValueChanged<bool> onTopographicChanged;
-  final bool specialPermits;
-  final ValueChanged<bool> onSpecialPermitsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -702,22 +986,10 @@ class _DescriptionPanel extends StatelessWidget {
               hintText: 'Detalle tecnico y requerimientos detectados durante la visita...',
             ),
           ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _CheckOption(
-                label: 'Levantamiento topografico requerido',
-                value: topographicSurvey,
-                onChanged: onTopographicChanged,
-              ),
-              _CheckOption(
-                label: 'Permisos especiales detectados',
-                value: specialPermits,
-                onChanged: onSpecialPermitsChanged,
-              ),
-            ],
+          const SizedBox(height: 12),
+          Text(
+            'Esta descripcion se conserva para contexto tecnico del levantamiento y debe reflejarse en la cotizacion.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
@@ -870,11 +1142,13 @@ class _UnderlinedField extends StatelessWidget {
     required this.label,
     required this.controller,
     this.suffixIcon,
+    this.onSuffixTap,
   });
 
   final String label;
   final TextEditingController controller;
   final IconData? suffixIcon;
+  final VoidCallback? onSuffixTap;
 
   @override
   Widget build(BuildContext context) {
@@ -885,7 +1159,13 @@ class _UnderlinedField extends StatelessWidget {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
-          decoration: InputDecoration(suffixIcon: suffixIcon != null ? Icon(suffixIcon) : null),
+          decoration: InputDecoration(
+            suffixIcon: suffixIcon != null
+                ? onSuffixTap != null
+                    ? IconButton(icon: Icon(suffixIcon), onPressed: onSuffixTap)
+                    : Icon(suffixIcon)
+                : null,
+          ),
         ),
       ],
     );
@@ -907,6 +1187,7 @@ class _DropdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveItems = items.contains(value) ? items : [value, ...items];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -914,43 +1195,19 @@ class _DropdownField extends StatelessWidget {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: value,
-          decoration: const InputDecoration(),
           items: [
-            for (final item in items)
-              DropdownMenuItem<String>(value: item, child: Text(item)),
+            for (final item in effectiveItems)
+              DropdownMenuItem<String>(
+                value: item,
+                child: Text(item),
+              ),
           ],
-          onChanged: (newValue) {
-            if (newValue != null) {
-              onChanged(newValue);
+          onChanged: (selected) {
+            if (selected != null) {
+              onChanged(selected);
             }
           },
         ),
-      ],
-    );
-  }
-}
-
-class _CheckOption extends StatelessWidget {
-  const _CheckOption({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Checkbox(
-          value: value,
-          onChanged: (newValue) => onChanged(newValue ?? false),
-        ),
-        Text(label),
       ],
     );
   }
@@ -978,4 +1235,142 @@ String _formatBytes(int size) {
   }
   final mb = kb / 1024;
   return '${mb.toStringAsFixed(1)} MB';
+}
+
+// ─── Client selector dialog ───────────────────────────────────────────────────
+
+class _ClientSelectorDialog extends StatefulWidget {
+  const _ClientSelectorDialog();
+
+  @override
+  State<_ClientSelectorDialog> createState() => _ClientSelectorDialogState();
+}
+
+class _ClientSelectorDialogState extends State<_ClientSelectorDialog> {
+  final _searchController = TextEditingController();
+  List<ClientRecord> _all = const [];
+  List<ClientRecord> _filtered = const [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadClients();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadClients() async {
+    final base = List<ClientRecord>.from(mockClients);
+    final supabase = SupabaseBootstrap.client;
+    if (supabase != null) {
+      try {
+        final rows = await supabase
+            .from('clients')
+            .select('id, business_name, email, phone, address_line, city')
+            .order('business_name');
+        final knownIds = base.map((c) => c.id).toSet();
+        for (final row in rows) {
+          final id = (row['id'] as String? ?? '').trim();
+          final name = (row['business_name'] as String? ?? '').trim();
+          if (id.isEmpty || name.isEmpty || knownIds.contains(id)) {
+            continue;
+          }
+          final addr = [
+            row['address_line'] as String? ?? '',
+            row['city'] as String? ?? '',
+          ].where((s) => s.isNotEmpty).join(', ');
+          base.add(ClientRecord(
+            id: id,
+            name: name,
+            sector: 'Cliente',
+            badge: 'Activo',
+            activeProjects: '00',
+            months: '--',
+            icon: Icons.apartment,
+            contactEmail: (row['email'] as String? ?? '').trim(),
+            phone: (row['phone'] as String? ?? '').trim(),
+            address: addr.isEmpty ? 'Sin dirección' : addr,
+            responsibles: const [],
+          ));
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _all = base;
+      _filtered = base;
+      _isLoading = false;
+    });
+  }
+
+  void _onSearch(String query) {
+    final q = query.trim().toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty ? _all : [for (final c in _all) if (c.name.toLowerCase().contains(q)) c];
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: SizedBox(
+        width: 480,
+        height: 520,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Text('Seleccionar cliente', style: Theme.of(context).textTheme.titleMedium),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Buscar por nombre',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: _onSearch,
+              ),
+            ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _filtered.isEmpty
+                      ? const Center(child: Text('Sin resultados'))
+                      : ListView.builder(
+                          itemCount: _filtered.length,
+                          itemBuilder: (ctx, i) {
+                            final c = _filtered[i];
+                            return ListTile(
+                              leading: Icon(c.icon),
+                              title: Text(c.name),
+                              subtitle: Text(c.sector),
+                              onTap: () => Navigator.of(ctx).pop(c),
+                            );
+                          },
+                        ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 0, 16, 12),
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

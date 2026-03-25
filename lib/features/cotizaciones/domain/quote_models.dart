@@ -10,6 +10,8 @@ class QuoteRecord {
     required this.tax,
     required this.total,
     this.validUntil,
+    this.approvalPdfPath,
+    this.approvalPdfUploadedAt,
   });
 
   final String id;
@@ -22,6 +24,10 @@ class QuoteRecord {
   final double tax;
   final double total;
   final DateTime? validUntil;
+  final String? approvalPdfPath;
+  final DateTime? approvalPdfUploadedAt;
+
+  bool get hasApprovalPdf => approvalPdfPath != null && approvalPdfPath!.trim().isNotEmpty;
 
   QuoteRecord copyWith({
     String? id,
@@ -34,6 +40,8 @@ class QuoteRecord {
     double? tax,
     double? total,
     DateTime? validUntil,
+    String? approvalPdfPath,
+    DateTime? approvalPdfUploadedAt,
   }) {
     return QuoteRecord(
       id: id ?? this.id,
@@ -46,6 +54,8 @@ class QuoteRecord {
       tax: tax ?? this.tax,
       total: total ?? this.total,
       validUntil: validUntil ?? this.validUntil,
+      approvalPdfPath: approvalPdfPath ?? this.approvalPdfPath,
+      approvalPdfUploadedAt: approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,
     );
   }
 }
@@ -56,14 +66,38 @@ class ProjectLookup {
     required this.code,
     required this.name,
     this.clientId,
+    this.siteAddress,
+    this.description,
+    this.managerName,
   });
 
   final String id;
   final String code;
   final String name;
   final String? clientId;
+  final String? siteAddress;
+  final String? description;
+  final String? managerName;
 
   String get label => '$code - $name';
+}
+
+class NewProjectInput {
+  const NewProjectInput({
+    required this.code,
+    required this.name,
+    this.clientId,
+    this.siteAddress,
+    this.description,
+    this.managerName,
+  });
+
+  final String code;
+  final String name;
+  final String? clientId;
+  final String? siteAddress;
+  final String? description;
+  final String? managerName;
 }
 
 class QuoteItemRecord {
@@ -112,4 +146,27 @@ class QuoteItemRecord {
       lineTotal: lineTotal ?? this.lineTotal,
     );
   }
+}
+
+class QuoteContextInfo {
+  const QuoteContextInfo({
+    required this.projectName,
+    required this.clientName,
+    required this.address,
+    required this.location,
+    required this.description,
+  });
+
+  final String projectName;
+  final String clientName;
+  final String address;
+  final String location;
+  final String description;
+
+  bool get isEmpty =>
+      projectName.trim().isEmpty &&
+      clientName.trim().isEmpty &&
+      address.trim().isEmpty &&
+      location.trim().isEmpty &&
+      description.trim().isEmpty;
 }

@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -68,6 +67,7 @@ class PresupuestoPage extends ConsumerWidget {
             data: (items) => _BudgetView(
               quote: quote,
               items: items,
+              contextState: ref.watch(quoteContextProvider(quote.projectId)),
               onAddItem: () => _openItemDialog(context, ref, quote, null, catalogState),
               onEditItem: (item) => _openItemDialog(context, ref, quote, item, catalogState),
               onDeleteItem: (item) => ref.read(quoteItemsProvider(quote.id).notifier).remove(item.id),
@@ -181,32 +181,42 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final pdf = pw.Document();
+    final logo = await _loadHeaderLogo();
+    final watermark = await _loadWatermarkImage();
     final money = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
     final dateLabel = quote.validUntil != null ? _date(quote.validUntil!) : _date(DateTime.now());
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(28),
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.letter,
+          margin: const pw.EdgeInsets.all(28),
+          buildBackground: watermark != null
+              ? (_) => pw.Positioned.fill(
+                    child: pw.Center(
+                      child: pw.Opacity(
+                        opacity: 0.30,
+                        child: pw.Image(watermark, width: 380, fit: pw.BoxFit.contain),
+                      ),
+                    ),
+                  )
+              : null,
+        ),
         build: (context) => [
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      CompanyProfile.brandName,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18),
-                    ),
-                    pw.SizedBox(height: 6),
-                    pw.Text(CompanyProfile.legalName, style: const pw.TextStyle(fontSize: 9)),
-                    pw.SizedBox(height: 4),
-                    pw.Text('TEL: ${CompanyProfile.phone}', style: const pw.TextStyle(fontSize: 9)),
-                  ],
-                ),
+              pw.Container(
+                width: 92,
+                height: 46,
+                alignment: pw.Alignment.centerLeft,
+                child: logo != null
+                    ? pw.Image(logo, fit: pw.BoxFit.contain)
+                    : pw.Text(
+                        CompanyProfile.brandName,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                      ),
               ),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
@@ -272,12 +282,31 @@ class PresupuestoPage extends ConsumerWidget {
 
     return Uint8List.fromList(await pdf.save());
   }
+
+  Future<pw.MemoryImage?> _loadHeaderLogo() async {
+    try {
+      final data = await rootBundle.load('assets/images/logo_remaa.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<pw.MemoryImage?> _loadWatermarkImage() async {
+    try {
+      final data = await rootBundle.load('assets/images/marca_agua_remaa.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class _BudgetView extends StatelessWidget {
   const _BudgetView({
     required this.quote,
     required this.items,
+    required this.contextState,
     required this.onAddItem,
     required this.onEditItem,
     required this.onDeleteItem,
@@ -285,6 +314,7 @@ class _BudgetView extends StatelessWidget {
 
   final QuoteRecord quote;
   final List<QuoteItemRecord> items;
+  final AsyncValue<QuoteContextInfo> contextState;
   final VoidCallback onAddItem;
   final ValueChanged<QuoteItemRecord> onEditItem;
   final ValueChanged<QuoteItemRecord> onDeleteItem;
@@ -330,6 +360,40 @@ class _BudgetView extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
+              contextState.when(
+                data: (context) => Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: RemaColors.surfaceLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: RemaColors.outlineVariant.withValues(alpha: 0.35)),
+                  ),
+                  child: Wrap(
+                    spacing: 24,
+                    runSpacing: 10,
+                    children: [
+                      _ContextField(label: 'Proyecto', value: context.projectName),
+                      _ContextField(label: 'Cliente', value: context.clientName),
+                      _ContextField(label: 'Direccion', value: context.address),
+                      _ContextField(label: 'Ubicacion', value: context.location),
+                      _ContextField(label: 'Descripcion', value: context.description),
+                    ],
+                  ),
+                ),
+                loading: () => const LinearProgressIndicator(minHeight: 2),
+                error: (_, __) => Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: RemaColors.surfaceLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: RemaColors.outlineVariant.withValues(alpha: 0.35)),
+                  ),
+                  child: const Text('No se pudo cargar el contexto del proyecto.'),
+                ),
+              ),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   FilledButton.icon(
@@ -453,6 +517,29 @@ class _TotalRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ContextField extends StatelessWidget {
+  const _ContextField({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final display = value.trim().isEmpty ? 'Sin dato' : value.trim();
+    return SizedBox(
+      width: 210,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 2),
+          Text(display, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
     );
   }
 }

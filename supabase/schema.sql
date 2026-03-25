@@ -1,6 +1,21 @@
 -- REMA Arquitectura - Esquema inicial escalable (PostgreSQL / Supabase)
 create extension if not exists pgcrypto;
 
+create sequence if not exists public.project_key_seq start 1;
+
+create or replace function public.next_project_key()
+returns text
+language plpgsql
+security definer
+as $$
+declare
+  seq_value bigint;
+begin
+  seq_value := nextval('public.project_key_seq');
+  return 'PRJ' || lpad(seq_value::text, 3, '0');
+end;
+$$;
+
 create table if not exists public.clients (
   id uuid primary key default gen_random_uuid(),
   business_name text not null,
@@ -64,6 +79,8 @@ create table if not exists public.quotes (
   project_type_id uuid,
   quote_number text not null,
   status text not null default 'draft',
+  approval_pdf_path text,
+  approval_pdf_uploaded_at timestamptz,
   subtotal numeric(14,2) not null default 0,
   tax numeric(14,2) not null default 0,
   total numeric(14,2) not null default 0,
@@ -97,6 +114,12 @@ alter table public.quotes
 
 alter table public.quotes
   add column if not exists project_type_id uuid;
+
+alter table public.quotes
+  add column if not exists approval_pdf_path text;
+
+alter table public.quotes
+  add column if not exists approval_pdf_uploaded_at timestamptz;
 
 create table if not exists public.universes (
   id uuid primary key default gen_random_uuid(),
@@ -486,4 +509,8 @@ on conflict (id) do nothing;
 
 insert into storage.buckets (id, name, public)
 values ('survey-photos', 'survey-photos', false)
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
+values ('quote-approvals', 'quote-approvals', false)
 on conflict (id) do nothing;

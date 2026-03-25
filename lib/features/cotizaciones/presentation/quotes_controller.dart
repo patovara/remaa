@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/supabase_bootstrap.dart';
 import 'concepts_catalog_controller.dart';
 import '../data/quotes_repository.dart';
 import '../domain/quote_models.dart';
@@ -23,6 +25,10 @@ final quoteItemsProvider = AsyncNotifierProvider.family<
     List<QuoteItemRecord>,
     String>(QuoteItemsController.new);
 
+final quoteContextProvider = FutureProvider.family<QuoteContextInfo, String>((ref, projectId) {
+  return ref.read(quotesRepositoryProvider).fetchQuoteContext(projectId: projectId);
+});
+
 class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
   late final QuotesRepository _repository = ref.read(quotesRepositoryProvider);
 
@@ -35,15 +41,50 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
     required String projectId,
     required String universeId,
     required String projectTypeId,
+    String? projectKey,
   }) async {
     final quote = await _repository.createDraftQuote(
       projectId: projectId,
       universeId: universeId,
       projectTypeId: projectTypeId,
+      projectKey: projectKey,
     );
     final current = state.valueOrNull ?? const <QuoteRecord>[];
     state = AsyncData([quote, ...current]);
     return quote;
+  }
+
+  Future<String> reserveProjectKey() async {
+    return _repository.reserveProjectKey(client: SupabaseBootstrap.client);
+  }
+
+  Future<ProjectLookup> createProject({required NewProjectInput input}) async {
+    final project = await _repository.createProject(input: input);
+    ref.invalidate(quoteProjectsProvider);
+    return project;
+  }
+
+  Future<void> updateProjectContext({
+    required String projectId,
+    required String name,
+    required String managerName,
+    required String address,
+    required String description,
+    String? clientId,
+  }) async {
+    await _repository.updateProjectContext(
+      projectId: projectId,
+      name: name,
+      managerName: managerName,
+      address: address,
+      description: description,
+      clientId: clientId,
+    );
+    ref.invalidate(quoteProjectsProvider);
+  }
+
+  Future<QuoteContextInfo> fetchQuoteContext({required String projectId}) {
+    return _repository.fetchQuoteContext(projectId: projectId);
   }
 
   Future<void> setTotals({
@@ -79,6 +120,53 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
 
   Future<void> reload() async {
     state = await AsyncValue.guard(_repository.fetchQuotes);
+  }
+
+  Future<void> updateStatus({required String quoteId, required String status}) async {
+    final current = state.valueOrNull ?? const <QuoteRecord>[];
+    QuoteRecord? quote;
+    for (final item in current) {
+      if (item.id == quoteId) {
+        quote = item;
+        break;
+      }
+    }
+    if (quote == null) return;
+
+    final updated = await _repository.updateStatus(quote: quote, status: status);
+    state = AsyncData([
+      for (final item in current)
+        if (item.id == quoteId) updated else item,
+    ]);
+  }
+
+  Future<void> attachApprovalPdf({
+    required String quoteId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final current = state.valueOrNull ?? const <QuoteRecord>[];
+    QuoteRecord? quote;
+    for (final item in current) {
+      if (item.id == quoteId) {
+        quote = item;
+        break;
+      }
+    }
+    if (quote == null) {
+      throw StateError('No se encontro la cotizacion para adjuntar el PDF.');
+    }
+
+    final updated = await _repository.attachApprovalPdf(
+      quote: quote,
+      bytes: bytes,
+      fileName: fileName,
+    );
+
+    state = AsyncData([
+      for (final item in current)
+        if (item.id == quoteId) updated else item,
+    ]);
   }
 }
 

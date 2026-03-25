@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +23,7 @@ class CotizacionesPage extends ConsumerStatefulWidget {
 
 class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   String _search = '';
+  String? _statusFilter; // null = todos, 'draft', 'approved', 'declined'
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +51,11 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                 onChanged: (value) => setState(() => _search = value.trim().toLowerCase()),
               ),
               const SizedBox(height: 24),
+              _StatusFilterBar(
+                current: _statusFilter,
+                onChanged: (value) => setState(() => _statusFilter = value),
+              ),
+              const SizedBox(height: 16),
               _QuotesMetrics(quotes: filtered),
               const SizedBox(height: 24),
               RemaPanel(
@@ -60,11 +69,6 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                         children: [
                           Expanded(
                             child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => showRemaMessage(context, 'Filtro avanzado en siguiente iteracion.'),
-                            icon: const Icon(Icons.filter_list),
-                            label: const Text('Filtrar'),
                           ),
                         ],
                       ),
@@ -84,6 +88,13 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                           quote: quote,
                           onEdit: () => context.go('/presupuesto/${quote.id}'),
                           onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
+                          onAttachPdf: () => _attachApprovalPdf(quote),
+                          onApprove: quote.status == 'draft'
+                              ? () => _changeStatus(quote.id, 'approved')
+                              : null,
+                          onDecline: quote.status != 'declined'
+                              ? () => _changeStatus(quote.id, 'declined')
+                              : null,
                         ),
                   ],
                 ),
@@ -115,12 +126,62 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   List<QuoteRecord> _filterQuotes(List<QuoteRecord> quotes) {
-    if (_search.isEmpty) {
-      return quotes;
+    var result = quotes;
+    if (_statusFilter != null) {
+      result = result.where((q) => q.status == _statusFilter).toList();
     }
-    return quotes
-        .where((quote) => quote.quoteNumber.toLowerCase().contains(_search))
-        .toList();
+    if (_search.isNotEmpty) {
+      result = result.where((q) => q.quoteNumber.toLowerCase().contains(_search)).toList();
+    }
+    return result;
+  }
+
+  Future<void> _changeStatus(String quoteId, String newStatus) async {
+    try {
+      await ref.read(quotesProvider.notifier).updateStatus(quoteId: quoteId, status: newStatus);
+      if (mounted) {
+        final label = newStatus == 'approved' ? 'Aprobada' : 'Declinada';
+        showRemaMessage(context, 'Cotizacion marcada como $label.');
+      }
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, '$error');
+      }
+    }
+  }
+
+  Future<void> _attachApprovalPdf(QuoteRecord quote) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf'],
+      withData: true,
+    );
+
+    if (!mounted || result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final file = result.files.first;
+    final Uint8List? bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      showRemaMessage(context, 'No se pudo leer el PDF seleccionado.');
+      return;
+    }
+
+    try {
+      await ref.read(quotesProvider.notifier).attachApprovalPdf(
+            quoteId: quote.id,
+            bytes: bytes,
+            fileName: file.name,
+          );
+      if (mounted) {
+        showRemaMessage(context, 'PDF del pedido adjuntado en ${quote.quoteNumber}.');
+      }
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, '$error');
+      }
+    }
   }
 
   Future<void> _openNewQuoteDialog() async {
@@ -161,10 +222,13 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       return;
     }
 
-    final quote = await ref.read(quotesProvider.notifier).createDraft(
+        final projectKey = await ref.read(quotesProvider.notifier).reserveProjectKey();
+
+        final quote = await ref.read(quotesProvider.notifier).createDraft(
           projectId: result.projectId,
           universeId: result.universeId,
           projectTypeId: result.projectTypeId,
+          projectKey: projectKey,
         );
 
     if (!mounted) {
@@ -246,14 +310,56 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = status == 'draft';
+    Color bg;
+    String label;
+    switch (status) {
+      case 'approved':
+        bg = const Color(0xFFDFF4DD);
+        label = 'Aprobada';
+        break;
+      case 'declined':
+        bg = const Color(0xFFFFDDDD);
+        label = 'Declinada';
+        break;
+      default:
+        bg = const Color(0xFFFFDEA0);
+        label = 'Pendiente';
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      color: isPending ? const Color(0xFFFFDEA0) : const Color(0xFFDFF4DD),
+      color: bg,
       child: Text(
-        (isPending ? 'Pendiente' : 'Aprobada').toUpperCase(),
+        label.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall,
       ),
+    );
+  }
+}
+
+class _StatusFilterBar extends StatelessWidget {
+  const _StatusFilterBar({required this.current, required this.onChanged});
+
+  final String? current;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = <(String?, String)>[
+      (null, 'Todos'),
+      ('draft', 'Pendientes'),
+      ('approved', 'Aprobadas'),
+      ('declined', 'Declinadas'),
+    ];
+    return Wrap(
+      spacing: 8,
+      children: [
+        for (final (value, label) in options)
+          FilterChip(
+            label: Text(label),
+            selected: current == value,
+            onSelected: (_) => onChanged(value),
+          ),
+      ],
     );
   }
 }
@@ -297,11 +403,17 @@ class _QuoteRow extends StatelessWidget {
     required this.quote,
     required this.onEdit,
     required this.onShare,
+    required this.onAttachPdf,
+    this.onApprove,
+    this.onDecline,
   });
 
   final QuoteRecord quote;
   final VoidCallback onEdit;
   final VoidCallback onShare;
+  final VoidCallback onAttachPdf;
+  final VoidCallback? onApprove;
+  final VoidCallback? onDecline;
 
   @override
   Widget build(BuildContext context) {
@@ -323,7 +435,20 @@ class _QuoteRow extends StatelessWidget {
             ),
           ),
           Expanded(flex: 2, child: Text(_money(quote.total))),
-          Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: _StatusBadge(status: quote.status))),
+          Expanded(
+            flex: 2,
+            child: Row(
+              children: [
+                Align(alignment: Alignment.centerLeft, child: _StatusBadge(status: quote.status)),
+                const SizedBox(width: 8),
+                Icon(
+                  quote.hasApprovalPdf ? Icons.picture_as_pdf : Icons.picture_as_pdf_outlined,
+                  color: quote.hasApprovalPdf ? Colors.green : Colors.grey,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
           Expanded(
             flex: 2,
             child: Row(
@@ -331,6 +456,25 @@ class _QuoteRow extends StatelessWidget {
               children: [
                 IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar'),
                 IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
+                IconButton(
+                  onPressed: onAttachPdf,
+                  icon: const Icon(Icons.attach_file),
+                  tooltip: quote.hasApprovalPdf ? 'Reemplazar PDF pedido' : 'Adjuntar PDF pedido',
+                ),
+                if (onApprove != null)
+                  IconButton(
+                    onPressed: onApprove,
+                    icon: const Icon(Icons.check_circle_outline),
+                    tooltip: 'Aprobar',
+                    color: Colors.green,
+                  ),
+                if (onDecline != null)
+                  IconButton(
+                    onPressed: onDecline,
+                    icon: const Icon(Icons.cancel_outlined),
+                    tooltip: 'Declinar',
+                    color: Colors.red,
+                  ),
               ],
             ),
           ),
