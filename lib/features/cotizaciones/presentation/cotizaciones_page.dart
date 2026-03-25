@@ -1,155 +1,240 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
+import '../domain/concept_generation.dart';
+import '../domain/quote_models.dart';
+import 'concepts_catalog_controller.dart';
+import 'quotes_controller.dart';
 
-class CotizacionesPage extends StatelessWidget {
+class CotizacionesPage extends ConsumerStatefulWidget {
   const CotizacionesPage({super.key});
 
   @override
+  ConsumerState<CotizacionesPage> createState() => _CotizacionesPageState();
+}
+
+class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
+  String _search = '';
+
+  @override
   Widget build(BuildContext context) {
+    final quotesAsync = ref.watch(quotesProvider);
+
     return PageFrame(
       title: 'Gestion de Cotizaciones',
       subtitle: 'Resumen operativo y detalle de cotizaciones activas.',
       trailing: FilledButton.icon(
-        onPressed: () => showRemaMessage(
-          context,
-          'Nueva cotizacion preparada con datos demo.',
-          label: 'Abrir',
-          onAction: () => context.go('/presupuesto'),
-        ),
+        onPressed: _openNewQuoteDialog,
         icon: const Icon(Icons.add),
         label: const Text('Nueva Cotizacion'),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            decoration: const InputDecoration(
-              hintText: 'Buscar cotizacion por clave o cliente...',
-              prefixIcon: Icon(Icons.search),
-            ),
-          ),
-          const SizedBox(height: 24),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 960;
-              if (!isWide) {
-                return const Column(
+      child: quotesAsync.when(
+        data: (quotes) {
+          final filtered = _filterQuotes(quotes);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Buscar cotizacion por folio...',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) => setState(() => _search = value.trim().toLowerCase()),
+              ),
+              const SizedBox(height: 24),
+              _QuotesMetrics(quotes: filtered),
+              const SizedBox(height: 24),
+              RemaPanel(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    RemaMetricTile(
-                      label: 'Total Cotizado',
-                      value: '\$2,840,000',
-                      caption: '+12.5% este mes',
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => showRemaMessage(context, 'Filtro avanzado en siguiente iteracion.'),
+                            icon: const Icon(Icons.filter_list),
+                            label: const Text('Filtrar'),
+                          ),
+                        ],
+                      ),
                     ),
-                    SizedBox(height: 16),
-                    RemaMetricTile(
-                      label: 'Pendientes',
-                      value: '14',
-                      caption: 'Esperando aprobacion',
-                      backgroundColor: RemaColors.surfaceWhite,
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
+                      child: _QuoteTableHeader(),
                     ),
-                    SizedBox(height: 16),
-                    RemaMetricTile(
-                      label: 'Aprobadas',
-                      value: '38',
-                      caption: '82% ratio de exito',
-                      backgroundColor: RemaColors.surfaceLow,
-                    ),
-                    SizedBox(height: 16),
-                    RemaMetricTile(
-                      label: 'Valor Promedio',
-                      value: '\$74,500',
-                      caption: 'Por proyecto individual',
-                      backgroundColor: Color(0xFFFFDEA0),
-                    ),
+                    if (filtered.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('No hay cotizaciones para mostrar.'),
+                      )
+                    else
+                      for (final quote in filtered)
+                        _QuoteRow(
+                          quote: quote,
+                          onEdit: () => context.go('/presupuesto/${quote.id}'),
+                          onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
+                        ),
                   ],
-                );
-              }
-              return const Row(
-                children: [
-                  Expanded(
-                    child: RemaMetricTile(
-                      label: 'Total Cotizado',
-                      value: '\$2,840,000',
-                      caption: '+12.5% este mes',
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: RemaMetricTile(
-                      label: 'Pendientes',
-                      value: '14',
-                      caption: 'Esperando aprobacion',
-                      backgroundColor: RemaColors.surfaceWhite,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: RemaMetricTile(
-                      label: 'Aprobadas',
-                      value: '38',
-                      caption: '82% ratio de exito',
-                      backgroundColor: RemaColors.surfaceLow,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: RemaMetricTile(
-                      label: 'Valor Promedio',
-                      value: '\$74,500',
-                      caption: 'Por proyecto individual',
-                      backgroundColor: Color(0xFFFFDEA0),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          RemaPanel(
-            padding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: RemaPanel(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => showRemaMessage(context, 'Filtro listo para conectarse con backend.'),
-                        icon: const Icon(Icons.filter_list),
-                        label: const Text('Filtrar'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => showRemaMessage(context, 'Exportacion demo disponible en la siguiente iteracion.'),
-                        icon: const Icon(Icons.download),
-                        label: const Text('Exportar'),
-                      ),
-                    ],
-                  ),
+                const Text('No se pudo cargar cotizaciones.'),
+                const SizedBox(height: 8),
+                Text(error.toString(), style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => ref.read(quotesProvider.notifier).reload(),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar'),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24),
-                  child: _QuoteTableHeader(),
-                ),
-                for (final quote in _quotes)
-                  _QuoteRow(
-                    quote: quote,
-                    onEdit: () => context.go('/presupuesto'),
-                    onShare: () => showRemaMessage(context, 'Compartir ${quote.id} queda listo para integracion.'),
-                  ),
               ],
             ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  List<QuoteRecord> _filterQuotes(List<QuoteRecord> quotes) {
+    if (_search.isEmpty) {
+      return quotes;
+    }
+    return quotes
+        .where((quote) => quote.quoteNumber.toLowerCase().contains(_search))
+        .toList();
+  }
+
+  Future<void> _openNewQuoteDialog() async {
+    final catalogState = ref.read(conceptsCatalogProvider);
+    final catalog = catalogState.valueOrNull;
+    if (catalog == null) {
+      showRemaMessage(context, 'Catalogo de conceptos no disponible aun.');
+      await ref.read(conceptsCatalogProvider.notifier).reload();
+      return;
+    }
+
+    List<ProjectLookup> projects;
+    try {
+      projects = await ref.read(quoteProjectsProvider.future);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, 'No se pudo cargar lista de proyectos.');
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (projects.isEmpty) {
+      showRemaMessage(context, 'No hay proyectos disponibles para crear cotizacion.');
+      return;
+    }
+
+    final result = await showDialog<_NewQuoteResult>(
+      context: context,
+      builder: (context) => _NewQuoteDialog(catalog: catalog, projects: projects),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    final quote = await ref.read(quotesProvider.notifier).createDraft(
+          projectId: result.projectId,
+          universeId: result.universeId,
+          projectTypeId: result.projectTypeId,
+        );
+
+    if (!mounted) {
+      return;
+    }
+    showRemaMessage(context, 'Cotizacion ${quote.quoteNumber} creada.');
+    context.go('/presupuesto/${quote.id}');
+  }
+}
+
+class _QuotesMetrics extends StatelessWidget {
+  const _QuotesMetrics({required this.quotes});
+
+  final List<QuoteRecord> quotes;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = quotes.fold<double>(0, (sum, quote) => sum + quote.total);
+    final pending = quotes.where((quote) => quote.status == 'draft').length;
+    final approved = quotes.where((quote) => quote.status == 'approved').length;
+    final average = quotes.isEmpty ? 0.0 : total / quotes.length;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tiles = [
+          RemaMetricTile(
+            label: 'Total Cotizado',
+            value: _money(total),
+            caption: '${quotes.length} cotizaciones',
+          ),
+          RemaMetricTile(
+            label: 'Pendientes',
+            value: '$pending',
+            caption: 'Estado draft',
+            backgroundColor: RemaColors.surfaceWhite,
+          ),
+          RemaMetricTile(
+            label: 'Aprobadas',
+            value: '$approved',
+            caption: 'Estado approved',
+            backgroundColor: RemaColors.surfaceLow,
+          ),
+          RemaMetricTile(
+            label: 'Valor Promedio',
+            value: _money(average),
+            caption: 'Por cotizacion',
+            backgroundColor: const Color(0xFFFFDEA0),
+          ),
+        ];
+
+        if (constraints.maxWidth < 960) {
+          return Column(
+            children: [
+              for (final tile in tiles) ...[
+                tile,
+                if (tile != tiles.last) const SizedBox(height: 16),
+              ],
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            for (final tile in tiles) ...[
+              Expanded(child: tile),
+              if (tile != tiles.last) const SizedBox(width: 16),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -161,11 +246,14 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = status == 'Pendiente';
+    final isPending = status == 'draft';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       color: isPending ? const Color(0xFFFFDEA0) : const Color(0xFFDFF4DD),
-      child: Text(status.toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
+      child: Text(
+        (isPending ? 'Pendiente' : 'Aprobada').toUpperCase(),
+        style: Theme.of(context).textTheme.labelSmall,
+      ),
     );
   }
 }
@@ -176,10 +264,8 @@ class _QuoteTableHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: [
-        _HeaderCell(flex: 2, label: 'ID Cotizacion'),
-        _HeaderCell(flex: 4, label: 'Proyecto'),
-        _HeaderCell(flex: 3, label: 'Cliente'),
+      children: const [
+        _HeaderCell(flex: 3, label: 'Folio'),
         _HeaderCell(flex: 2, label: 'Total'),
         _HeaderCell(flex: 2, label: 'Estado'),
         _HeaderCell(flex: 2, label: 'Acciones'),
@@ -207,9 +293,13 @@ class _HeaderCell extends StatelessWidget {
 }
 
 class _QuoteRow extends StatelessWidget {
-  const _QuoteRow({required this.quote, required this.onEdit, required this.onShare});
+  const _QuoteRow({
+    required this.quote,
+    required this.onEdit,
+    required this.onShare,
+  });
 
-  final ({String id, String title, String location, String client, String status, String amount}) quote;
+  final QuoteRecord quote;
   final VoidCallback onEdit;
   final VoidCallback onShare;
 
@@ -224,25 +314,15 @@ class _QuoteRow extends StatelessWidget {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            flex: 2,
-            child: Text(quote.id, style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark)),
-          ),
-          Expanded(
-            flex: 4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(quote.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(quote.location, style: const TextStyle(color: RemaColors.onSurfaceVariant)),
-              ],
+            flex: 3,
+            child: Text(
+              quote.quoteNumber,
+              style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
             ),
           ),
-          Expanded(flex: 3, child: Text(quote.client)),
-          Expanded(flex: 2, child: Text(quote.amount, style: const TextStyle(fontWeight: FontWeight.w700))),
+          Expanded(flex: 2, child: Text(_money(quote.total))),
           Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: _StatusBadge(status: quote.status))),
           Expanded(
             flex: 2,
@@ -260,29 +340,113 @@ class _QuoteRow extends StatelessWidget {
   }
 }
 
-const _quotes = <({String id, String title, String location, String client, String status, String amount})>[
-  (
-    id: '#QT-2024-082',
-    title: 'Residencia Los Olivos',
-    location: 'Ubicacion: Valle Real',
-    client: 'Ing. Roberto Mendez',
-    status: 'Pendiente',
-    amount: '\$145,200.00 MXN'
-  ),
-  (
-    id: '#QT-2024-079',
-    title: 'Torre Loft 360',
-    location: 'Ubicacion: Zona Residencial',
-    client: 'Construcciones Alpha S.A.',
-    status: 'Aprobada',
-    amount: '\$482,000.00 MXN'
-  ),
-  (
-    id: '#QT-2024-075',
-    title: 'Ampliacion Quinta Gto',
-    location: 'Ubicacion: Guanajuato Capital',
-    client: 'Familia Torres',
-    status: 'Aprobada',
-    amount: '\$218,900.00 MXN'
-  ),
-];
+class _NewQuoteResult {
+  const _NewQuoteResult({
+    required this.projectId,
+    required this.universeId,
+    required this.projectTypeId,
+  });
+
+  final String projectId;
+  final String universeId;
+  final String projectTypeId;
+}
+
+class _NewQuoteDialog extends StatefulWidget {
+  const _NewQuoteDialog({required this.catalog, required this.projects});
+
+  final ConceptCatalogSnapshot catalog;
+  final List<ProjectLookup> projects;
+
+  @override
+  State<_NewQuoteDialog> createState() => _NewQuoteDialogState();
+}
+
+class _NewQuoteDialogState extends State<_NewQuoteDialog> {
+  String? _projectId;
+  String? _universeId;
+  String? _projectTypeId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.projects.isNotEmpty) {
+      _projectId = widget.projects.first.id;
+    }
+    if (widget.catalog.universes.isNotEmpty) {
+      _universeId = widget.catalog.universes.first.id;
+    }
+    if (widget.catalog.projectTypes.isNotEmpty) {
+      _projectTypeId = widget.catalog.projectTypes.first.id;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Nueva cotizacion'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+              DropdownButtonFormField<String>(
+                initialValue: _projectId,
+                decoration: const InputDecoration(labelText: 'Proyecto'),
+                items: [
+                  for (final project in widget.projects)
+                    DropdownMenuItem(value: project.id, child: Text(project.label)),
+                ],
+                onChanged: (value) => setState(() => _projectId = value),
+              ),
+              const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _universeId,
+              decoration: const InputDecoration(labelText: 'Universo'),
+              items: [
+                for (final universe in widget.catalog.universes)
+                  DropdownMenuItem(value: universe.id, child: Text(universe.name)),
+              ],
+              onChanged: (value) => setState(() => _universeId = value),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _projectTypeId,
+              decoration: const InputDecoration(labelText: 'Tipo de proyecto'),
+              items: [
+                for (final projectType in widget.catalog.projectTypes)
+                  DropdownMenuItem(value: projectType.id, child: Text(projectType.name)),
+              ],
+              onChanged: (value) => setState(() => _projectTypeId = value),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_projectId == null || _universeId == null || _projectTypeId == null) {
+              return;
+            }
+            Navigator.of(context).pop(
+              _NewQuoteResult(
+                projectId: _projectId!,
+                universeId: _universeId!,
+                projectTypeId: _projectTypeId!,
+              ),
+            );
+          },
+          child: const Text('Crear'),
+        ),
+      ],
+    );
+  }
+}
+
+String _money(double value) {
+  return '\$${value.toStringAsFixed(2)}';
+}

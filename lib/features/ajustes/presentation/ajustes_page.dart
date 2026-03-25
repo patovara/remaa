@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/config/company_profile.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
@@ -91,7 +92,7 @@ class _ProfileHero extends StatelessWidget {
               children: [
                 Text('Ing. Miguel Vazquez', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
                 SizedBox(height: 6),
-                Text('Socio Director | REMA Arquitectura SC'),
+                Text('Socio Director | ${CompanyProfile.legalName}'),
                 SizedBox(height: 12),
                 Wrap(
                   spacing: 10,

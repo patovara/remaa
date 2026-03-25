@@ -1,12 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/config/company_profile.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
@@ -27,7 +27,10 @@ class _ActasPageState extends State<ActasPage> {
   final _clienteController = TextEditingController(text: 'Residencial Las Lomas S.A.');
   final _razonSocialController = TextEditingController(text: 'Residencial Las Lomas S.A. de C.V.');
   final _direccionController = TextEditingController(text: 'Blvd. Virreyes #405, Lomas de Chapultepec, CDMX');
+  final _ubicacionController = TextEditingController(text: 'CDMX');
+  final _horaEstablecidaController = TextEditingController(text: '10:00');
   final _servicioController = TextEditingController(text: 'Suministro e instalacion de cristal templado para mampara');
+  final _gerenteClienteController = TextEditingController(text: 'Gerente del cliente');
   final _responsableController = TextEditingController(text: 'Arq. Roberto Mendez');
   final _tituloResponsableController = TextEditingController(text: 'Supervisor de Obra');
   final _puestoResponsableController = TextEditingController(text: 'Representante tecnico del cliente');
@@ -36,6 +39,7 @@ class _ActasPageState extends State<ActasPage> {
   final _fechaConclusionController = TextEditingController();
   final _numeroPedidoController = TextEditingController();
   final _fechaAprobacionPedidoController = TextEditingController();
+  final _actaTemplateController = TextEditingController(text: _defaultActaTemplate);
 
   _ActaRole _role = _ActaRole.staff;
   int _step = 0;
@@ -52,7 +56,10 @@ class _ActasPageState extends State<ActasPage> {
     _clienteController.dispose();
     _razonSocialController.dispose();
     _direccionController.dispose();
+    _ubicacionController.dispose();
+    _horaEstablecidaController.dispose();
     _servicioController.dispose();
+    _gerenteClienteController.dispose();
     _responsableController.dispose();
     _tituloResponsableController.dispose();
     _puestoResponsableController.dispose();
@@ -60,6 +67,7 @@ class _ActasPageState extends State<ActasPage> {
     _fechaConclusionController.dispose();
     _numeroPedidoController.dispose();
     _fechaAprobacionPedidoController.dispose();
+    _actaTemplateController.dispose();
     super.dispose();
   }
 
@@ -121,21 +129,28 @@ class _ActasPageState extends State<ActasPage> {
   }
 
   Future<void> _selectDate(TextEditingController controller) async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2040),
-      locale: const Locale('es'),
-    );
+    try {
+      final selected = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2040),
+      );
 
-    if (selected == null) {
-      return;
+      if (selected == null) {
+        return;
+      }
+
+      setState(() {
+        controller.text = _formatter.format(selected);
+      });
+    } catch (e) {
+      // Fallback si el DatePicker falla
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, 'Ingresa la fecha en formato DD/MM/YYYY');
     }
-
-    setState(() {
-      controller.text = _formatter.format(selected);
-    });
   }
 
   bool _validateForPdf() {
@@ -167,6 +182,8 @@ class _ActasPageState extends State<ActasPage> {
 
   Future<Uint8List> _buildPdfBytes() async {
     final pdf = pw.Document();
+    final logo = await _loadHeaderLogo();
+    final watermark = await _loadWatermarkImage();
 
     pw.MemoryImage? ingresoImage;
     pw.MemoryImage? antesImage;
@@ -186,52 +203,67 @@ class _ActasPageState extends State<ActasPage> {
       duranteImages.add(pw.MemoryImage(media.bytes));
     }
 
+    final renderedActa = _renderTemplate(
+      _actaTemplateController.text,
+      _templateValues,
+    );
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.all(36),
         build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+          return pw.Stack(
             children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    'REMA ARQUITECTURA',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18),
+              if (watermark != null)
+                pw.Positioned.fill(
+                  child: pw.Center(
+                    child: pw.Opacity(
+                      opacity: 0.30,
+                      child: pw.Image(
+                        watermark,
+                        width: 380,
+                        fit: pw.BoxFit.contain,
+                      ),
+                    ),
                   ),
-                  pw.Text(DateFormat('dd/MM/yyyy').format(DateTime.now())),
-                ],
-              ),
-              pw.SizedBox(height: 22),
-              pw.Center(
-                child: pw.Text(
-                  'ACTA ENTREGA - RECEPCION',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
                 ),
-              ),
-              pw.SizedBox(height: 18),
-              pw.Text(
-                'A las ${DateFormat('HH:mm').format(DateTime.now())} hrs del ${DateFormat('dd/MM/yyyy').format(DateTime.now())}, se reunen en ${_clienteController.text}, ubicado en ${_direccionController.text}.',
-              ),
-              pw.SizedBox(height: 12),
-              pw.Text(
-                'Servicio: ${_servicioController.text}.\nPedido No. ${_numeroPedidoController.text} aprobado el ${_fechaAprobacionPedidoController.text}.\nFacturado a: ${_razonSocialController.text}.',
-              ),
-              pw.SizedBox(height: 12),
-              pw.Text(
-                'El trabajo inicio el ${_fechaInicioController.text} y concluyo el ${_fechaConclusionController.text}.',
-              ),
-              pw.SizedBox(height: 24),
-              pw.Text('Se firma de conformidad por ambas partes.'),
-              pw.Spacer(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _signatureBlock('RESPONSABLE', _puestoResponsableController.text),
-                  _signatureBlock('SUPERVISOR', '${_tituloResponsableController.text} ${_responsableController.text}'),
-                  _signatureBlock('ING. MIGUEL VAZQUEZ', 'GRUPO REMAA'),
+                  _pdfHeader(logo),
+                  pw.SizedBox(height: 16),
+                  pw.Text(
+                    renderedActa,
+                    style: const pw.TextStyle(fontSize: 11),
+                  ),
+                  pw.Spacer(),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _signatureBlock(
+                        _gerenteClienteController.text.trim().isEmpty
+                            ? '{nombre_del_gerente_del_cliente}'
+                            : _gerenteClienteController.text.trim(),
+                        'Gerente del cliente',
+                      ),
+                      _signatureBlock(
+                        _responsableController.text.trim().isEmpty
+                          ? '{nombre_del_responsable_del_cliente}'
+                            : _responsableController.text.trim(),
+                        _puestoResponsableController.text.trim().isEmpty
+                          ? '{nombre_del_puesto_del_responsable_del_cliente}'
+                            : _puestoResponsableController.text.trim(),
+                      ),
+                      _signatureBlock(
+                        'ING. MIGUEL VAZQUEZ',
+                        'GRUPO REMAA',
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 16),
+                  _pageFooter(1),
                 ],
               ),
             ],
@@ -240,58 +272,115 @@ class _ActasPageState extends State<ActasPage> {
       ),
     );
 
+    pdf.addPage(_photoPage(
+      logo: logo,
+      title: 'REPORTE FOTOGRAFICO - INGRESO A INSTALACIONES',
+      image: ingresoImage,
+      page: 2,
+    ));
+    pdf.addPage(_photoPage(
+      logo: logo,
+      title: 'REPORTE FOTOGRAFICO - ANTES',
+      image: antesImage,
+      page: 3,
+    ));
+
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.all(36),
         build: (context) {
-          return [
-            pw.Text(
-              'REPORTE FOTOGRAFICO',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
-            ),
-            pw.SizedBox(height: 12),
-            _photoSection('Ingreso a las instalaciones', ingresoImage),
-            pw.SizedBox(height: 10),
-            _photoSection('Antes', antesImage),
-            pw.SizedBox(height: 10),
-            pw.Text(
-              'Durante',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(height: 6),
-            pw.Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final image in duranteImages)
-                  pw.Container(
-                    width: 240,
-                    height: 140,
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
-                    child: pw.Image(image, fit: pw.BoxFit.cover),
-                  ),
-                if (duranteImages.isEmpty)
-                  pw.Container(
-                    width: 240,
-                    height: 140,
-                    alignment: pw.Alignment.center,
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.grey300),
-                      color: PdfColors.grey100,
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _pdfHeader(logo),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'REPORTE FOTOGRAFICO - DURANTE',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+              ),
+              pw.SizedBox(height: 12),
+              pw.Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final image in duranteImages)
+                    pw.Container(
+                      width: 240,
+                      height: 140,
+                      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
+                      child: pw.Image(image, fit: pw.BoxFit.cover),
                     ),
-                    child: pw.Text('Sin fotos de avance'),
-                  ),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            _photoSection('Despues', despuesImage),
-          ];
+                  if (duranteImages.isEmpty)
+                    pw.Container(
+                      width: 240,
+                      height: 140,
+                      alignment: pw.Alignment.center,
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey300),
+                        color: PdfColors.grey100,
+                      ),
+                      child: pw.Text('Sin evidencia cargada'),
+                    ),
+                ],
+              ),
+              pw.Spacer(),
+              _pageFooter(4),
+            ],
+          );
         },
       ),
     );
 
+    pdf.addPage(_photoPage(
+      logo: logo,
+      title: 'REPORTE FOTOGRAFICO - DESPUÉS',
+      image: despuesImage,
+      page: 5,
+    ));
+
     return pdf.save();
+  }
+
+  Map<String, String> get _templateValues => {
+        'hora_establecida_por_usuario': _horaEstablecidaController.text.trim(),
+      'fecha_actual': DateFormat('dd/MM/yyyy').format(DateTime.now()),
+      // Alias legacy para plantillas viejas.
+      'fecha_acutal': DateFormat('dd/MM/yyyy').format(DateTime.now()),
+        'nombre_del_cliente': _clienteController.text.trim(),
+        'direccion_del_cliente': _direccionController.text.trim(),
+        'ubicacion_del_cliente': _ubicacionController.text.trim(),
+        'descripcion_del_servicio': _servicioController.text.trim(),
+        'numero_de_pedido': _numeroPedidoController.text.trim(),
+      'fecha_aprobacion_del_pedido': _fechaAprobacionPedidoController.text.trim(),
+        'fecha_aprobacion_pedido': _fechaAprobacionPedidoController.text.trim(),
+      'razon_social_del_cliente': _razonSocialController.text.trim(),
+      'titulo_del_responsable_del_cliente': _tituloResponsableController.text.trim(),
+      'titulo_del_supervisor_del_cliente': _tituloResponsableController.text.trim(),
+        'razon_social_facturacion': _razonSocialController.text.trim(),
+      'nombre_del_gerente_del_cliente': _gerenteClienteController.text.trim(),
+      'nombre_del_supervisor_del_cliente': _responsableController.text.trim(),
+      'nombre_del_responsable_del_cliente': _responsableController.text.trim(),
+      'nombre_del_titulo_del_responsable_del_cliente': _tituloResponsableController.text.trim(),
+      'nombre_del_titulo_del_supervisor_del_cliente': _tituloResponsableController.text.trim(),
+      'nombre_del_puesto_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+      'nombre_del_puesto_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+      'fecha_de_inicio': _fechaInicioController.text.trim(),
+      'fecha_de_conclusion': _fechaConclusionController.text.trim(),
+        'fecha_inicio': _fechaInicioController.text.trim(),
+        'fecha_conclusion': _fechaConclusionController.text.trim(),
+      };
+
+  String _renderTemplate(String template, Map<String, String> values) {
+    return template.replaceAllMapped(RegExp(r'\{[^{}]+\}'), (match) {
+      final token = match.group(0)!;
+      final key = token.substring(1, token.length - 1);
+      final value = values[key];
+      if (value == null || value.isEmpty) {
+        return token;
+      }
+      return value;
+    });
   }
 
   Future<void> _previewPdf() async {
@@ -372,6 +461,7 @@ class _ActasPageState extends State<ActasPage> {
               razonSocialController: _razonSocialController,
               direccionController: _direccionController,
               servicioController: _servicioController,
+              gerenteClienteController: _gerenteClienteController,
               responsableController: _responsableController,
               tituloResponsableController: _tituloResponsableController,
               puestoResponsableController: _puestoResponsableController,
@@ -379,6 +469,9 @@ class _ActasPageState extends State<ActasPage> {
               fechaConclusionController: _fechaConclusionController,
               numeroPedidoController: _numeroPedidoController,
               fechaAprobacionPedidoController: _fechaAprobacionPedidoController,
+              ubicacionController: _ubicacionController,
+              horaEstablecidaController: _horaEstablecidaController,
+              actaTemplateController: _actaTemplateController,
               onPickDate: _selectDate,
             )
           else
@@ -438,6 +531,98 @@ class _ActasPageState extends State<ActasPage> {
     );
   }
 
+  Future<pw.MemoryImage?> _loadHeaderLogo() async {
+    try {
+      final data = await rootBundle.load('assets/images/logo_remaa.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<pw.MemoryImage?> _loadWatermarkImage() async {
+    try {
+      final data = await rootBundle.load('assets/images/marca_agua_remaa.png');
+      return pw.MemoryImage(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  pw.Widget _pdfHeader(pw.MemoryImage? logo) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Container(
+              width: 92,
+              height: 46,
+              alignment: pw.Alignment.centerLeft,
+              child: logo != null
+                  ? pw.Image(logo, fit: pw.BoxFit.contain)
+                  : pw.Text(
+                      CompanyProfile.brandName,
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                    ),
+            ),
+            pw.Spacer(),
+            pw.SizedBox(
+              width: 280,
+              child: pw.Text(
+                CompanyProfile.legalName,
+                textAlign: pw.TextAlign.right,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 8),
+        pw.Center(
+          child: pw.Text(
+            'ACTA ENTREGA - RECEPCIÓN',
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _pageFooter(int page) {
+    return pw.Align(
+      alignment: pw.Alignment.centerRight,
+      child: pw.Text(
+        'Pagina $page de 5',
+        style: const pw.TextStyle(fontSize: 9),
+      ),
+    );
+  }
+
+  pw.Page _photoPage({
+    required pw.MemoryImage? logo,
+    required String title,
+    required pw.MemoryImage? image,
+    required int page,
+  }) {
+    return pw.Page(
+      pageFormat: PdfPageFormat.letter,
+      margin: const pw.EdgeInsets.all(36),
+      build: (context) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _pdfHeader(logo),
+            pw.SizedBox(height: 20),
+            _photoSection(title, image),
+            pw.Spacer(),
+            _pageFooter(page),
+          ],
+        );
+      },
+    );
+  }
+
   pw.Widget _signatureBlock(String title, String subtitle) {
     return pw.Container(
       width: 165,
@@ -465,6 +650,26 @@ class _ActasPageState extends State<ActasPage> {
     );
   }
 }
+
+const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se reúnen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel Vázquez, Representante de Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V. y el {titulo_del_responsable_del_cliente} {nombre_del_responsable_del_cliente}, {nombre_del_puesto_del_responsable_del_cliente} del {nombre_del_cliente}.
+
+  Para la Revisión de la Entrega-Recepción de Servicio de 
+  {descripcion_del_servicio}
+
+  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, 
+  Facturado a: {razon_social_del_cliente}
+
+  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.
+
+  Se hace constar la Terminación del Proyecto de conformidad.
+
+  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un Año sin Costo Alguno para el {nombre_del_cliente}, con Razón Social a Nombre de: {razon_social_del_cliente}, 
+
+  Se Firma de Conformidad de Ambas partes:
+
+  
+  
+  ''';
 
 class _RoleAndSteps extends StatelessWidget {
   const _RoleAndSteps({
@@ -535,6 +740,7 @@ class _ActaBodyStep extends StatelessWidget {
     required this.razonSocialController,
     required this.direccionController,
     required this.servicioController,
+    required this.gerenteClienteController,
     required this.responsableController,
     required this.tituloResponsableController,
     required this.puestoResponsableController,
@@ -542,6 +748,9 @@ class _ActaBodyStep extends StatelessWidget {
     required this.fechaConclusionController,
     required this.numeroPedidoController,
     required this.fechaAprobacionPedidoController,
+    required this.ubicacionController,
+    required this.horaEstablecidaController,
+    required this.actaTemplateController,
     required this.onPickDate,
   });
 
@@ -550,6 +759,7 @@ class _ActaBodyStep extends StatelessWidget {
   final TextEditingController razonSocialController;
   final TextEditingController direccionController;
   final TextEditingController servicioController;
+  final TextEditingController gerenteClienteController;
   final TextEditingController responsableController;
   final TextEditingController tituloResponsableController;
   final TextEditingController puestoResponsableController;
@@ -557,6 +767,9 @@ class _ActaBodyStep extends StatelessWidget {
   final TextEditingController fechaConclusionController;
   final TextEditingController numeroPedidoController;
   final TextEditingController fechaAprobacionPedidoController;
+  final TextEditingController ubicacionController;
+  final TextEditingController horaEstablecidaController;
+  final TextEditingController actaTemplateController;
   final ValueChanged<TextEditingController> onPickDate;
 
   @override
@@ -575,27 +788,31 @@ class _ActaBodyStep extends StatelessWidget {
               const SizedBox(height: 16),
               _ActaField(label: 'Direccion', controller: direccionController),
               const SizedBox(height: 16),
+              _ActaField(label: 'Ubicacion', controller: ubicacionController),
+              const SizedBox(height: 16),
               _ActaField(label: 'Descripcion del servicio', controller: servicioController, maxLines: 2),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
                     child: _ActaField(
-                      label: 'Responsable del cliente',
+                      label: 'Supervisor del cliente',
                       controller: responsableController,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _ActaField(
-                      label: 'Titulo del responsable',
+                      label: 'Titulo del supervisor',
                       controller: tituloResponsableController,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              _ActaField(label: 'Puesto del responsable', controller: puestoResponsableController),
+              _ActaField(label: 'Puesto del supervisor', controller: puestoResponsableController),
+              const SizedBox(height: 16),
+              _ActaField(label: 'Gerente del cliente', controller: gerenteClienteController),
             ],
           ),
         ),
@@ -616,6 +833,13 @@ class _ActaBodyStep extends StatelessWidget {
               const SizedBox(height: 20),
               Row(
                 children: [
+                  Expanded(
+                    child: _ActaField(
+                      label: 'Hora establecida por usuario',
+                      controller: horaEstablecidaController,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _DateField(
                       label: 'Fecha de inicio',
@@ -657,6 +881,12 @@ class _ActaBodyStep extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 18),
+              _ActaField(
+                label: 'Plantilla base del acta (motor de reemplazo)',
+                controller: actaTemplateController,
+                maxLines: 10,
               ),
             ],
           ),

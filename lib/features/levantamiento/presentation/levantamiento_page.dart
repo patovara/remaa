@@ -1,21 +1,27 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
+import '../../cotizaciones/domain/concept_generation.dart';
+import '../../cotizaciones/domain/quote_models.dart';
+import '../../cotizaciones/presentation/concepts_catalog_controller.dart';
+import '../../cotizaciones/presentation/quotes_controller.dart';
+import 'levantamiento_state.dart';
 
-class LevantamientoPage extends StatefulWidget {
+class LevantamientoPage extends ConsumerStatefulWidget {
   const LevantamientoPage({super.key});
 
   @override
-  State<LevantamientoPage> createState() => _LevantamientoPageState();
+  ConsumerState<LevantamientoPage> createState() => _LevantamientoPageState();
 }
 
-class _LevantamientoPageState extends State<LevantamientoPage> {
+class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   final _projectKeyController = TextEditingController(text: 'P-001');
   final _projectNameController = TextEditingController(text: 'Residencia Olivos');
   final _clientController = TextEditingController(text: 'Ing. Roberto Mendez');
@@ -28,6 +34,10 @@ class _LevantamientoPageState extends State<LevantamientoPage> {
 
   DateTime _selectedDate = DateTime(2024, 10, 24);
   String _selectedArchitect = 'Arq. Daniel M.';
+  String? _selectedProjectId;
+  String? _selectedUniverseId;
+  String? _selectedProjectTypeId;
+  bool _isCreatingQuote = false;
   bool _topographicSurvey = true;
   bool _specialPermits = false;
   final List<_PickedMedia> _photos = [];
@@ -83,17 +93,155 @@ class _LevantamientoPageState extends State<LevantamientoPage> {
     showRemaMessage(context, 'Coordenadas copiadas al portapapeles.');
   }
 
+  Future<void> _goToQuote() async {
+    final active = ref.read(activeLevantamientoProvider);
+    final selectedUniverseId = _selectedUniverseId;
+    final selectedProjectId = _selectedProjectId;
+    final selectedProjectTypeId = _selectedProjectTypeId;
+
+    if (selectedUniverseId == null || selectedProjectId == null || selectedProjectTypeId == null) {
+      showRemaMessage(context, 'Selecciona proyecto, universo y tipo de proyecto para continuar.');
+      return;
+    }
+
+    if (active != null && active.isActive && active.universeId != selectedUniverseId) {
+      showRemaMessage(
+        context,
+        'Ya hay un levantamiento activo en otro universo. Finalizalo antes de cambiar.',
+      );
+      return;
+    }
+
+    if (active != null && active.isActive && active.quoteId != null) {
+      context.go('/presupuesto/${active.quoteId}');
+      return;
+    }
+
+    setState(() => _isCreatingQuote = true);
+    try {
+      final quote = await ref.read(quotesProvider.notifier).createDraft(
+            projectId: selectedProjectId,
+            universeId: selectedUniverseId,
+            projectTypeId: selectedProjectTypeId,
+          );
+
+      if (!mounted) {
+        return;
+      }
+
+      ref.read(activeLevantamientoProvider.notifier).activate(
+            projectId: selectedProjectId,
+            universeId: selectedUniverseId,
+            projectTypeId: selectedProjectTypeId,
+            quoteId: quote.id,
+          );
+
+      showRemaMessage(context, 'Levantamiento asociado a ${quote.quoteNumber}.');
+      context.go('/presupuesto/${quote.id}');
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingQuote = false);
+      }
+    }
+  }
+
   void _finishSurvey() {
+    final active = ref.read(activeLevantamientoProvider);
+    if (active == null || !active.isActive) {
+      showRemaMessage(context, 'No hay un levantamiento activo para finalizar.');
+      return;
+    }
+
+    ref.read(activeLevantamientoProvider.notifier).finish();
     showRemaMessage(
       context,
-      'Levantamiento listo para continuar. Fotos cargadas: ${_photos.length}.',
-      label: 'Presupuesto',
-      onAction: () => context.go('/presupuesto'),
+      'Levantamiento finalizado. Fotos cargadas: ${_photos.length}. Ya puedes iniciar otro universo.',
+      label: active.quoteId != null ? 'Presupuesto' : null,
+      onAction: active.quoteId != null
+          ? () => context.go('/presupuesto/${active.quoteId}')
+          : null,
+      duration: const Duration(seconds: 8),
     );
+  }
+
+  List<ProjectTypeCatalogItem> _allowedProjectTypes(
+    List<ProjectTypeCatalogItem> items,
+  ) {
+    bool isAllowed(String raw) {
+      final value = raw.toLowerCase().trim();
+      return value == 'mantenimiento' || value == 'construccion' || value == 'remodelacion';
+    }
+
+    return [for (final item in items) if (isAllowed(item.name)) item];
+  }
+
+  void _primeSelections({
+    required List<ProjectLookup> projects,
+    required List<UniverseCatalogItem> universes,
+    required List<ProjectTypeCatalogItem> projectTypes,
+    required ActiveLevantamientoSession? active,
+  }) {
+    String? nextProjectId = _selectedProjectId;
+    String? nextUniverseId = _selectedUniverseId;
+    String? nextProjectTypeId = _selectedProjectTypeId;
+
+    if (active != null && active.isActive) {
+      nextProjectId = active.projectId;
+      nextUniverseId = active.universeId;
+      nextProjectTypeId = active.projectTypeId;
+    } else {
+      if (nextProjectId == null && projects.isNotEmpty) {
+        nextProjectId = projects.first.id;
+      }
+      if (nextUniverseId == null && universes.isNotEmpty) {
+        nextUniverseId = universes.first.id;
+      }
+      if (nextProjectTypeId == null && projectTypes.isNotEmpty) {
+        nextProjectTypeId = projectTypes.first.id;
+      }
+    }
+
+    final changed = nextProjectId != _selectedProjectId ||
+        nextUniverseId != _selectedUniverseId ||
+        nextProjectTypeId != _selectedProjectTypeId;
+
+    if (!changed) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedProjectId = nextProjectId;
+        _selectedUniverseId = nextUniverseId;
+        _selectedProjectTypeId = nextProjectTypeId;
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final catalogState = ref.watch(conceptsCatalogProvider);
+    final projectsState = ref.watch(quoteProjectsProvider);
+    final activeLevantamiento = ref.watch(activeLevantamientoProvider);
+
+    final universes = catalogState.valueOrNull?.universes ?? const <UniverseCatalogItem>[];
+    final projectTypes = _allowedProjectTypes(
+      catalogState.valueOrNull?.projectTypes ?? const <ProjectTypeCatalogItem>[],
+    );
+    final projects = projectsState.valueOrNull ?? const <ProjectLookup>[];
+
+    _primeSelections(
+      projects: projects,
+      universes: universes,
+      projectTypes: projectTypes,
+      active: activeLevantamiento,
+    );
+
+    final universeLocked = activeLevantamiento != null && activeLevantamiento.isActive;
+
     return PageFrame(
       title: 'Levantamiento de Proyecto',
       subtitle: 'Registro tecnico de obra, evidencia y georreferencia inicial.',
@@ -108,6 +256,35 @@ class _LevantamientoPageState extends State<LevantamientoPage> {
             onArchitectChanged: (value) => setState(() => _selectedArchitect = value),
             projectNameController: _projectNameController,
             clientController: _clientController,
+            projects: projects,
+            selectedProjectId: _selectedProjectId,
+            onProjectChanged: universeLocked
+                ? null
+                : (value) => setState(() => _selectedProjectId = value),
+            universes: universes,
+            selectedUniverseId: _selectedUniverseId,
+            onUniverseChanged: universeLocked
+                ? null
+                : (value) {
+                    if (!ref
+                        .read(activeLevantamientoProvider.notifier)
+                        .canUseUniverse(value)) {
+                      showRemaMessage(
+                        context,
+                        'Universo bloqueado por levantamiento activo.',
+                      );
+                      return;
+                    }
+                    setState(() => _selectedUniverseId = value);
+                  },
+            projectTypes: projectTypes,
+            selectedProjectTypeId: _selectedProjectTypeId,
+            onProjectTypeChanged: universeLocked
+                ? null
+                : (value) => setState(() => _selectedProjectTypeId = value),
+            showCatalogWarning: catalogState.hasError,
+            showProjectsWarning: projectsState.hasError,
+            universeLocked: universeLocked,
           );
           final media = _EvidencePanel(
             photos: _photos,
@@ -167,7 +344,7 @@ class _LevantamientoPageState extends State<LevantamientoPage> {
               ],
               const SizedBox(height: 28),
               _BottomActions(
-                onQuote: () => context.go('/presupuesto'),
+                onQuote: _isCreatingQuote ? null : _goToQuote,
                 onFinish: _finishSurvey,
               ),
             ],
@@ -187,6 +364,18 @@ class _ProjectDetailsPanel extends StatelessWidget {
     required this.onArchitectChanged,
     required this.projectNameController,
     required this.clientController,
+    required this.projects,
+    required this.selectedProjectId,
+    required this.onProjectChanged,
+    required this.universes,
+    required this.selectedUniverseId,
+    required this.onUniverseChanged,
+    required this.projectTypes,
+    required this.selectedProjectTypeId,
+    required this.onProjectTypeChanged,
+    required this.showCatalogWarning,
+    required this.showProjectsWarning,
+    required this.universeLocked,
   });
 
   final DateTime selectedDate;
@@ -196,6 +385,18 @@ class _ProjectDetailsPanel extends StatelessWidget {
   final ValueChanged<String> onArchitectChanged;
   final TextEditingController projectNameController;
   final TextEditingController clientController;
+  final List<ProjectLookup> projects;
+  final String? selectedProjectId;
+  final ValueChanged<String>? onProjectChanged;
+  final List<UniverseCatalogItem> universes;
+  final String? selectedUniverseId;
+  final ValueChanged<String>? onUniverseChanged;
+  final List<ProjectTypeCatalogItem> projectTypes;
+  final String? selectedProjectTypeId;
+  final ValueChanged<String>? onProjectTypeChanged;
+  final bool showCatalogWarning;
+  final bool showProjectsWarning;
+  final bool universeLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -245,6 +446,74 @@ class _ProjectDetailsPanel extends StatelessWidget {
             controller: clientController,
             suffixIcon: Icons.person_search,
           ),
+          const SizedBox(height: 20),
+          DropdownButtonFormField<String>(
+            initialValue: selectedProjectId,
+            decoration: const InputDecoration(labelText: 'Proyecto de levantamiento'),
+            items: [
+              for (final project in projects)
+                DropdownMenuItem<String>(
+                  value: project.id,
+                  child: Text(project.label),
+                ),
+            ],
+            onChanged: onProjectChanged == null
+                ? null
+                : (value) {
+                    if (value != null) {
+                      onProjectChanged!(value);
+                    }
+                  },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: selectedUniverseId,
+            decoration: InputDecoration(
+              labelText: universeLocked ? 'Universo (bloqueado por levantamiento activo)' : 'Universo',
+            ),
+            items: [
+              for (final universe in universes)
+                DropdownMenuItem<String>(
+                  value: universe.id,
+                  child: Text(universe.name),
+                ),
+            ],
+            onChanged: onUniverseChanged == null
+                ? null
+                : (value) {
+                    if (value != null) {
+                      onUniverseChanged!(value);
+                    }
+                  },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: selectedProjectTypeId,
+            decoration: const InputDecoration(labelText: 'Tipo de proyecto'),
+            items: [
+              for (final projectType in projectTypes)
+                DropdownMenuItem<String>(
+                  value: projectType.id,
+                  child: Text(projectType.name),
+                ),
+            ],
+            onChanged: onProjectTypeChanged == null
+                ? null
+                : (value) {
+                    if (value != null) {
+                      onProjectTypeChanged!(value);
+                    }
+                  },
+          ),
+          if (showCatalogWarning || showProjectsWarning) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Algunos catalogos no cargaron. Se usara fallback local cuando aplique.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: RemaColors.onSurfaceVariant,
+                  ),
+            ),
+          ],
         ],
       ),
     );
@@ -323,6 +592,10 @@ class _LocationPanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: RemaColors.surfaceHighest,
               borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: Colors.grey.withValues(alpha: 0.3),
+                width: 1,
+              ),
             ),
             child: Stack(
               children: [
@@ -338,11 +611,32 @@ class _LocationPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Center(
-                  child: CircleAvatar(
-                    radius: 24,
-                    backgroundColor: RemaColors.primaryDark,
-                    child: Icon(Icons.location_on, color: Colors.white),
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircleAvatar(
+                        radius: 24,
+                        backgroundColor: RemaColors.primaryDark,
+                        child: Icon(Icons.location_on, color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Mapa pendiente de integracion',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Ingresa coordenadas manualmente en el campo inferior',
+                        style: TextStyle(
+                          color: Colors.grey.withValues(alpha: 0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Positioned(
@@ -366,7 +660,7 @@ class _LocationPanel extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _UnderlinedField(
-            label: 'Direccion completa',
+            label: 'Direccion completa (o DD.DDDD, DD.DDDD para coordenadas)',
             controller: addressController,
           ),
         ],
@@ -434,7 +728,7 @@ class _DescriptionPanel extends StatelessWidget {
 class _BottomActions extends StatelessWidget {
   const _BottomActions({required this.onQuote, required this.onFinish});
 
-  final VoidCallback onQuote;
+  final VoidCallback? onQuote;
   final VoidCallback onFinish;
 
   @override

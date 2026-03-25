@@ -11,6 +11,28 @@
 - client_responsibles: responsables por cliente para firmas y seguimiento. Cada cliente puede tener un supervisor y un gerente, con registro independiente y referencia a clients.
 - projects: proyectos asociados al cliente.
 
+## Catalogo dinamico de conceptos
+
+Se agrego una capa de catalogo para estandarizar conceptos de obra en cotizaciones:
+
+- universes
+- project_types
+- concept_closures
+- concept_templates
+- concept_attributes
+- attribute_options
+
+Cambios de compatibilidad:
+
+- quotes ahora permite universe_id para restringir una cotizacion a un solo universo.
+- quotes ahora permite project_type_id para fijar el tipo de proyecto a nivel cotizacion.
+- quote_items conserva concept y agrega template_id + generated_data (jsonb) para conceptos dinamicos sin romper items legacy.
+
+Nota:
+
+- generated_data guarda el contexto de generacion (tipo de proyecto, accion, universo, atributos, unidad y precio base).
+- El precio final se persiste en unit_price y line_total; no se recalcula historicos si cambia el catalogo.
+
 ## Storage
 
 - Bucket privado: client-documents

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:rema_app/app/app.dart';
@@ -15,7 +16,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const RemaApp());
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
     expect(find.text('Levantamiento de Proyecto'), findsOneWidget);
@@ -26,7 +27,7 @@ void main() {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1.0;
 
-    await tester.pumpWidget(const RemaApp());
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Clientes'));
@@ -45,7 +46,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const RemaApp());
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Agregar a la cotizacion'));
@@ -54,7 +55,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('COTIZACION'), findsOneWidget);
-    expect(find.text('Conceptos Generales y Condiciones'), findsOneWidget);
+    expect(find.text('Agregar concepto'), findsOneWidget);
   });
 
   testWidgets('navega a nuevo cliente desde clientes', (tester) async {
@@ -63,7 +64,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const RemaApp());
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Clientes'));
@@ -81,7 +82,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const RemaApp());
+    await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Actas'));

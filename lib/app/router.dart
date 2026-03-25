@@ -65,7 +65,15 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/presupuesto',
           pageBuilder: (context, state) => const NoTransitionPage(
-            child: PresupuestoPage(),
+            child: PresupuestoPage(quoteId: 'seed-quote-001'),
+          ),
+        ),
+        GoRoute(
+          path: '/presupuesto/:quoteId',
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: PresupuestoPage(
+              quoteId: state.pathParameters['quoteId'] ?? 'seed-quote-001',
+            ),
           ),
         ),
       ],

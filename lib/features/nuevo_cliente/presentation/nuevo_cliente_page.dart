@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
@@ -17,6 +18,7 @@ class NuevoClientePage extends StatefulWidget {
 }
 
 class _NuevoClientePageState extends State<NuevoClientePage> {
+  final _businessNameController = TextEditingController(text: 'Residencial Las Lomas S.A.');
   final _nameController = TextEditingController(text: 'Arq. Juan Perez');
   final _rfcController = TextEditingController(text: 'JUAP900101AAA');
   final _phoneController = TextEditingController(text: '+52 55 0000 0000');
@@ -28,6 +30,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
 
   @override
   void dispose() {
+    _businessNameController.dispose();
     _nameController.dispose();
     _rfcController.dispose();
     _phoneController.dispose();
@@ -69,13 +72,46 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
     showRemaMessage(context, 'Se elimino ${document.name}.');
   }
 
-  void _saveClient() {
-    showRemaMessage(
-      context,
-      'Cliente ${_nameController.text} listo para persistirse cuando se conecte el flujo a Supabase.',
-      label: 'Clientes',
-      onAction: () => context.go('/clientes'),
-    );
+  Future<void> _saveClient() async {
+    final client = SupabaseBootstrap.client;
+    if (client == null) {
+      showRemaMessage(
+        context,
+        'No hay conexion activa con Supabase. Revisa el .env local.',
+      );
+      return;
+    }
+
+    try {
+      await client.from('clients').insert({
+        'business_name': _businessNameController.text.trim(),
+        'rfc': _rfcController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
+        'address_line': _addressController.text.trim(),
+        'city': _cityController.text.trim(),
+        'notes': 'Contacto principal: ${_nameController.text.trim()}',
+      });
+
+      if (!mounted) {
+        return;
+      }
+
+      showRemaMessage(
+        context,
+        'Cliente ${_businessNameController.text.trim()} creado correctamente.',
+        label: 'Clientes',
+        onAction: () => context.go('/clientes'),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(
+        context,
+        'No se pudo guardar el cliente. Revisa permisos RLS o datos requeridos.',
+      );
+    }
   }
 
   @override
@@ -87,6 +123,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 1080;
           final formPanel = _ClientFormPanel(
+            businessNameController: _businessNameController,
             nameController: _nameController,
             rfcController: _rfcController,
             phoneController: _phoneController,
@@ -100,7 +137,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
             onRemoveDocument: _removeDocument,
           );
           final sidebar = _ClientSidebar(
-            onSave: _saveClient,
+            onSave: () => _saveClient(),
             onCancel: () => context.go('/clientes'),
           );
 
@@ -142,6 +179,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
 
 class _ClientFormPanel extends StatelessWidget {
   const _ClientFormPanel({
+    required this.businessNameController,
     required this.nameController,
     required this.rfcController,
     required this.phoneController,
@@ -150,6 +188,7 @@ class _ClientFormPanel extends StatelessWidget {
     required this.cityController,
   });
 
+  final TextEditingController businessNameController;
   final TextEditingController nameController;
   final TextEditingController rfcController;
   final TextEditingController phoneController;
@@ -165,7 +204,9 @@ class _ClientFormPanel extends StatelessWidget {
         children: [
           const RemaSectionHeader(title: 'Datos Generales', icon: Icons.badge_outlined),
           const SizedBox(height: 24),
-          _ClientField(label: 'Nombre completo', controller: nameController),
+          _ClientField(label: 'Razon social / Nombre legal', controller: businessNameController),
+          const SizedBox(height: 18),
+          _ClientField(label: 'Nombre de contacto', controller: nameController),
           const SizedBox(height: 18),
           Row(
             children: [

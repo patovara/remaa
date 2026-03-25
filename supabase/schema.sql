@@ -60,6 +60,8 @@ create table if not exists public.project_surveys (
 create table if not exists public.quotes (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
+  universe_id uuid,
+  project_type_id uuid,
   quote_number text not null,
   status text not null default 'draft',
   subtotal numeric(14,2) not null default 0,
@@ -71,17 +73,212 @@ create table if not exists public.quotes (
   unique (quote_number)
 );
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'quotes_universe_project_type_pair_check'
+      and conrelid = 'public.quotes'::regclass
+  ) then
+    alter table public.quotes
+      add constraint quotes_universe_project_type_pair_check
+      check (
+        (universe_id is null and project_type_id is null)
+        or
+        (universe_id is not null and project_type_id is not null)
+      );
+  end if;
+end;
+$$;
+
+alter table public.quotes
+  add column if not exists universe_id uuid;
+
+alter table public.quotes
+  add column if not exists project_type_id uuid;
+
+create table if not exists public.universes (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'quotes_universe_id_fkey'
+      and conrelid = 'public.quotes'::regclass
+  ) then
+    alter table public.quotes
+      add constraint quotes_universe_id_fkey
+      foreign key (universe_id) references public.universes(id) on delete restrict;
+  end if;
+end;
+$$;
+
+create table if not exists public.project_types (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  action_base text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'quotes_project_type_id_fkey'
+      and conrelid = 'public.quotes'::regclass
+  ) then
+    alter table public.quotes
+      add constraint quotes_project_type_id_fkey
+      foreign key (project_type_id) references public.project_types(id) on delete restrict;
+  end if;
+end;
+$$;
+
+create or replace function public.validate_quote_item_template_scope()
+returns trigger
+language plpgsql
+as $$
+declare
+  quote_universe_id uuid;
+  quote_project_type_id uuid;
+  template_universe_id uuid;
+  template_project_type_id uuid;
+begin
+  if new.template_id is null then
+    return new;
+  end if;
+
+  select q.universe_id, q.project_type_id
+    into quote_universe_id, quote_project_type_id
+  from public.quotes q
+  where q.id = new.quote_id;
+
+  if quote_universe_id is null or quote_project_type_id is null then
+    raise exception 'La cotizacion % debe tener universo y tipo de proyecto para usar template.', new.quote_id;
+  end if;
+
+  select ct.universe_id, ct.project_type_id
+    into template_universe_id, template_project_type_id
+  from public.concept_templates ct
+  where ct.id = new.template_id;
+
+  if template_universe_id is null or template_project_type_id is null then
+    raise exception 'Template % no valido para quote_item.', new.template_id;
+  end if;
+
+  if quote_universe_id <> template_universe_id or quote_project_type_id <> template_project_type_id then
+    raise exception 'Template % fuera del universo/tipo de la cotizacion %.', new.template_id, new.quote_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+create table if not exists public.concept_closures (
+  id uuid primary key default gen_random_uuid(),
+  text text not null unique,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.concept_templates (
+  id uuid primary key default gen_random_uuid(),
+  universe_id uuid not null references public.universes(id) on delete restrict,
+  project_type_id uuid not null references public.project_types(id) on delete restrict,
+  closure_id uuid not null references public.concept_closures(id) on delete restrict,
+  name text not null,
+  base_description text not null,
+  default_unit text not null,
+  base_price numeric(14,2) not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint concept_templates_unique_name_per_universe unique (universe_id, name)
+);
+
+create table if not exists public.concept_attributes (
+  id uuid primary key default gen_random_uuid(),
+  concept_template_id uuid not null references public.concept_templates(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint concept_attributes_unique_name_per_template unique (concept_template_id, name)
+);
+
+create table if not exists public.attribute_options (
+  id uuid primary key default gen_random_uuid(),
+  attribute_id uuid not null references public.concept_attributes(id) on delete cascade,
+  value text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint attribute_options_unique_value_per_attribute unique (attribute_id, value)
+);
+
 create table if not exists public.quote_items (
   id uuid primary key default gen_random_uuid(),
   quote_id uuid not null references public.quotes(id) on delete cascade,
+  template_id uuid references public.concept_templates(id) on delete set null,
   concept text not null,
+  generated_data jsonb,
   unit text,
   quantity numeric(12,2) not null default 0,
   unit_price numeric(14,2) not null default 0,
   line_total numeric(14,2) not null default 0,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint quote_items_generated_data_is_object check (
+    generated_data is null or jsonb_typeof(generated_data) = 'object'
+  )
 );
+
+alter table public.quote_items
+  add column if not exists template_id uuid;
+
+alter table public.quote_items
+  add column if not exists generated_data jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'quote_items_template_id_fkey'
+      and conrelid = 'public.quote_items'::regclass
+  ) then
+    alter table public.quote_items
+      add constraint quote_items_template_id_fkey
+      foreign key (template_id) references public.concept_templates(id) on delete set null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'quote_items_generated_data_is_object'
+      and conrelid = 'public.quote_items'::regclass
+  ) then
+    alter table public.quote_items
+      add constraint quote_items_generated_data_is_object check (
+        generated_data is null or jsonb_typeof(generated_data) = 'object'
+      );
+  end if;
+end;
+$$;
+
+drop trigger if exists trg_quote_items_validate_template_scope on public.quote_items;
+
+create trigger trg_quote_items_validate_template_scope
+before insert or update of quote_id, template_id
+on public.quote_items
+for each row
+execute function public.validate_quote_item_template_scope();
 
 create table if not exists public.documents (
   id uuid primary key default gen_random_uuid(),
@@ -121,10 +318,167 @@ create index if not exists idx_projects_client_id on public.projects(client_id);
 create index if not exists idx_client_responsibles_client_id on public.client_responsibles(client_id);
 create index if not exists idx_project_surveys_project_id on public.project_surveys(project_id);
 create index if not exists idx_quotes_project_id on public.quotes(project_id);
+create index if not exists idx_quotes_universe_id on public.quotes(universe_id);
+create index if not exists idx_quotes_project_type_id on public.quotes(project_type_id);
 create index if not exists idx_quote_items_quote_id on public.quote_items(quote_id);
+create index if not exists idx_quote_items_template_id on public.quote_items(template_id);
+create index if not exists idx_concept_templates_universe_id on public.concept_templates(universe_id);
+create index if not exists idx_concept_templates_project_type_id on public.concept_templates(project_type_id);
+create index if not exists idx_concept_templates_closure_id on public.concept_templates(closure_id);
+create index if not exists idx_concept_attributes_template_id on public.concept_attributes(concept_template_id);
+create index if not exists idx_attribute_options_attribute_id on public.attribute_options(attribute_id);
 create index if not exists idx_documents_client_id on public.documents(client_id);
 create index if not exists idx_documents_project_id on public.documents(project_id);
 create index if not exists idx_photos_project_survey_id on public.photos(project_survey_id);
+
+insert into public.universes (name)
+values
+  ('Vidrio/Aluminio'),
+  ('Recubrimientos'),
+  ('Acero'),
+  ('Paneles')
+on conflict (name) do nothing;
+
+insert into public.project_types (name, action_base)
+values
+  ('Mantenimiento', 'SUMINISTRAR Y APLICAR'),
+  ('Remodelacion', 'SUMINISTRAR E INSTALAR'),
+  ('Construccion', 'DEMOLER Y RETIRAR')
+on conflict (name) do update set
+  action_base = excluded.action_base,
+  updated_at = now();
+
+insert into public.concept_closures (text)
+values
+  ('INCLUYE MATERIAL DE PRIMERA CALIDAD, CORTES, DESPERDICIOS, ACARREOS, MANIOBRAS, MANO DE OBRA ESPECIALIZADA Y TODO LO NECESARIO PARA SU CORRECTA EJECUCION.'),
+  ('INCLUYE HERRAMIENTA, EQUIPO DE SEGURIDAD, NIVELACION, LIMPIEZA FINAL Y RETIRO DE SOBRANTES.')
+on conflict (text) do nothing;
+
+insert into public.concept_templates (
+  universe_id,
+  project_type_id,
+  closure_id,
+  name,
+  base_description,
+  default_unit,
+  base_price
+)
+select
+  u.id,
+  pt.id,
+  cc.id,
+  t.name,
+  t.base_description,
+  t.default_unit,
+  t.base_price
+from (
+  values
+    (
+      'Recubrimientos',
+      'Mantenimiento',
+      'Pintura vinilica',
+      'pintura vinilica marca {marca}, acabado {acabado}, a {manos} manos sobre superficie preparada',
+      'm2',
+      120.00::numeric
+    ),
+    (
+      'Vidrio/Aluminio',
+      'Remodelacion',
+      'Canceleria de aluminio',
+      'canceleria de aluminio serie {serie}, color {color}, con vidrio {vidrio} y herrajes completos',
+      'm2',
+      1650.00::numeric
+    ),
+    (
+      'Acero',
+      'Construccion',
+      'Estructura metalica ligera',
+      'estructura metalica con perfil tubular calibre {calibre}, soldadura {soldadura} y acabado {acabado}',
+      'kg',
+      58.00::numeric
+    ),
+    (
+      'Paneles',
+      'Remodelacion',
+      'Panel de yeso',
+      'sistema de panel de yeso tipo {tipo_panel}, espesor {espesor}, con bastidor galvanizado',
+      'm2',
+      290.00::numeric
+    )
+) as t(universe_name, project_type_name, name, base_description, default_unit, base_price)
+join public.universes u on u.name = t.universe_name
+join public.project_types pt on pt.name = t.project_type_name
+join public.concept_closures cc on cc.text = 'INCLUYE MATERIAL DE PRIMERA CALIDAD, CORTES, DESPERDICIOS, ACARREOS, MANIOBRAS, MANO DE OBRA ESPECIALIZADA Y TODO LO NECESARIO PARA SU CORRECTA EJECUCION.'
+on conflict (universe_id, name) do update set
+  project_type_id = excluded.project_type_id,
+  closure_id = excluded.closure_id,
+  base_description = excluded.base_description,
+  default_unit = excluded.default_unit,
+  base_price = excluded.base_price,
+  updated_at = now();
+
+insert into public.concept_attributes (concept_template_id, name)
+select
+  ct.id,
+  attrs.name
+from public.concept_templates ct
+join (
+  values
+    ('Pintura vinilica', 'marca'),
+    ('Pintura vinilica', 'acabado'),
+    ('Pintura vinilica', 'manos'),
+    ('Canceleria de aluminio', 'serie'),
+    ('Canceleria de aluminio', 'color'),
+    ('Canceleria de aluminio', 'vidrio'),
+    ('Estructura metalica ligera', 'calibre'),
+    ('Estructura metalica ligera', 'soldadura'),
+    ('Estructura metalica ligera', 'acabado'),
+    ('Panel de yeso', 'tipo_panel'),
+    ('Panel de yeso', 'espesor')
+) as attrs(template_name, name)
+  on attrs.template_name = ct.name
+on conflict (concept_template_id, name) do nothing;
+
+insert into public.attribute_options (attribute_id, value)
+select
+  ca.id,
+  opts.value
+from public.concept_attributes ca
+join public.concept_templates ct on ct.id = ca.concept_template_id
+join (
+  values
+    ('Pintura vinilica', 'marca', 'Comex'),
+    ('Pintura vinilica', 'marca', 'Berel'),
+    ('Pintura vinilica', 'marca', 'Sherwin Williams'),
+    ('Pintura vinilica', 'acabado', 'Mate'),
+    ('Pintura vinilica', 'acabado', 'Satinado'),
+    ('Pintura vinilica', 'acabado', 'Semibrillante'),
+    ('Pintura vinilica', 'manos', '1'),
+    ('Pintura vinilica', 'manos', '2'),
+    ('Pintura vinilica', 'manos', '3'),
+    ('Canceleria de aluminio', 'serie', '70'),
+    ('Canceleria de aluminio', 'serie', '80'),
+    ('Canceleria de aluminio', 'serie', 'Eurovent'),
+    ('Canceleria de aluminio', 'color', 'Natural'),
+    ('Canceleria de aluminio', 'color', 'Negro'),
+    ('Canceleria de aluminio', 'color', 'Blanco'),
+    ('Canceleria de aluminio', 'vidrio', 'Claro 6mm'),
+    ('Canceleria de aluminio', 'vidrio', 'Filtrasol 6mm'),
+    ('Canceleria de aluminio', 'vidrio', 'Templado 9mm'),
+    ('Estructura metalica ligera', 'calibre', '14'),
+    ('Estructura metalica ligera', 'calibre', '16'),
+    ('Estructura metalica ligera', 'soldadura', 'MIG'),
+    ('Estructura metalica ligera', 'soldadura', 'Electrodo'),
+    ('Estructura metalica ligera', 'acabado', 'Primer anticorrosivo'),
+    ('Estructura metalica ligera', 'acabado', 'Esmalte alquidalico'),
+    ('Panel de yeso', 'tipo_panel', 'STD'),
+    ('Panel de yeso', 'tipo_panel', 'RH'),
+    ('Panel de yeso', 'tipo_panel', 'RF'),
+    ('Panel de yeso', 'espesor', '1/2"'),
+    ('Panel de yeso', 'espesor', '5/8"')
+) as opts(template_name, attribute_name, value)
+  on opts.template_name = ct.name and opts.attribute_name = ca.name
+on conflict (attribute_id, value) do nothing;
 
 insert into storage.buckets (id, name, public)
 values ('client-documents', 'client-documents', false)
