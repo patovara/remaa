@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
@@ -1621,21 +1622,81 @@ class _ClientQuotesPanel extends ConsumerWidget {
   }
 }
 
-class _QuoteRow extends StatelessWidget {
+class _QuoteRow extends ConsumerWidget {
   const _QuoteRow({required this.quote});
 
   final QuoteRecord quote;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final formatter = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
+    final canOpenFinalActa = quote.isActaFinalizada || quote.isPaid;
+
     return ListTile(
       dense: true,
       leading: const Icon(Icons.description_outlined),
       title: Text(quote.quoteNumber),
       subtitle: Text(_statusLabel(quote.status)),
-      trailing: Text(formatter.format(quote.total)),
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                formatter.format(quote.total),
+                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (canOpenFinalActa) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Previsualizar acta',
+                onPressed: () => _previewFinalActa(context, ref, quote),
+                icon: const Icon(Icons.visibility_outlined),
+              ),
+              IconButton(
+                tooltip: 'Descargar acta',
+                onPressed: () => _downloadFinalActa(context, ref, quote),
+                icon: const Icon(Icons.download_outlined),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<ActaDocumentRecord?> _loadFinalActaDocument(WidgetRef ref, QuoteRecord quote) async {
+    return ref.read(quotesRepositoryProvider).fetchActaDocument(quote.id);
+  }
+
+  Future<void> _previewFinalActa(BuildContext context, WidgetRef ref, QuoteRecord quote) async {
+    final document = await _loadFinalActaDocument(ref, quote);
+    if (document == null) {
+      if (context.mounted) {
+        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      }
+      return;
+    }
+
+    await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
+  }
+
+  Future<void> _downloadFinalActa(BuildContext context, WidgetRef ref, QuoteRecord quote) async {
+    final document = await _loadFinalActaDocument(ref, quote);
+    if (document == null) {
+      if (context.mounted) {
+        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      }
+      return;
+    }
+
+    await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
+    if (context.mounted) {
+      showRemaMessage(context, 'Acta final lista para descarga.');
+    }
   }
 
   String _statusLabel(String status) {

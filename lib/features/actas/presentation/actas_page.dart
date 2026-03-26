@@ -1,7 +1,7 @@
 import 'package:file_picker/file_picker.dart';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -11,6 +11,7 @@ import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/config/company_profile.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/theme/rema_colors.dart';
+import '../../../core/utils/image_optimizer.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
@@ -20,7 +21,6 @@ import '../../cotizaciones/data/quotes_repository.dart';
 import '../../cotizaciones/domain/quote_models.dart';
 import '../../cotizaciones/presentation/quotes_controller.dart';
 import '../../levantamiento/presentation/levantamiento_state.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum _ActaRole { staff, admin }
 
@@ -560,14 +560,26 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       showRemaMessage(context, 'No se pudo leer la imagen seleccionada.');
       return;
     }
-    final optimized = await _optimizeImageBytes(bytes);
+    OptimizedImageResult optimized;
+    try {
+      optimized = await optimizeImageForDocument(
+        inputBytes: bytes,
+        fileName: file.name,
+        profile: ImageOptimizationProfile.mainDocument,
+      );
+    } on ImageOptimizationException catch (error) {
+      if (mounted) {
+        showRemaMessage(context, error.message);
+      }
+      return;
+    }
 
     setState(() {
       setTarget(
         _PickedMedia(
-          name: file.name,
-          bytes: optimized,
-          size: optimized.length,
+          name: optimized.fileName,
+          bytes: optimized.bytes,
+          size: optimized.bytes.length,
         ),
       );
     });
@@ -585,38 +597,45 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
 
     final optimizedMedia = <_PickedMedia>[];
+    final rejectedMessages = <String>[];
     for (final file in result.files.where((item) => item.bytes != null)) {
-      final optimized = await _optimizeImageBytes(file.bytes!);
-      optimizedMedia.add(
-        _PickedMedia(
-          name: file.name,
-          bytes: optimized,
-          size: optimized.length,
-        ),
-      );
+      try {
+        final optimized = await optimizeImageForDocument(
+          inputBytes: file.bytes!,
+          fileName: file.name,
+          profile: ImageOptimizationProfile.gridDocument,
+        );
+        optimizedMedia.add(
+          _PickedMedia(
+            name: optimized.fileName,
+            bytes: optimized.bytes,
+            size: optimized.bytes.length,
+          ),
+        );
+      } on ImageOptimizationException catch (error) {
+        rejectedMessages.add('${file.name}: ${error.message}');
+      }
     }
 
-    setState(() {
-      _fotosDurante.addAll(optimizedMedia);
-    });
+    if (optimizedMedia.isNotEmpty) {
+      setState(() {
+        _fotosDurante.addAll(optimizedMedia);
+      });
+    }
 
-    showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos de avance.');
-  }
-
-  Future<Uint8List> _optimizeImageBytes(Uint8List input) async {
-    try {
-      final codec = await ui.instantiateImageCodec(
-        input,
-        targetWidth: 600,
+    if (optimizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
+      showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos optimizadas de avance.');
+      return;
+    }
+    if (optimizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
+      showRemaMessage(
+        context,
+        'Se agregaron ${optimizedMedia.length} fotos optimizadas. ${rejectedMessages.first}',
       );
-      final frame = await codec.getNextFrame();
-      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) {
-        return input;
-      }
-      return data.buffer.asUint8List();
-    } catch (_) {
-      return input;
+      return;
+    }
+    if (rejectedMessages.isNotEmpty) {
+      showRemaMessage(context, rejectedMessages.first);
     }
   }
 
@@ -633,9 +652,22 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         return;
       }
 
+      final previousValue = controller.text;
+      final nextValue = _formatter.format(selected);
+
       setState(() {
-        controller.text = _formatter.format(selected);
+        controller.text = nextValue;
       });
+
+      final dateErrors = _collectDateValidationErrors();
+      if (dateErrors.isNotEmpty) {
+        setState(() {
+          controller.text = previousValue;
+        });
+        if (mounted) {
+          showRemaMessage(context, dateErrors.first);
+        }
+      }
     } catch (e) {
       // Fallback si el DatePicker falla
       if (!mounted) {
@@ -726,11 +758,53 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       missing.add('Fecha de aprobacion del pedido');
     }
 
+    missing.addAll(_collectDateValidationErrors());
+
     if (_fotoIngreso == null && _fotoAntes == null && _fotoDespues == null && _fotosDurante.isEmpty) {
       missing.add('Registro fotografico');
     }
 
     return missing;
+  }
+
+  List<String> _collectDateValidationErrors() {
+    final errors = <String>[];
+    final fechaInicio = _tryParseDate(_fechaInicioController.text);
+    final fechaConclusion = _tryParseDate(_fechaConclusionController.text);
+    final fechaAprobacion = _tryParseDate(_fechaAprobacionPedidoController.text);
+
+    if (_fechaInicioController.text.trim().isNotEmpty && fechaInicio == null) {
+      errors.add('Fecha de inicio invalida');
+    }
+    if (_fechaConclusionController.text.trim().isNotEmpty && fechaConclusion == null) {
+      errors.add('Fecha de conclusion invalida');
+    }
+    if (_fechaAprobacionPedidoController.text.trim().isNotEmpty && fechaAprobacion == null) {
+      errors.add('Fecha de aprobacion del pedido invalida');
+    }
+
+    if (fechaInicio != null && fechaConclusion != null && fechaConclusion.isBefore(fechaInicio)) {
+      errors.add('La fecha de conclusion no puede ser menor que la fecha de inicio');
+    }
+
+    if (fechaAprobacion != null && fechaConclusion != null && !fechaAprobacion.isBefore(fechaConclusion)) {
+      errors.add('La fecha de aprobacion del pedido debe ser anterior a la fecha de conclusion');
+    }
+
+    return errors;
+  }
+
+  DateTime? _tryParseDate(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    try {
+      final parsed = _formatter.parseStrict(trimmed);
+      return DateTime(parsed.year, parsed.month, parsed.day);
+    } catch (_) {
+      return null;
+    }
   }
 
   String _formatDecimal(double value) {

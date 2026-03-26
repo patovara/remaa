@@ -1,11 +1,11 @@
 import 'package:file_picker/file_picker.dart';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/rema_colors.dart';
+import '../../../core/utils/image_optimizer.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
@@ -167,31 +167,59 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     final selectedFiles = result.files.toList();
     final acceptedFiles = selectedFiles.take(remaining).toList();
     final normalizedMedia = <_PickedMedia>[];
+    final rejectedMessages = <String>[];
     for (final file in acceptedFiles) {
       final bytes = file.bytes;
       if (bytes == null || bytes.isEmpty) {
         continue;
       }
-      final optimized = await _optimizeImageBytes(bytes);
-      normalizedMedia.add(
-        _PickedMedia(
-          name: file.name,
-          bytes: optimized,
-          size: optimized.length,
-        ),
-      );
+      try {
+        final optimized = await optimizeImageForDocument(
+          inputBytes: bytes,
+          fileName: file.name,
+          profile: ImageOptimizationProfile.gridDocument,
+        );
+        normalizedMedia.add(
+          _PickedMedia(
+            name: optimized.fileName,
+            bytes: optimized.bytes,
+            size: optimized.bytes.length,
+            mimeType: optimized.mimeType,
+          ),
+        );
+      } on ImageOptimizationException catch (error) {
+        rejectedMessages.add('${file.name}: ${error.message}');
+      }
     }
 
-    setState(() {
-      _photos.addAll(normalizedMedia);
-    });
-    _persistDraftSnapshot();
+    if (normalizedMedia.isNotEmpty) {
+      setState(() {
+        _photos.addAll(normalizedMedia);
+      });
+      _persistDraftSnapshot();
+    }
 
     if (acceptedFiles.length < selectedFiles.length) {
       showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
       return;
     }
-    showRemaMessage(context, 'Se agregaron ${acceptedFiles.length} imagenes al levantamiento.');
+    if (normalizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
+      showRemaMessage(
+        context,
+        'Se agregaron ${normalizedMedia.length} imagenes optimizadas al levantamiento.',
+      );
+      return;
+    }
+    if (normalizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
+      showRemaMessage(
+        context,
+        'Se agregaron ${normalizedMedia.length} imagenes optimizadas. ${rejectedMessages.first}',
+      );
+      return;
+    }
+    if (rejectedMessages.isNotEmpty) {
+      showRemaMessage(context, rejectedMessages.first);
+    }
   }
 
   void _persistDraftSnapshot() {
@@ -730,7 +758,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           bytes: bytes,
           originalName: photo.name,
           fileSizeBytes: photo.size,
-          mimeType: _guessMimeType(photo.name),
+          mimeType: photo.mimeType ?? _guessMimeType(photo.name),
         ),
       );
       if (inputs.length == 2) {
@@ -746,23 +774,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     if (lower.endsWith('.webp')) return 'image/webp';
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
     return 'image/jpeg';
-  }
-
-  Future<Uint8List> _optimizeImageBytes(Uint8List input) async {
-    try {
-      final codec = await ui.instantiateImageCodec(
-        input,
-        targetWidth: 600,
-      );
-      final frame = await codec.getNextFrame();
-      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
-      if (data == null) {
-        return input;
-      }
-      return data.buffer.asUint8List();
-    } catch (_) {
-      return input;
-    }
   }
 
   String _composeDescriptions({
@@ -1701,11 +1712,13 @@ class _PickedMedia {
     required this.name,
     required this.size,
     this.bytes,
+    this.mimeType,
   });
 
   final String name;
   final int size;
   final Uint8List? bytes;
+  final String? mimeType;
 }
 
 String _formatBytes(int size) {
