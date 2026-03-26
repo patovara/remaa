@@ -10,6 +10,7 @@ import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../clientes/data/client_metadata_repository.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../../cotizaciones/domain/quote_models.dart';
 import '../../cotizaciones/presentation/concepts_catalog_controller.dart';
@@ -18,18 +19,25 @@ import '../../clientes/presentation/clientes_mock_data.dart';
 import 'levantamiento_state.dart';
 
 class LevantamientoPage extends ConsumerStatefulWidget {
-  const LevantamientoPage({super.key});
+  const LevantamientoPage({super.key, this.initialClientId});
+
+  final String? initialClientId;
 
   @override
   ConsumerState<LevantamientoPage> createState() => _LevantamientoPageState();
 }
 
 class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
+  final _metadataRepository = ClientMetadataRepository();
   final _projectKeyController = TextEditingController();
   final _projectNameController = TextEditingController();
   final _clientController = TextEditingController();
   final _addressController = TextEditingController();
   final _notesController = TextEditingController();
+  List<ClientRecord> _clientOptions = const [];
+  bool _isLoadingClients = false;
+  String? _pendingClientIdFromRoute;
+  String? _clientErrorText;
 
   DateTime _selectedDate = DateTime.now();
   String? _selectedClientId;
@@ -42,8 +50,10 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   @override
   void initState() {
     super.initState();
-    // Restaurar campos del formulario si hay una sesión activa
+    _pendingClientIdFromRoute = widget.initialClientId?.trim();
     final active = ref.read(activeLevantamientoProvider);
+    final draft = ref.read(levantamientoDraftProvider);
+
     if (active != null && active.isActive) {
       if (active.projectKey?.isNotEmpty == true) {
         _projectKeyController.text = active.projectKey!;
@@ -59,14 +69,75 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       }
       _selectedClientId = active.clientId;
       _selectedProjectId = active.projectId;
+      if (active.evidencePreviewList.isNotEmpty) {
+        _photos.addAll([
+          for (var index = 0; index < active.evidencePreviewList.length; index++)
+            _PickedMedia(
+              name: 'Evidencia ${index + 1}',
+              size: active.evidencePreviewList[index].length,
+              bytes: active.evidencePreviewList[index],
+            ),
+        ]);
+      }
       if (active.entries.isNotEmpty) {
         _notesController.text = active.entries.last.description;
       }
+    } else if (draft != null) {
+      if (draft.projectKey?.isNotEmpty == true) {
+        _projectKeyController.text = draft.projectKey!;
+      }
+      if (draft.projectName?.isNotEmpty == true) {
+        _projectNameController.text = draft.projectName!;
+      }
+      if (draft.clientName?.isNotEmpty == true) {
+        _clientController.text = draft.clientName!;
+      }
+      if (draft.address?.isNotEmpty == true) {
+        _addressController.text = draft.address!;
+      }
+      if (draft.notes?.isNotEmpty == true) {
+        _notesController.text = draft.notes!;
+      }
+      _selectedClientId = draft.clientId;
+      _selectedUniverseId = draft.universeId;
+      _selectedProjectTypeId = draft.projectTypeId;
+      if (draft.photos.isNotEmpty) {
+        _photos.addAll([
+          for (final photo in draft.photos)
+            _PickedMedia(
+              name: photo.name,
+              size: photo.size,
+              bytes: photo.bytes,
+            ),
+        ]);
+      }
+    }
+
+    _projectKeyController.addListener(_persistDraftSnapshot);
+    _projectNameController.addListener(_persistDraftSnapshot);
+    _addressController.addListener(_persistDraftSnapshot);
+    _notesController.addListener(_persistDraftSnapshot);
+
+    _loadClientOptions();
+  }
+
+  @override
+  void didUpdateWidget(covariant LevantamientoPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextClientId = widget.initialClientId?.trim();
+    final oldClientId = oldWidget.initialClientId?.trim();
+    if (nextClientId != null && nextClientId.isNotEmpty && nextClientId != oldClientId) {
+      _pendingClientIdFromRoute = nextClientId;
+      _selectClientById(nextClientId);
     }
   }
 
   @override
   void dispose() {
+    _projectKeyController.removeListener(_persistDraftSnapshot);
+    _projectNameController.removeListener(_persistDraftSnapshot);
+    _addressController.removeListener(_persistDraftSnapshot);
+    _notesController.removeListener(_persistDraftSnapshot);
     _projectKeyController.dispose();
     _projectNameController.dispose();
     _clientController.dispose();
@@ -114,6 +185,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     setState(() {
       _photos.addAll(normalizedMedia);
     });
+    _persistDraftSnapshot();
 
     if (acceptedFiles.length < selectedFiles.length) {
       showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
@@ -122,8 +194,31 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     showRemaMessage(context, 'Se agregaron ${acceptedFiles.length} imagenes al levantamiento.');
   }
 
+  void _persistDraftSnapshot() {
+    ref.read(levantamientoDraftProvider.notifier).update(
+          projectKey: _projectKeyController.text,
+          projectName: _projectNameController.text,
+          clientId: _selectedClientId,
+          clientName: _clientController.text,
+          address: _addressController.text,
+          notes: _notesController.text,
+          universeId: _selectedUniverseId,
+          projectTypeId: _selectedProjectTypeId,
+          photos: [
+            for (final photo in _photos)
+              if (photo.bytes != null && photo.bytes!.isNotEmpty)
+                DraftLevantamientoPhoto(
+                  name: photo.name,
+                  size: photo.size,
+                  bytes: photo.bytes!,
+                ),
+          ],
+        );
+  }
+
   void _removePhoto(_PickedMedia photo) {
     setState(() => _photos.remove(photo));
+    _persistDraftSnapshot();
     showRemaMessage(context, 'Se elimino ${photo.name}.');
   }
 
@@ -138,6 +233,15 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   }
 
   Future<void> _goToQuote() async {
+    final resolvedClient = _resolveValidatedClientSelection();
+    if (resolvedClient == null) {
+      showRemaMessage(
+        context,
+        'Selecciona un cliente existente o crea uno nuevo antes de continuar.',
+      );
+      return;
+    }
+
     final active = ref.read(activeLevantamientoProvider);
     final selectedUniverseId = _selectedUniverseId;
     final selectedProjectTypeId = _selectedProjectTypeId;
@@ -226,6 +330,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
             evidencePreviewList: _previewPhotos(),
             entries: entry == null ? const <SurveyEntryRecord>[] : <SurveyEntryRecord>[entry],
           );
+          ref.read(levantamientoDraftProvider.notifier).clear();
 
       showRemaMessage(context, 'Levantamiento asociado a ${quote.quoteNumber}.');
       context.go('/presupuesto/${quote.id}');
@@ -296,11 +401,252 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       if (mounted && _projectKeyController.text.trim().isEmpty) {
         _projectKeyController.text = fallback;
       }
+      _persistDraftSnapshot();
       return fallback;
     }
   }
 
-  Future<void> _openClientSelector() async {
+  Future<void> _loadClientOptions() async {
+    setState(() => _isLoadingClients = true);
+    final base = List<ClientRecord>.from(mockClients);
+    final supabase = SupabaseBootstrap.client;
+    if (supabase != null) {
+      try {
+        List<dynamic> rows;
+        try {
+          rows = await supabase
+              .from('clients')
+              .select('id, business_name, contact_name, notes, email, phone, address_line, city')
+              .order('business_name');
+        } catch (_) {
+          rows = await supabase
+              .from('clients')
+              .select('id, business_name, notes, email, phone, address_line, city')
+              .order('business_name');
+        }
+        final knownIds = base.map((c) => c.id).toSet();
+        for (final row in rows) {
+          final id = (row['id'] as String? ?? '').trim();
+          final name = (row['business_name'] as String? ?? '').trim();
+          if (id.isEmpty || name.isEmpty || knownIds.contains(id)) {
+            continue;
+          }
+          final addr = [
+            row['address_line'] as String? ?? '',
+            row['city'] as String? ?? '',
+          ].where((s) => s.isNotEmpty).join(', ');
+          final contactName = _metadataRepository.resolveContactName(
+            contactName: row['contact_name'] as String?,
+            notes: row['notes'] as String?,
+          );
+          base.add(
+            ClientRecord(
+              id: id,
+              name: name,
+              contactName: contactName,
+              sector: 'Cliente',
+              badge: 'Activo',
+              activeProjects: '00',
+              months: '--',
+              icon: Icons.apartment,
+              contactEmail: (row['email'] as String? ?? '').trim(),
+              phone: (row['phone'] as String? ?? '').trim(),
+              address: addr.isEmpty ? 'Sin direccion' : addr,
+              responsibles: const [],
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _clientOptions = base;
+      _isLoadingClients = false;
+    });
+    final pendingClientId = _pendingClientIdFromRoute;
+    if (pendingClientId != null && pendingClientId.isNotEmpty) {
+      _pendingClientIdFromRoute = null;
+      await _selectClientById(pendingClientId);
+    }
+  }
+
+  Future<void> _selectClientById(String clientId) async {
+    final local = _clientOptions.where((item) => item.id == clientId).cast<ClientRecord?>().firstWhere(
+          (item) => item != null,
+          orElse: () => null,
+        );
+    if (local != null) {
+      _applySelectedClient(local);
+      return;
+    }
+
+    final supabase = SupabaseBootstrap.client;
+    if (supabase == null || !_isUuid(clientId)) {
+      return;
+    }
+
+    try {
+      Map<String, dynamic>? row;
+      try {
+        row = await supabase
+            .from('clients')
+            .select('id, business_name, contact_name, notes, email, phone, address_line, city')
+            .eq('id', clientId)
+            .maybeSingle();
+      } catch (_) {
+        row = await supabase
+            .from('clients')
+            .select('id, business_name, notes, email, phone, address_line, city')
+            .eq('id', clientId)
+            .maybeSingle();
+      }
+      if (!mounted || row == null) {
+        return;
+      }
+      final contactName = _metadataRepository.resolveContactName(
+        contactName: row['contact_name'] as String?,
+        notes: row['notes'] as String?,
+      );
+      final client = ClientRecord(
+        id: row['id'] as String? ?? clientId,
+        name: (row['business_name'] as String? ?? '').trim(),
+        contactName: contactName,
+        sector: 'Cliente',
+        badge: 'Activo',
+        activeProjects: '00',
+        months: '--',
+        icon: Icons.apartment,
+        contactEmail: (row['email'] as String? ?? '').trim(),
+        phone: (row['phone'] as String? ?? '').trim(),
+        address: [
+          row['address_line'] as String? ?? '',
+          row['city'] as String? ?? '',
+        ].where((s) => s.isNotEmpty).join(', ').trim().isEmpty
+            ? 'Sin direccion'
+            : [
+                row['address_line'] as String? ?? '',
+                row['city'] as String? ?? '',
+              ].where((s) => s.isNotEmpty).join(', '),
+        responsibles: const [],
+      );
+      setState(() {
+        if (_clientOptions.every((item) => item.id != client.id)) {
+          _clientOptions = [..._clientOptions, client];
+        }
+      });
+      _applySelectedClient(client);
+    } catch (_) {}
+  }
+
+  void _applySelectedClient(ClientRecord selected) {
+    if (!mounted) {
+      return;
+    }
+    final active = ref.read(activeLevantamientoProvider);
+    final address = selected.address.trim();
+    setState(() {
+      _clientController.text = selected.name;
+      _selectedClientId = selected.id;
+      _clientErrorText = null;
+      if (address.isNotEmpty && address.toLowerCase() != 'sin direccion') {
+        _addressController.text = address;
+      }
+    });
+    _persistDraftSnapshot();
+
+    final existingKey = _projectKeyController.text.trim();
+    final sessionKey = active?.projectKey?.trim() ?? '';
+    if (existingKey.isEmpty && sessionKey.isNotEmpty) {
+      _projectKeyController.text = sessionKey;
+    } else if (existingKey.isEmpty) {
+      _ensureProjectKey().then((generated) {
+        if (!mounted || generated.trim().isEmpty) {
+          return;
+        }
+        showRemaMessage(context, 'Folio de proyecto generado: ${generated.trim()}');
+      });
+    }
+
+    if (active != null && active.isActive) {
+      ref.read(activeLevantamientoProvider.notifier).updateSnapshot(
+        clientId: selected.id,
+        clientName: selected.name,
+        address: address.isNotEmpty ? address : null,
+        projectKey: _projectKeyController.text.trim(),
+      );
+    }
+  }
+
+  void _handleClientQueryChanged(String value) {
+    _clientController.text = value;
+    final current = _clientOptions.where((item) => item.id == _selectedClientId).cast<ClientRecord?>().firstWhere(
+          (item) => item != null,
+          orElse: () => null,
+        );
+    if (current != null && current.name != value) {
+      setState(() {
+        _selectedClientId = null;
+        _clientErrorText = null;
+      });
+      return;
+    }
+
+    if (_clientErrorText != null) {
+      setState(() => _clientErrorText = null);
+    }
+    _persistDraftSnapshot();
+  }
+
+  ClientRecord? _resolveValidatedClientSelection() {
+    final selectedClientId = _selectedClientId?.trim();
+    if (selectedClientId != null && selectedClientId.isNotEmpty) {
+      final selected = _clientOptions.where((item) => item.id == selectedClientId).cast<ClientRecord?>().firstWhere(
+            (item) => item != null,
+            orElse: () => null,
+          );
+      if (selected != null) {
+        if (_clientErrorText != null) {
+          setState(() => _clientErrorText = null);
+        }
+        return selected;
+      }
+    }
+
+    final typedValue = _normalizeClientLookup(_clientController.text);
+    if (typedValue.isEmpty) {
+      setState(() => _clientErrorText = 'Selecciona un cliente existente o crea uno nuevo.');
+      return null;
+    }
+
+    final exactMatches = [
+      for (final client in _clientOptions)
+        if (_normalizeClientLookup(client.name) == typedValue ||
+            _normalizeClientLookup(client.displayContactName) == typedValue)
+          client,
+    ];
+
+    if (exactMatches.length == 1) {
+      final match = exactMatches.first;
+      _applySelectedClient(match);
+      return match;
+    }
+
+    setState(() {
+      _selectedClientId = null;
+      _clientErrorText = exactMatches.isEmpty
+          ? 'El cliente no existe. Seleccionalo de la lista o crea uno nuevo.'
+          : 'Hay varias coincidencias. Selecciona el cliente desde la lista.';
+    });
+    return null;
+  }
+
+  String _normalizeClientLookup(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  Future<void> _goToNewClient() async {
     final active = ref.read(activeLevantamientoProvider);
     final projectDataLocked = active != null && active.isActive && active.quoteId != null;
     if (projectDataLocked) {
@@ -310,46 +656,15 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       );
       return;
     }
-
-    final selected = await showDialog<ClientRecord>(
-      context: context,
-      builder: (_) => const _ClientSelectorDialog(),
-    );
-    if (selected != null && mounted) {
-      final address = selected.address.trim();
-      setState(() {
-        _clientController.text = selected.name;
-        _selectedClientId = selected.id;
-        if (address.isNotEmpty && address.toLowerCase() != 'sin dirección') {
-          _addressController.text = address;
-        }
-      });
-
-      // Solo generar folio nuevo si no tenemos uno ya (evita duplicar PRJ001→PRJ002)
-      final existingKey = _projectKeyController.text.trim();
-      final sessionKey = active?.projectKey?.trim() ?? '';
-      if (existingKey.isEmpty && sessionKey.isNotEmpty) {
-        // Restaurar clave de sesión antes de intentar generar una nueva
-        _projectKeyController.text = sessionKey;
-      } else if (existingKey.isEmpty) {
-        await _ensureProjectKey();
-        if (!mounted) return;
-        final generated = _projectKeyController.text.trim();
-        if (generated.isNotEmpty) {
-          showRemaMessage(context, 'Folio de proyecto generado: $generated');
-        }
-      }
-
-      // Actualizar snapshot con datos del nuevo cliente
-      if (active != null && active.isActive) {
-        ref.read(activeLevantamientoProvider.notifier).updateSnapshot(
-          clientId: selected.id,
-          clientName: selected.name,
-          address: address.isNotEmpty ? address : null,
-          projectKey: _projectKeyController.text.trim(),
-        );
-      }
+    final createdClientId = await context.push<String>('/nuevo-cliente?returnTo=pop');
+    if (!mounted || createdClientId == null || createdClientId.trim().isEmpty) {
+      return;
     }
+    await _loadClientOptions();
+    if (!mounted) {
+      return;
+    }
+    await _selectClientById(createdClientId.trim());
   }
 
   bool _isUuid(String value) {
@@ -367,6 +682,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     }
 
     ref.read(activeLevantamientoProvider.notifier).finish();
+    ref.read(levantamientoDraftProvider.notifier).clear();
     showRemaMessage(
       context,
       'Levantamiento finalizado. Fotos cargadas: ${_photos.length}. Ya puedes iniciar otro universo.',
@@ -569,6 +885,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         _selectedUniverseId = nextUniverseId;
         _selectedProjectTypeId = nextProjectTypeId;
       });
+      _persistDraftSnapshot();
     });
   }
 
@@ -603,7 +920,13 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
             projectKeyController: _projectKeyController,
             projectNameController: _projectNameController,
             clientController: _clientController,
-            onClientTap: _openClientSelector,
+            clientOptions: _clientOptions,
+            isLoadingClients: _isLoadingClients,
+            clientErrorText: _clientErrorText,
+            selectedClientId: _selectedClientId,
+            onClientChanged: _handleClientQueryChanged,
+            onClientSelected: _applySelectedClient,
+            onAddClient: _goToNewClient,
             universes: universes,
             selectedUniverseId: _selectedUniverseId,
             onUniverseChanged: universeLocked
@@ -619,12 +942,16 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
                       return;
                     }
                     setState(() => _selectedUniverseId = value);
+                    _persistDraftSnapshot();
                   },
             projectTypes: projectTypes,
             selectedProjectTypeId: _selectedProjectTypeId,
             onProjectTypeChanged: universeLocked
                 ? null
-                : (value) => setState(() => _selectedProjectTypeId = value),
+              : (value) {
+                setState(() => _selectedProjectTypeId = value);
+                _persistDraftSnapshot();
+                },
             showCatalogWarning: catalogState.hasError,
             universeLocked: universeLocked,
             projectDataLocked: projectDataLocked,
@@ -699,7 +1026,13 @@ class _ProjectDetailsPanel extends StatelessWidget {
     required this.projectKeyController,
     required this.projectNameController,
     required this.clientController,
-    required this.onClientTap,
+    required this.clientOptions,
+    required this.isLoadingClients,
+    required this.clientErrorText,
+    required this.selectedClientId,
+    required this.onClientChanged,
+    required this.onClientSelected,
+    required this.onAddClient,
     required this.universes,
     required this.selectedUniverseId,
     required this.onUniverseChanged,
@@ -715,7 +1048,13 @@ class _ProjectDetailsPanel extends StatelessWidget {
   final TextEditingController projectKeyController;
   final TextEditingController projectNameController;
   final TextEditingController clientController;
-  final VoidCallback onClientTap;
+  final List<ClientRecord> clientOptions;
+  final bool isLoadingClients;
+  final String? clientErrorText;
+  final String? selectedClientId;
+  final ValueChanged<String> onClientChanged;
+  final ValueChanged<ClientRecord> onClientSelected;
+  final VoidCallback onAddClient;
   final List<UniverseCatalogItem> universes;
   final String? selectedUniverseId;
   final ValueChanged<String>? onUniverseChanged;
@@ -769,12 +1108,17 @@ class _ProjectDetailsPanel extends StatelessWidget {
             enabled: !projectDataLocked,
           ),
           const SizedBox(height: 20),
-          _UnderlinedField(
+          _ClientAutocompleteField(
             label: 'Cliente',
-            controller: clientController,
-            suffixIcon: Icons.person_search,
-            onSuffixTap: projectDataLocked ? null : onClientTap,
+            valueText: clientController.text,
+            clients: clientOptions,
+            isLoading: isLoadingClients,
+            errorText: clientErrorText,
             enabled: !projectDataLocked,
+            selectedClientId: selectedClientId,
+            onChanged: onClientChanged,
+            onSelected: onClientSelected,
+            onAddClient: onAddClient,
           ),
           if (projectDataLocked) ...[
             const SizedBox(height: 8),
@@ -1132,6 +1476,180 @@ class _UnderlinedField extends StatelessWidget {
                 : null,
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _ClientAutocompleteField extends StatelessWidget {
+  const _ClientAutocompleteField({
+    required this.label,
+    required this.valueText,
+    required this.clients,
+    required this.isLoading,
+    required this.errorText,
+    required this.enabled,
+    required this.selectedClientId,
+    required this.onChanged,
+    required this.onSelected,
+    required this.onAddClient,
+  });
+
+  final String label;
+  final String valueText;
+  final List<ClientRecord> clients;
+  final bool isLoading;
+  final String? errorText;
+  final bool enabled;
+  final String? selectedClientId;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<ClientRecord> onSelected;
+  final VoidCallback onAddClient;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentClient = clients.where((item) => item.id == selectedClientId).cast<ClientRecord?>().firstWhere(
+          (item) => item != null,
+          orElse: () => null,
+        );
+    final hasMatches = valueText.trim().isEmpty || clients.any((item) => item.matchesSearchQuery(valueText));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FieldLabel(label: label),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 720;
+            final field = Autocomplete<ClientRecord>(
+              key: ValueKey('${selectedClientId ?? ''}::$valueText::${clients.length}'),
+              initialValue: TextEditingValue(text: valueText),
+              displayStringForOption: (option) => option.name,
+              optionsBuilder: (textEditingValue) {
+                final query = textEditingValue.text.trim();
+                if (!enabled) {
+                  return const Iterable<ClientRecord>.empty();
+                }
+                final ranked = [
+                  for (final client in clients)
+                    if (client.matchesSearchQuery(query)) client,
+                ];
+                ranked.sort((left, right) {
+                  final leftStarts = left.name.toLowerCase().startsWith(query.toLowerCase()) ? 0 : 1;
+                  final rightStarts = right.name.toLowerCase().startsWith(query.toLowerCase()) ? 0 : 1;
+                  if (leftStarts != rightStarts) {
+                    return leftStarts.compareTo(rightStarts);
+                  }
+                  return left.name.compareTo(right.name);
+                });
+                return ranked.take(8);
+              },
+              onSelected: onSelected,
+              fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+                if (textController.text != valueText) {
+                  textController.value = TextEditingValue(
+                    text: valueText,
+                    selection: TextSelection.collapsed(offset: valueText.length),
+                  );
+                }
+                return TextField(
+                  controller: textController,
+                  focusNode: focusNode,
+                  enabled: enabled,
+                  onChanged: onChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Busca por razon social o nombre de contacto',
+                    errorText: errorText,
+                    suffixIcon: isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : const Icon(Icons.search),
+                  ),
+                );
+              },
+              optionsViewBuilder: (context, onOptionSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560, maxHeight: 280),
+                      child: ListView(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        children: [
+                          for (final option in options)
+                            ListTile(
+                              title: Text(option.name),
+                              subtitle: Text(
+                                option.displayContactName.isEmpty
+                                    ? option.address
+                                    : '${option.displayContactName} | ${option.address}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () => onOptionSelected(option),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  field,
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: enabled ? onAddClient : null,
+                    icon: const Icon(Icons.add_business_outlined),
+                    label: const Text('Nuevo cliente'),
+                  ),
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: enabled ? onAddClient : null,
+                  icon: const Icon(Icons.add_business_outlined),
+                  label: const Text('Nuevo cliente'),
+                ),
+              ],
+            );
+          },
+        ),
+        if (currentClient != null && currentClient.displayContactName.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Contacto: ${currentClient.displayContactName}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ] else if (!isLoading && enabled && !hasMatches && valueText.trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Sin coincidencias. Puedes crear un cliente nuevo.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: RemaColors.onSurfaceVariant,
+                ),
+          ),
+        ],
       ],
     );
   }

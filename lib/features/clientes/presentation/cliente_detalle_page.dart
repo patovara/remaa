@@ -57,13 +57,13 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       try {
         row = await SupabaseBootstrap.client!
             .from('clients')
-            .select('id, business_name, rfc, email, phone, address_line, city, sector_label, logo_path, is_hidden')
+        .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city, sector_label, logo_path, is_hidden')
             .eq('id', widget.clientId)
             .maybeSingle();
       } catch (_) {
         row = await SupabaseBootstrap.client!
             .from('clients')
-            .select('id, business_name, rfc, email, phone, address_line, city')
+        .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city')
             .eq('id', widget.clientId)
             .maybeSingle();
       }
@@ -83,6 +83,10 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
         if (addressLine.isNotEmpty) addressLine,
         if (city.isNotEmpty) city,
       ].join(', ');
+      final contactName = _metadataRepository.resolveContactName(
+        contactName: row['contact_name'] as String?,
+        notes: row['notes'] as String?,
+      );
       final rawSector = (row['sector_label'] as String? ?? '').trim();
       final logoPath = (row['logo_path'] as String? ?? '').trim();
       final logoBytes = await _metadataRepository.downloadLogo(logoPath);
@@ -90,6 +94,7 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       final remote = ClientRecord(
         id: row['id'] as String? ?? widget.clientId,
         name: businessName,
+        contactName: contactName,
         rfc: (row['rfc'] as String? ?? '').trim().isEmpty ? null : (row['rfc'] as String? ?? '').trim(),
         sector: rawSector.isEmpty ? 'SIN SECTOR' : _metadataRepository.normalizeSectorLabel(rawSector),
         badge: 'Activo',
@@ -352,6 +357,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   bool _isSaving = false;
   bool _isUpdatingVisibility = false;
   String? _nameError;
+  String? _contactNameError;
   String? _emailError;
   String? _phoneError;
   String? _addressError;
@@ -361,6 +367,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   Uint8List? _logoBytes;
   String? _logoName;
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _contactNameCtrl;
   late final TextEditingController _rfcCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
@@ -393,6 +400,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.client.name);
+    _contactNameCtrl = TextEditingController(text: widget.client.contactName ?? '');
     _rfcCtrl = TextEditingController(text: widget.client.rfc ?? '');
     _emailCtrl = TextEditingController(text: widget.client.contactEmail);
     _phoneCtrl = TextEditingController(text: widget.client.phone);
@@ -407,6 +415,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.client != widget.client) {
       _nameCtrl.text = widget.client.name;
+      _contactNameCtrl.text = widget.client.contactName ?? '';
       _rfcCtrl.text = widget.client.rfc ?? '';
       _emailCtrl.text = widget.client.contactEmail;
       _phoneCtrl.text = widget.client.phone;
@@ -421,6 +430,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _contactNameCtrl.dispose();
     _rfcCtrl.dispose();
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
@@ -513,12 +523,14 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
 
   bool _validateInputs() {
     final businessName = _nameCtrl.text.trim();
+    final contactName = _contactNameCtrl.text.trim();
     final phoneDigits = ClientInputRules.digitsOnly(_phoneCtrl.text);
     final email = ClientInputRules.normalizeEmail(_emailCtrl.text);
     final address = _addressCtrl.text.trim();
     final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
 
     String? nameError;
+    String? contactNameError;
     String? emailError;
     String? phoneError;
     String? addressError;
@@ -526,6 +538,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
 
     if (businessName.isEmpty) {
       nameError = 'Ingresa la razon social del cliente.';
+    }
+    if (contactName.isNotEmpty && !ClientInputRules.isValidTextOnly(contactName)) {
+      contactNameError = 'El nombre de contacto solo admite letras.';
     }
     if (!ClientInputRules.isValidTenDigitPhone(phoneDigits)) {
       phoneError = ClientInputRules.phoneTenDigitsErrorMessage();
@@ -542,13 +557,19 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
 
     setState(() {
       _nameError = nameError;
+      _contactNameError = contactNameError;
       _emailError = emailError;
       _phoneError = phoneError;
       _addressError = addressError;
       _sectorError = sectorError;
     });
 
-    return nameError == null && emailError == null && phoneError == null && addressError == null && sectorError == null;
+    return nameError == null &&
+      contactNameError == null &&
+      emailError == null &&
+      phoneError == null &&
+      addressError == null &&
+      sectorError == null;
   }
 
   Future<void> _save() async {
@@ -557,6 +578,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     }
 
     final businessName = _nameCtrl.text.trim().toUpperCase();
+    final contactName = ClientInputRules.sanitizeTextOnly(_contactNameCtrl.text);
     final rfc = _rfcCtrl.text.trim().toUpperCase();
     final phoneDigits = ClientInputRules.digitsOnly(_phoneCtrl.text);
     final email = ClientInputRules.normalizeEmail(_emailCtrl.text);
@@ -577,6 +599,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       final updated = ClientRecord(
         id: widget.client.id,
         name: businessName,
+        contactName: contactName.isEmpty ? null : contactName,
         rfc: rfc.isEmpty ? null : rfc,
         sector: sector,
         badge: widget.client.badge,
@@ -596,6 +619,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         await widget.metadataRepository.updateClientMetadata(
           clientId: updated.id,
           businessName: updated.name,
+          contactName: updated.contactName,
           email: updated.contactEmail,
           phone: updated.phone,
           address: updated.address,
@@ -761,6 +785,20 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 ),
                 const SizedBox(height: 16),
                 TextField(
+                  controller: _contactNameCtrl,
+                  onChanged: (_) {
+                    if (_contactNameError != null) {
+                      setState(() => _contactNameError = null);
+                    }
+                  },
+                  inputFormatters: const [_UpperCaseTextFormatter()],
+                  decoration: InputDecoration(
+                    labelText: 'Nombre de contacto',
+                    errorText: _contactNameError,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
                   controller: _rfcCtrl,
                   inputFormatters: const [_UpperCaseTextFormatter()],
                   decoration: const InputDecoration(
@@ -878,6 +916,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                           ? null
                           : () {
                               _nameCtrl.text = widget.client.name;
+                              _contactNameCtrl.text = widget.client.contactName ?? '';
                               _rfcCtrl.text = widget.client.rfc ?? '';
                               _emailCtrl.text = widget.client.contactEmail;
                               _phoneCtrl.text = widget.client.phone;
@@ -888,6 +927,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                                 _logoBytes = widget.client.logoBytes;
                                 _logoName = null;
                                 _nameError = null;
+                                _contactNameError = null;
                                 _emailError = null;
                                 _phoneError = null;
                                 _addressError = null;
@@ -913,6 +953,11 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 const SizedBox(height: 8),
               ] else ...[
                 _SummaryRow(label: 'Razon social', value: client.name),
+                const SizedBox(height: 16),
+                _SummaryRow(
+                  label: 'Nombre de contacto',
+                  value: client.displayContactName.isEmpty ? 'Sin contacto principal' : client.displayContactName,
+                ),
                 const SizedBox(height: 16),
                 _SummaryRow(
                   label: 'RFC',
@@ -1595,10 +1640,16 @@ class _QuoteRow extends StatelessWidget {
 
   String _statusLabel(String status) {
     switch (status) {
+      case 'concluded':
+        return 'Concluida';
       case 'approved':
         return 'Aprobada';
       case 'declined':
         return 'Declinada';
+      case 'acta_finalizada':
+        return 'Por cobrar';
+      case 'paid':
+        return 'Pagada';
       default:
         return 'Pendiente';
     }

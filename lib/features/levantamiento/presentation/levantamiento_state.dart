@@ -3,6 +3,80 @@ import 'dart:typed_data';
 
 import '../../cotizaciones/domain/quote_models.dart';
 
+class DraftLevantamientoPhoto {
+  const DraftLevantamientoPhoto({
+    required this.name,
+    required this.size,
+    required this.bytes,
+  });
+
+  final String name;
+  final int size;
+  final Uint8List bytes;
+}
+
+class DraftLevantamientoSnapshot {
+  const DraftLevantamientoSnapshot({
+    this.projectKey,
+    this.projectName,
+    this.clientId,
+    this.clientName,
+    this.address,
+    this.notes,
+    this.universeId,
+    this.projectTypeId,
+    this.photos = const <DraftLevantamientoPhoto>[],
+  });
+
+  final String? projectKey;
+  final String? projectName;
+  final String? clientId;
+  final String? clientName;
+  final String? address;
+  final String? notes;
+  final String? universeId;
+  final String? projectTypeId;
+  final List<DraftLevantamientoPhoto> photos;
+
+  bool get hasContent {
+    return [
+      projectKey,
+      projectName,
+      clientId,
+      clientName,
+      address,
+      notes,
+      universeId,
+      projectTypeId,
+      if (photos.isNotEmpty) 'photos',
+    ].any((value) => value != null && value.trim().isNotEmpty);
+  }
+
+  DraftLevantamientoSnapshot copyWith({
+    String? projectKey,
+    String? projectName,
+    String? clientId,
+    String? clientName,
+    String? address,
+    String? notes,
+    String? universeId,
+    String? projectTypeId,
+    List<DraftLevantamientoPhoto>? photos,
+  }) {
+    return DraftLevantamientoSnapshot(
+      projectKey: projectKey ?? this.projectKey,
+      projectName: projectName ?? this.projectName,
+      clientId: clientId ?? this.clientId,
+      clientName: clientName ?? this.clientName,
+      address: address ?? this.address,
+      notes: notes ?? this.notes,
+      universeId: universeId ?? this.universeId,
+      projectTypeId: projectTypeId ?? this.projectTypeId,
+      photos: photos ?? this.photos,
+    );
+  }
+}
+
 class ActiveLevantamientoSession {
   const ActiveLevantamientoSession({
     required this.projectId,
@@ -73,6 +147,11 @@ class ActiveLevantamientoSession {
 final activeLevantamientoProvider =
     NotifierProvider<ActiveLevantamientoController, ActiveLevantamientoSession?>(
   ActiveLevantamientoController.new,
+);
+
+final levantamientoDraftProvider =
+    NotifierProvider<LevantamientoDraftController, DraftLevantamientoSnapshot?>(
+  LevantamientoDraftController.new,
 );
 
 class ActiveLevantamientoController
@@ -197,5 +276,51 @@ class ActiveLevantamientoController
 
   void clear() {
     state = null;
+  }
+}
+
+class LevantamientoDraftController
+    extends Notifier<DraftLevantamientoSnapshot?> {
+  @override
+  DraftLevantamientoSnapshot? build() {
+    return null;
+  }
+
+  void update({
+    String? projectKey,
+    String? projectName,
+    String? clientId,
+    String? clientName,
+    String? address,
+    String? notes,
+    String? universeId,
+    String? projectTypeId,
+    List<DraftLevantamientoPhoto> photos = const <DraftLevantamientoPhoto>[],
+  }) {
+    final normalized = DraftLevantamientoSnapshot(
+      projectKey: _normalize(projectKey),
+      projectName: _normalize(projectName),
+      clientId: _normalize(clientId),
+      clientName: _normalize(clientName),
+      address: _normalize(address),
+      notes: _normalize(notes),
+      universeId: _normalize(universeId),
+      projectTypeId: _normalize(projectTypeId),
+      photos: photos,
+    );
+
+    state = normalized.hasContent ? normalized : null;
+  }
+
+  void clear() {
+    state = null;
+  }
+
+  String? _normalize(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 }

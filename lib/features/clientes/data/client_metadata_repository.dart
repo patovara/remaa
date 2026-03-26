@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../../core/utils/client_input_rules.dart';
 
 class ClientMetadataRepository {
   static const List<String> defaultSectorLabels = <String>[
@@ -14,6 +15,32 @@ class ClientMetadataRepository {
 
   String normalizeSectorLabel(String value) {
     return value.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
+  }
+
+  String normalizeContactName(String value) {
+    return ClientInputRules.sanitizeTextOnly(value);
+  }
+
+  String? extractLegacyContactName(String? notes) {
+    final source = (notes ?? '').trim();
+    if (source.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'contacto principal\s*:\s*(.+)$', caseSensitive: false)
+        .firstMatch(source);
+    if (match == null) {
+      return null;
+    }
+    final extracted = normalizeContactName(match.group(1) ?? '');
+    return extracted.isEmpty ? null : extracted;
+  }
+
+  String? resolveContactName({String? contactName, String? notes}) {
+    final direct = normalizeContactName(contactName ?? '');
+    if (direct.isNotEmpty) {
+      return direct;
+    }
+    return extractLegacyContactName(notes);
   }
 
   String logoMimeTypeFromFileName(String fileName) {
@@ -122,6 +149,7 @@ class ClientMetadataRepository {
   Future<void> updateClientMetadata({
     required String clientId,
     required String businessName,
+    String? contactName,
     required String email,
     required String phone,
     required String address,
@@ -137,6 +165,9 @@ class ClientMetadataRepository {
 
     final payload = <String, Object?>{
       'business_name': businessName.trim().toUpperCase(),
+      'contact_name': (contactName == null || contactName.trim().isEmpty)
+          ? null
+          : normalizeContactName(contactName),
       'rfc': (rfc == null || rfc.trim().isEmpty) ? null : rfc.trim().toUpperCase(),
       'email': email.trim().toLowerCase(),
       'phone': phone.trim(),
@@ -148,6 +179,17 @@ class ClientMetadataRepository {
       payload['logo_mime_type'] = logoMimeType;
     }
 
-    await client.from('clients').update(payload).eq('id', clientId);
+    try {
+      await client.from('clients').update(payload).eq('id', clientId);
+    } catch (_) {
+      final legacyPayload = <String, Object?>{
+        ...payload,
+        'notes': (contactName == null || contactName.trim().isEmpty)
+            ? null
+            : 'Contacto principal: ${normalizeContactName(contactName)}',
+      };
+      legacyPayload.remove('contact_name');
+      await client.from('clients').update(legacyPayload).eq('id', clientId);
+    }
   }
 }

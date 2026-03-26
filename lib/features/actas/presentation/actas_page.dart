@@ -16,6 +16,9 @@ import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import '../../clientes/data/client_responsibles_repository.dart';
 import '../../clientes/presentation/clientes_mock_data.dart';
+import '../../cotizaciones/data/quotes_repository.dart';
+import '../../cotizaciones/domain/quote_models.dart';
+import '../../cotizaciones/presentation/quotes_controller.dart';
 import '../../levantamiento/presentation/levantamiento_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -34,6 +37,7 @@ class ActasPage extends ConsumerStatefulWidget {
 class _ActasPageState extends ConsumerState<ActasPage> {
   final _formatter = DateFormat('dd/MM/yyyy');
   final _responsiblesRepository = ClientResponsiblesRepository();
+  final _quotesRepository = QuotesRepository();
   static final RegExp _textOnlyPattern = RegExp(r'^[A-ZÁÉÍÓÚÜÑ ]+$');
   static final RegExp _hour24Pattern = RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$');
 
@@ -84,28 +88,19 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   }
 
   Future<void> _loadServiceDescriptionFromQuote(String quoteId) async {
-    final client = SupabaseBootstrap.client;
-    if (client == null || !_isUuid(quoteId)) {
-      return;
-    }
-
     try {
-      final rows = await client
-          .from('quote_items')
-          .select('concept, unit, quantity, created_at')
-          .eq('quote_id', quoteId)
-          .order('created_at', ascending: true);
+      final items = await _quotesRepository.fetchItemsByQuoteId(quoteId);
 
       final concepts = <String>[];
-      for (var index = 0; index < rows.length; index++) {
-        final row = rows[index];
-        final concept = (row['concept'] as String? ?? '').trim();
+      for (var index = 0; index < items.length; index++) {
+        final item = items[index];
+        final concept = item.concept.trim();
         if (concept.isNotEmpty) {
-          final quantity = row['quantity'] as num?;
-          final unit = (row['unit'] as String? ?? '').trim();
+          final quantity = item.quantity;
+          final unit = item.unit.trim();
           final normalizedConcept = concept.replaceAll(RegExp(r'\s+'), ' ').trim();
-          final prefix = quantity != null && quantity > 0
-              ? '${index + 1}. ${_formatDecimal(quantity.toDouble())} ${unit.isEmpty ? 'UN' : unit} - '
+          final prefix = quantity > 0
+              ? '${index + 1}. ${_formatDecimal(quantity)} ${unit.isEmpty ? 'UN' : unit} - '
               : '${index + 1}. ';
           concepts.add('$prefix$normalizedConcept');
         }
@@ -136,7 +131,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           .eq('id', quoteId)
           .single();
       final status = row['status'] as String? ?? '';
-      if (mounted && status == 'acta_finalizada') {
+      if (mounted && (status == QuoteStatus.actaFinalizada || status == QuoteStatus.paid)) {
         setState(() => _actaFinalizada = true);
       }
     } catch (_) {}
@@ -318,28 +313,23 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     );
     if (confirmed != true || !mounted) return;
 
-    if (!_isUuid(widget.quoteId!)) {
-      setState(() => _actaFinalizada = true);
-      showRemaMessage(
-        context,
-        'Acta finalizada solo localmente. La cotizacion actual es demo y no puede sincronizarse con la base de datos.',
-      );
-      return;
-    }
-
-    final client = SupabaseBootstrap.client;
-    if (client == null) {
-      showRemaMessage(context, 'No hay conexion activa con Supabase.');
-      return;
-    }
     try {
-      await client
-          .from('quotes')
-          .update({'status': 'acta_finalizada'})
-          .eq('id', widget.quoteId!);
+      final bytes = await _buildPdfBytes();
+      final order = _numeroPedidoController.text.trim().isEmpty
+          ? widget.quoteId!
+          : _numeroPedidoController.text.trim().replaceAll(' ', '_');
+      await ref.read(quotesRepositoryProvider).saveActaDocument(
+            quoteId: widget.quoteId!,
+            bytes: bytes,
+            fileName: 'acta_entrega_$order.pdf',
+          );
+      await ref.read(quotesProvider.notifier).updateStatus(
+            quoteId: widget.quoteId!,
+            status: QuoteStatus.actaFinalizada,
+          );
       if (!mounted) return;
       setState(() => _actaFinalizada = true);
-      showRemaMessage(context, 'Acta finalizada. La cotizacion queda pendiente de pago.');
+      showRemaMessage(context, 'Acta finalizada y guardada localmente. La cotizacion queda por cobrar.');
     } catch (error) {
       if (!mounted) return;
       AppLogger.error('actas_finalize_failed',

@@ -75,12 +75,12 @@ class _ClientesPageState extends State<ClientesPage> {
       try {
         rows = await client
             .from('clients')
-            .select('id, business_name, email, phone, address_line, city, created_at, sector_label, logo_path, is_hidden')
+        .select('id, business_name, contact_name, notes, email, phone, address_line, city, created_at, sector_label, logo_path, is_hidden')
             .order('created_at', ascending: false);
       } catch (_) {
         rows = await client
             .from('clients')
-            .select('id, business_name, email, phone, address_line, city, created_at')
+        .select('id, business_name, contact_name, notes, email, phone, address_line, city, created_at')
             .order('created_at', ascending: false);
       }
 
@@ -99,12 +99,17 @@ class _ClientesPageState extends State<ClientesPage> {
             if (city.isNotEmpty) city,
           ].join(', ');
           final rawSector = (row['sector_label'] as String? ?? '').trim();
+          final contactName = _metadataRepository.resolveContactName(
+            contactName: row['contact_name'] as String?,
+            notes: row['notes'] as String?,
+          );
           final logoPath = (row['logo_path'] as String? ?? '').trim();
           final logoBytes = await _metadataRepository.downloadLogo(logoPath);
 
           return ClientRecord(
             id: row['id'] as String? ?? name.toLowerCase().replaceAll(' ', '-'),
             name: name,
+            contactName: contactName,
             sector: rawSector.isEmpty ? 'SIN SECTOR' : _metadataRepository.normalizeSectorLabel(rawSector),
             badge: 'Activo',
             activeProjects: '00',
@@ -184,10 +189,7 @@ class _ClientesPageState extends State<ClientesPage> {
       final matchesVisibility = client.isHidden == _showHidden;
       final normalizedSector = _metadataRepository.normalizeSectorLabel(client.sector);
       final matchesSector = _selectedSector == 'TODOS' || normalizedSector == _selectedSector;
-      final matchesSearch = query.isEmpty ||
-          client.name.toLowerCase().contains(query) ||
-          client.sector.toLowerCase().contains(query) ||
-          client.contactEmail.toLowerCase().contains(query);
+      final matchesSearch = client.matchesSearchQuery(query);
       return matchesVisibility && matchesSector && matchesSearch;
     }).toList();
 
@@ -409,6 +411,13 @@ class _ClientCard extends StatelessWidget {
             client.name,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
+          if (client.displayContactName.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              client.displayContactName,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
           const SizedBox(height: 6),
           Text(client.sector.toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
           const SizedBox(height: 22),

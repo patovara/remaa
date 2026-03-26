@@ -74,6 +74,7 @@ class ClientRecord {
   const ClientRecord({
     required this.id,
     required this.name,
+    this.contactName,
     this.rfc,
     required this.sector,
     required this.badge,
@@ -91,6 +92,7 @@ class ClientRecord {
 
   final String id;
   final String name;
+  final String? contactName;
   final String? rfc;
   final String sector;
   final String badge;
@@ -105,9 +107,23 @@ class ClientRecord {
   final Uint8List? logoBytes;
   final bool isHidden;
 
+  String get displayContactName => (contactName ?? '').trim();
+
+  bool matchesSearchQuery(String query) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return true;
+    }
+    return name.toLowerCase().contains(normalized) ||
+        displayContactName.toLowerCase().contains(normalized) ||
+        sector.toLowerCase().contains(normalized) ||
+        contactEmail.toLowerCase().contains(normalized);
+  }
+
   ClientRecord copyWith({
     String? id,
     String? name,
+    String? contactName,
     String? rfc,
     String? sector,
     String? badge,
@@ -125,6 +141,7 @@ class ClientRecord {
     return ClientRecord(
       id: id ?? this.id,
       name: name ?? this.name,
+      contactName: contactName ?? this.contactName,
       rfc: rfc ?? this.rfc,
       sector: sector ?? this.sector,
       badge: badge ?? this.badge,
@@ -155,6 +172,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'hotel-live-aqua',
     name: 'Hotel Live Aqua',
+    contactName: 'ROBERTO MENDEZ',
     sector: 'HOTELERO',
     badge: 'Premium',
     activeProjects: '03',
@@ -189,6 +207,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'residencia-valle-alto',
     name: 'Residencia Valle Alto',
+    contactName: 'ELENA GARCIA',
     sector: 'RESIDENCIAL',
     badge: 'Residencial',
     activeProjects: '01',
@@ -213,6 +232,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'plaza-san-jeronimo',
     name: 'Plaza San Jeronimo',
+    contactName: 'SOFIA RANGEL',
     sector: 'COMERCIAL',
     badge: 'Comercial',
     activeProjects: '02',
@@ -237,6 +257,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'corporativo-gdi',
     name: 'Corporativo GDI',
+    contactName: 'CARLOS DIAZ',
     sector: 'COMERCIAL',
     badge: 'Activo',
     activeProjects: '05',

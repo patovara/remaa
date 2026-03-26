@@ -49,6 +49,15 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: RemaApp()));
     await tester.pumpAndSettle();
 
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) => widget is TextField &&
+            widget.decoration?.hintText == 'Busca por razon social o nombre de contacto',
+      ),
+      'Hotel Live Aqua',
+    );
+    await tester.pumpAndSettle();
+
     await tester.ensureVisible(find.text('Agregar a la cotizacion'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Agregar a la cotizacion'));

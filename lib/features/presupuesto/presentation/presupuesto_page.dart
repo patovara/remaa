@@ -45,6 +45,30 @@ class PresupuestoPage extends ConsumerWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (currentQuote != null && currentQuote.isDraft)
+            FilledButton.icon(
+              onPressed: () => _changeQuoteStatus(
+                context,
+                ref,
+                currentQuote,
+                QuoteStatus.concluded,
+              ),
+              icon: const Icon(Icons.task_alt_outlined),
+              label: const Text('Concluir'),
+            ),
+          if (currentQuote != null && currentQuote.isConcluded) ...[
+            OutlinedButton.icon(
+              onPressed: () => _changeQuoteStatus(
+                context,
+                ref,
+                currentQuote,
+                QuoteStatus.draft,
+              ),
+              icon: const Icon(Icons.undo),
+              label: const Text('Reabrir'),
+            ),
+            const SizedBox(width: 8),
+          ],
           IconButton(
             onPressed: currentQuote != null
                 ? () async {
@@ -96,6 +120,7 @@ class PresupuestoPage extends ConsumerWidget {
             data: (items) => _BudgetView(
               quote: quote,
               items: items,
+              canEditItems: quote.canEditItems,
               contextState: ref.watch(quoteContextProvider(quote.projectId)),
               universeLabel: _labelById(
                 quote.universeId,
@@ -131,6 +156,33 @@ class PresupuestoPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _changeQuoteStatus(
+    BuildContext context,
+    WidgetRef ref,
+    QuoteRecord quote,
+    String nextStatus,
+  ) async {
+    try {
+      await ref.read(quotesProvider.notifier).updateStatus(
+            quoteId: quote.id,
+            status: nextStatus,
+          );
+      if (!context.mounted) {
+        return;
+      }
+      final message = switch (nextStatus) {
+        QuoteStatus.concluded => 'Cotizacion concluida. Ya puedes adjuntar el PDF de aprobacion.',
+        QuoteStatus.draft => 'Cotizacion reabierta para edicion.',
+        _ => 'Estado actualizado.',
+      };
+      showRemaMessage(context, message);
+    } catch (error) {
+      if (context.mounted) {
+        showRemaMessage(context, '$error');
+      }
+    }
   }
 
   QuoteRecord? _findQuote(List<QuoteRecord> quotes, String id) {
@@ -594,6 +646,7 @@ class _BudgetView extends StatelessWidget {
   const _BudgetView({
     required this.quote,
     required this.items,
+    required this.canEditItems,
     required this.contextState,
     required this.universeLabel,
     required this.projectTypeLabel,
@@ -604,6 +657,7 @@ class _BudgetView extends StatelessWidget {
 
   final QuoteRecord quote;
   final List<QuoteItemRecord> items;
+  final bool canEditItems;
   final AsyncValue<QuoteContextInfo> contextState;
   final String universeLabel;
   final String projectTypeLabel;
@@ -691,10 +745,19 @@ class _BudgetView extends StatelessWidget {
               Row(
                 children: [
                   FilledButton.icon(
-                    onPressed: onAddItem,
+                    onPressed: canEditItems ? onAddItem : null,
                     icon: const Icon(Icons.add),
                     label: const Text('Agregar concepto'),
                   ),
+                  if (!canEditItems) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'La edición de conceptos se bloquea cuando la cotización ya fue concluida, aprobada o cerrada.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 16),
@@ -730,11 +793,11 @@ class _BudgetView extends StatelessWidget {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.edit_outlined),
-                                onPressed: () => onEditItem(item),
+                                onPressed: canEditItems ? () => onEditItem(item) : null,
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline),
-                                onPressed: () => onDeleteItem(item),
+                                onPressed: canEditItems ? () => onDeleteItem(item) : null,
                               ),
                             ],
                           ),

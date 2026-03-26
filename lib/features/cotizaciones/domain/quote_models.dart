@@ -1,5 +1,14 @@
 import 'dart:typed_data';
 
+abstract final class QuoteStatus {
+  static const String draft = 'draft';
+  static const String concluded = 'concluded';
+  static const String approved = 'approved';
+  static const String declined = 'declined';
+  static const String actaFinalizada = 'acta_finalizada';
+  static const String paid = 'paid';
+}
+
 class QuoteRecord {
   const QuoteRecord({
     required this.id,
@@ -29,7 +38,14 @@ class QuoteRecord {
   final String? approvalPdfPath;
   final DateTime? approvalPdfUploadedAt;
 
+  bool get isDraft => status == QuoteStatus.draft;
+  bool get isConcluded => status == QuoteStatus.concluded;
+  bool get isApproved => status == QuoteStatus.approved;
+  bool get isDeclined => status == QuoteStatus.declined;
+  bool get isActaFinalizada => status == QuoteStatus.actaFinalizada;
+  bool get isPaid => status == QuoteStatus.paid;
   bool get hasApprovalPdf => approvalPdfPath != null && approvalPdfPath!.trim().isNotEmpty;
+  bool get canEditItems => isDraft;
 
   QuoteRecord copyWith({
     String? id,
@@ -223,4 +239,18 @@ class SurveyEvidenceMeta {
   final int? widthPx;
   final int? heightPx;
   final DateTime? takenAt;
+}
+
+class ActaDocumentRecord {
+  const ActaDocumentRecord({
+    required this.quoteId,
+    required this.fileName,
+    required this.bytes,
+    required this.createdAt,
+  });
+
+  final String quoteId;
+  final String fileName;
+  final Uint8List bytes;
+  final DateTime createdAt;
 }

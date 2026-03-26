@@ -21,8 +21,10 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(
           path: '/levantamiento',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: LevantamientoPage(),
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: LevantamientoPage(
+              initialClientId: state.uri.queryParameters['clientId'],
+            ),
           ),
         ),
         GoRoute(
@@ -68,8 +70,10 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/nuevo-cliente',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: NuevoClientePage(),
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: NuevoClientePage(
+              returnTo: state.uri.queryParameters['returnTo'],
+            ),
           ),
         ),
         GoRoute(

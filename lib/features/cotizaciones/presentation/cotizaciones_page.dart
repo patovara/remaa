@@ -27,7 +27,7 @@ class CotizacionesPage extends ConsumerStatefulWidget {
 
 class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   String _search = '';
-  String? _statusFilter; // null = todos, 'draft', 'approved', 'declined'
+  String? _statusFilter; // null = todos, 'draft', 'concluded', 'approved', 'declined'
 
   @override
   Widget build(BuildContext context) {
@@ -99,23 +99,40 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                               _showProjectDescription(context, quote, projectById[quote.projectId]),
                           onEdit: () => context.go('/presupuesto/${quote.id}'),
                           onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
-                          onAttachPdf: () => _attachApprovalPdf(quote),
+                            onAttachPdf: quote.isConcluded
+                              ? () => _attachApprovalPdf(quote, projectById[quote.projectId])
+                              : null,
                           onPreviewPdf: quote.hasApprovalPdf
                               ? () => _previewApprovalPdf(context, quote)
                               : null,
-                          onGoToActas: quote.status == 'approved'
-                              ? () => _goToActas(context, quote)
+                            onPreviewActa: quote.isActaFinalizada || quote.isPaid
+                              ? () => _previewFinalActa(context, quote)
                               : null,
-                          onApprove: quote.status == 'draft'
-                              ? () => _changeStatus(quote.id, 'approved')
+                            onDownloadActa: quote.isActaFinalizada || quote.isPaid
+                              ? () => _downloadFinalActa(context, quote)
                               : null,
-                          onDecline: quote.status != 'declined' &&
-                              quote.status != 'acta_finalizada' &&
+                            onShareActa: quote.isActaFinalizada || quote.isPaid
+                              ? () => _shareFinalActa(context, quote)
+                              : null,
+                            onMarkPaid: quote.isActaFinalizada
+                              ? () => _changeStatus(quote.id, QuoteStatus.paid)
+                              : null,
+                            onGoToActas: quote.isApproved
+                              ? () => _goToActas(context, quote, projectById[quote.projectId])
+                              : null,
+                            onConclude: quote.isDraft
+                              ? () => _changeStatus(quote.id, QuoteStatus.concluded)
+                              : null,
+                            onApprove: quote.isConcluded
+                              ? () => _changeStatus(quote.id, QuoteStatus.approved)
+                              : null,
+                            onDecline: !quote.isDeclined &&
+                              !quote.isActaFinalizada &&
                               !quote.hasApprovalPdf
-                              ? () => _changeStatus(quote.id, 'declined')
+                              ? () => _changeStatus(quote.id, QuoteStatus.declined)
                               : null,
-                          onReactivate: quote.status == 'declined'
-                              ? () => _changeStatus(quote.id, 'draft')
+                            onReactivate: (quote.isDeclined || quote.isConcluded)
+                              ? () => _changeStatus(quote.id, QuoteStatus.draft)
                               : null,
                         ),
                   ],
@@ -163,7 +180,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       await ref.read(quotesProvider.notifier).updateStatus(quoteId: quoteId, status: newStatus);
       if (mounted) {
         final label = switch (newStatus) {
-          'approved' => 'Aprobada',
+          QuoteStatus.concluded => 'Concluida',
+          QuoteStatus.approved => 'Aprobada',
+          QuoteStatus.actaFinalizada => 'Por cobrar',
+          QuoteStatus.paid => 'Pagada',
           'declined' => 'Declinada',
           _ => 'Reactivada',
         };
@@ -176,7 +196,26 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     }
   }
 
-  Future<void> _attachApprovalPdf(QuoteRecord quote) async {
+  Future<void> _attachApprovalPdf(QuoteRecord quote, ProjectLookup? project) async {
+    ProjectLookup? resolvedProject = project;
+    if (resolvedProject == null || (resolvedProject.clientId?.trim().isEmpty ?? true)) {
+      try {
+        final projects = await ref.read(quoteProjectsProvider.future);
+        for (final item in projects) {
+          if (item.id == quote.projectId) {
+            resolvedProject = item;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final validationError = _approvalPdfPrerequisiteError(quote, resolvedProject);
+    if (validationError != null) {
+      showRemaMessage(context, validationError);
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
@@ -208,6 +247,25 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
         showRemaMessage(context, '$error');
       }
     }
+  }
+
+  String? _approvalPdfPrerequisiteError(QuoteRecord quote, ProjectLookup? project) {
+    if (quote.isDeclined) {
+      return 'No puedes adjuntar el PDF de aprobacion a una cotizacion declinada.';
+    }
+    if (quote.isActaFinalizada) {
+      return 'No puedes adjuntar el PDF de aprobacion a una cotizacion con acta finalizada.';
+    }
+    if (!quote.isConcluded) {
+      return 'Primero debes concluir la cotizacion antes de adjuntar el PDF de aprobacion.';
+    }
+    if (project != null && (project.clientId?.trim().isEmpty ?? true)) {
+      return 'Debes vincular la cotizacion a un cliente registrado antes de adjuntar el PDF de aprobacion.';
+    }
+    if (quote.total <= 0) {
+      return 'La cotizacion debe estar concluida: agrega al menos un concepto con importe antes de adjuntar el PDF de aprobacion.';
+    }
+    return null;
   }
 
   Future<void> _previewApprovalPdf(BuildContext context, QuoteRecord quote) async {
@@ -242,22 +300,77 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     }
   }
 
-  Future<void> _goToActas(BuildContext context, QuoteRecord quote) async {
+  Future<ActaDocumentRecord?> _loadFinalActaDocument(QuoteRecord quote) async {
+    return ref.read(quotesRepositoryProvider).fetchActaDocument(quote.id);
+  }
+
+  Future<void> _previewFinalActa(BuildContext context, QuoteRecord quote) async {
+    final document = await _loadFinalActaDocument(quote);
+    if (document == null) {
+      if (mounted) {
+        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      }
+      return;
+    }
+    await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
+  }
+
+  Future<void> _downloadFinalActa(BuildContext context, QuoteRecord quote) async {
+    final document = await _loadFinalActaDocument(quote);
+    if (document == null) {
+      if (mounted) {
+        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      }
+      return;
+    }
+    await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
+    if (mounted) {
+      showRemaMessage(context, 'Acta final lista para descarga.');
+    }
+  }
+
+  Future<void> _shareFinalActa(BuildContext context, QuoteRecord quote) async {
+    final document = await _loadFinalActaDocument(quote);
+    if (document == null) {
+      if (mounted) {
+        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      }
+      return;
+    }
+    await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
+    if (mounted) {
+      showRemaMessage(context, 'Acta final lista para compartir.');
+    }
+  }
+
+  Future<void> _goToActas(BuildContext context, QuoteRecord quote, ProjectLookup? project) async {
     try {
-      final client = SupabaseBootstrap.client;
-      if (client == null) {
-        showRemaMessage(context, 'No hay conexion activa con Supabase.');
-        return;
+      ProjectLookup? resolvedProject = project;
+      if (resolvedProject == null) {
+        try {
+          final projects = await ref.read(quoteProjectsProvider.future);
+          for (final item in projects) {
+            if (item.id == quote.projectId) {
+              resolvedProject = item;
+              break;
+            }
+          }
+        } catch (_) {}
       }
 
-      // Obtener el proyecto para extraer el clientId
-      final projectRow = await client
-          .from('projects')
-          .select('client_id')
-          .eq('id', quote.projectId)
-          .single();
+      String? clientId = resolvedProject?.clientId?.trim();
+      if (clientId == null || clientId.isEmpty) {
+        final client = SupabaseBootstrap.client;
+        if (client != null && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(quote.projectId)) {
+          final projectRow = await client
+              .from('projects')
+              .select('client_id')
+              .eq('id', quote.projectId)
+              .maybeSingle();
+          clientId = (projectRow?['client_id'] as String?)?.trim();
+        }
+      }
 
-      final clientId = projectRow['client_id'] as String?;
       if (clientId == null || clientId.isEmpty) {
         showRemaMessage(context, 'Este proyecto no tiene cliente asignado.');
         return;
@@ -399,8 +512,8 @@ class _QuotesMetrics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = quotes.fold<double>(0, (sum, quote) => sum + quote.total);
-    final pending = quotes.where((quote) => quote.status == 'draft').length;
-    final approved = quotes.where((quote) => quote.status == 'approved').length;
+    final pending = quotes.where((quote) => quote.isDraft).length;
+    final concluded = quotes.where((quote) => quote.isConcluded).length;
     final average = quotes.isEmpty ? 0.0 : total / quotes.length;
 
     return LayoutBuilder(
@@ -418,9 +531,9 @@ class _QuotesMetrics extends StatelessWidget {
             backgroundColor: RemaColors.surfaceWhite,
           ),
           RemaMetricTile(
-            label: 'Aprobadas',
-            value: '$approved',
-            caption: 'Estado approved',
+            label: 'Concluidas',
+            value: '$concluded',
+            caption: 'Listas para aprobacion',
             backgroundColor: RemaColors.surfaceLow,
           ),
           RemaMetricTile(
@@ -465,17 +578,25 @@ class _StatusBadge extends StatelessWidget {
     Color bg;
     String label;
     switch (status) {
-      case 'approved':
+      case QuoteStatus.concluded:
+        bg = const Color(0xFFFFF1CC);
+        label = 'Concluida';
+        break;
+      case QuoteStatus.approved:
         bg = const Color(0xFFDFF4DD);
         label = 'Aprobada';
         break;
-      case 'declined':
+      case QuoteStatus.declined:
         bg = const Color(0xFFFFDDDD);
         label = 'Declinada';
         break;
-      case 'acta_finalizada':
+      case QuoteStatus.actaFinalizada:
         bg = const Color(0xFFD0E8FF);
-        label = 'Acta Final';
+        label = 'Por cobrar';
+        break;
+      case QuoteStatus.paid:
+        bg = const Color(0xFFE3F2FD);
+        label = 'Pagada';
         break;
       default:
         bg = const Color(0xFFFFDEA0);
@@ -503,9 +624,11 @@ class _StatusFilterBar extends StatelessWidget {
     final options = <(String?, String)>[
       (null, 'Todos'),
       ('draft', 'Pendientes'),
+      ('concluded', 'Concluidas'),
       ('approved', 'Aprobadas'),
       ('declined', 'Declinadas'),
-      ('acta_finalizada', 'Acta finalizada'),
+      ('acta_finalizada', 'Por cobrar'),
+      ('paid', 'Pagadas'),
     ];
     return Wrap(
       spacing: 8,
@@ -561,8 +684,13 @@ class _QuoteRow extends StatelessWidget {
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
-    required this.onAttachPdf,
+    this.onAttachPdf,
     this.onPreviewPdf,
+    this.onPreviewActa,
+    this.onDownloadActa,
+    this.onShareActa,
+    this.onMarkPaid,
+    this.onConclude,
     this.onApprove,
     this.onDecline,
     this.onReactivate,
@@ -573,8 +701,13 @@ class _QuoteRow extends StatelessWidget {
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
-  final VoidCallback onAttachPdf;
+  final VoidCallback? onAttachPdf;
   final VoidCallback? onPreviewPdf;
+  final VoidCallback? onPreviewActa;
+  final VoidCallback? onDownloadActa;
+  final VoidCallback? onShareActa;
+  final VoidCallback? onMarkPaid;
+  final VoidCallback? onConclude;
   final VoidCallback? onApprove;
   final VoidCallback? onDecline;
   final VoidCallback? onReactivate;
@@ -638,6 +771,32 @@ class _QuoteRow extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (quote.isActaFinalizada || quote.isPaid) ...[
+                  IconButton(
+                    onPressed: onShareActa,
+                    icon: const Icon(Icons.share_outlined),
+                    tooltip: 'Compartir acta final',
+                  ),
+                  IconButton(
+                    onPressed: onPreviewActa,
+                    icon: const Icon(Icons.visibility),
+                    tooltip: 'Previsualizar acta final',
+                    color: Colors.blue,
+                  ),
+                  IconButton(
+                    onPressed: onDownloadActa,
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    tooltip: 'Descargar acta final',
+                    color: Colors.deepPurple,
+                  ),
+                  if (quote.isActaFinalizada)
+                    IconButton(
+                      onPressed: onMarkPaid,
+                      icon: const Icon(Icons.payments_outlined),
+                      tooltip: 'Marcar como pagada',
+                      color: Colors.green,
+                    ),
+                ] else ...[
                 IconButton(
                   onPressed: onViewProjectDescription,
                   icon: const Icon(Icons.description_outlined),
@@ -646,11 +805,19 @@ class _QuoteRow extends StatelessWidget {
                 ),
                 IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar'),
                 IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
-                IconButton(
-                  onPressed: onAttachPdf,
-                  icon: const Icon(Icons.attach_file),
-                  tooltip: quote.hasApprovalPdf ? 'Reemplazar PDF pedido' : 'Adjuntar PDF pedido',
-                ),
+                if (onAttachPdf != null)
+                  IconButton(
+                    onPressed: onAttachPdf,
+                    icon: const Icon(Icons.attach_file),
+                    tooltip: quote.hasApprovalPdf ? 'Reemplazar PDF pedido' : 'Adjuntar PDF pedido',
+                  ),
+                if (onConclude != null)
+                  IconButton(
+                    onPressed: onConclude,
+                    icon: const Icon(Icons.task_alt_outlined),
+                    tooltip: 'Concluir cotización',
+                    color: Colors.orange.shade700,
+                  ),
                 if (onPreviewPdf != null)
                   IconButton(
                     onPressed: onPreviewPdf,
@@ -676,7 +843,7 @@ class _QuoteRow extends StatelessWidget {
                   IconButton(
                     onPressed: onReactivate,
                     icon: const Icon(Icons.undo),
-                    tooltip: 'Reactivar cotización',
+                    tooltip: quote.isConcluded ? 'Reabrir cotización' : 'Reactivar cotización',
                     color: Colors.orange,
                   ),
                 if (onGoToActas != null)
@@ -686,6 +853,7 @@ class _QuoteRow extends StatelessWidget {
                     tooltip: 'Ir a ACTAS',
                     color: Colors.purple,
                   ),
+                ],
               ],
             ),
           ),

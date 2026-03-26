@@ -19,6 +19,7 @@ $$;
 create table if not exists public.clients (
   id uuid primary key default gen_random_uuid(),
   business_name text not null,
+  contact_name text,
   rfc text,
   phone text,
   email text,
@@ -134,6 +135,9 @@ alter table public.quotes
 
 alter table public.quotes
   add column if not exists approval_pdf_uploaded_at timestamptz;
+
+alter table public.clients
+  add column if not exists contact_name text;
 
 create table if not exists public.universes (
   id uuid primary key default gen_random_uuid(),

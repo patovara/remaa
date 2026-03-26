@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/logging/app_logger.dart';
+import '../../clientes/presentation/clientes_mock_data.dart';
 import '../domain/quote_models.dart';
 
 class QuotesRepository {
@@ -41,6 +42,7 @@ class QuotesRepository {
   };
 
   static final Map<String, List<SurveyEntryRecord>> _localSurveyEntries = {};
+  static final Map<String, ActaDocumentRecord> _localActaDocuments = {};
 
   Future<List<ProjectLookup>> fetchProjects() async {
     final client = SupabaseBootstrap.client;
@@ -71,7 +73,15 @@ class QuotesRepository {
         return _localProjects;
       }
 
-      return projects;
+      final merged = <ProjectLookup>[...projects];
+      final knownIds = projects.map((project) => project.id).toSet();
+      for (final local in _localProjects) {
+        if (knownIds.add(local.id)) {
+          merged.add(local);
+        }
+      }
+
+      return merged;
     } catch (error) {
       AppLogger.error('projects_fetch_failed', data: {'error': error.toString()});
       return _localProjects;
@@ -347,11 +357,39 @@ class QuotesRepository {
     required QuoteRecord quote,
     required String status,
   }) async {
-    if (status == 'approved' && !quote.hasApprovalPdf) {
-      throw StateError('Debes adjuntar el PDF del pedido antes de aprobar la cotizacion.');
+    if (quote.isPaid && status != QuoteStatus.paid) {
+      throw StateError('No puedes modificar una cotizacion ya pagada.');
     }
 
-    final updated = quote.copyWith(status: status);
+    if (quote.isActaFinalizada &&
+        status != QuoteStatus.actaFinalizada &&
+        status != QuoteStatus.paid) {
+      throw StateError('No puedes modificar una cotizacion con acta finalizada.');
+    }
+
+    if (status == QuoteStatus.concluded) {
+      await _ensureQuoteCanBeConcluded(quote);
+    }
+    if (status == QuoteStatus.approved) {
+      if (!quote.isConcluded) {
+        throw StateError('La cotizacion debe estar concluida antes de aprobarse.');
+      }
+      if (!quote.hasApprovalPdf) {
+        throw StateError('Debes adjuntar el PDF del pedido antes de aprobar la cotizacion.');
+      }
+    }
+    if (status == QuoteStatus.paid && !quote.isActaFinalizada) {
+      throw StateError('La cotizacion debe estar por cobrar antes de marcarse como pagada.');
+    }
+
+    final shouldClearApprovalPdf =
+        status == QuoteStatus.draft && (quote.isConcluded || quote.isDeclined);
+
+    final updated = quote.copyWith(
+      status: status,
+      approvalPdfPath: shouldClearApprovalPdf ? '' : quote.approvalPdfPath,
+      approvalPdfUploadedAt: shouldClearApprovalPdf ? null : quote.approvalPdfUploadedAt,
+    );
     final client = SupabaseBootstrap.client;
 
     if (client == null || !_isUuid(quote.id)) {
@@ -360,7 +398,12 @@ class QuotesRepository {
     }
 
     try {
-      await client.from('quotes').update({'status': status}).eq('id', quote.id);
+      final payload = <String, Object?>{'status': status};
+      if (shouldClearApprovalPdf) {
+        payload['approval_pdf_path'] = null;
+        payload['approval_pdf_uploaded_at'] = null;
+      }
+      await client.from('quotes').update(payload).eq('id', quote.id);
       return updated;
     } catch (error) {
       AppLogger.error('quotes_update_status_failed', data: {'error': error.toString()});
@@ -377,6 +420,12 @@ class QuotesRepository {
     if (bytes.isEmpty) {
       throw StateError('No se pudo leer el archivo PDF.');
     }
+
+    if (!quote.isConcluded) {
+      throw StateError('Debes concluir la cotizacion antes de adjuntar el PDF de aprobacion.');
+    }
+
+    await _ensureApprovalPdfCanBeAttached(quote);
 
     final now = DateTime.now();
     final safeName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
@@ -408,6 +457,123 @@ class QuotesRepository {
     } catch (error) {
       AppLogger.error('quotes_attach_approval_pdf_failed', data: {'error': error.toString()});
       throw StateError('No se pudo adjuntar el PDF del pedido.');
+    }
+  }
+
+  Future<void> saveActaDocument({
+    required String quoteId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    if (bytes.isEmpty) {
+      throw StateError('No se pudo generar el PDF del acta.');
+    }
+
+    _localActaDocuments[quoteId] = ActaDocumentRecord(
+      quoteId: quoteId,
+      fileName: fileName,
+      bytes: bytes,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  Future<ActaDocumentRecord?> fetchActaDocument(String quoteId) async {
+    return _localActaDocuments[quoteId];
+  }
+
+  Future<void> _ensureApprovalPdfCanBeAttached(QuoteRecord quote) async {
+    final issues = <String>[];
+
+    if (quote.isDeclined) {
+      issues.add('la cotizacion esta declinada');
+    }
+    if (quote.isActaFinalizada) {
+      issues.add('el acta ya fue finalizada');
+    }
+    if (!quote.isConcluded) {
+      issues.add('la cotizacion aun no esta concluida');
+    }
+
+    final project = await _findProjectById(quote.projectId);
+    final clientId = project?.clientId?.trim() ?? '';
+    if (clientId.isEmpty) {
+      issues.add('el proyecto no tiene un cliente registrado');
+    }
+
+    final items = await fetchItemsByQuoteId(quote.id);
+    final hasValidItems = items.any(
+      (item) => item.lineTotal > 0 && item.quantity > 0 && item.concept.trim().isNotEmpty,
+    );
+    if (!hasValidItems || quote.total <= 0) {
+      issues.add('la cotizacion no esta concluida con conceptos e importe');
+    }
+
+    if (issues.isNotEmpty) {
+      throw StateError(
+        'No puedes adjuntar el PDF de aprobacion porque ${issues.join(', ')}.',
+      );
+    }
+  }
+
+  Future<void> _ensureQuoteCanBeConcluded(QuoteRecord quote) async {
+    final issues = <String>[];
+
+    final project = await _findProjectById(quote.projectId);
+    final clientId = project?.clientId?.trim() ?? '';
+    if (clientId.isEmpty) {
+      issues.add('el proyecto no tiene un cliente registrado');
+    }
+
+    final items = await fetchItemsByQuoteId(quote.id);
+    final hasValidItems = items.any(
+      (item) => item.lineTotal > 0 && item.quantity > 0 && item.concept.trim().isNotEmpty,
+    );
+    if (!hasValidItems || quote.total <= 0) {
+      issues.add('la cotizacion no tiene conceptos concluidos con importe');
+    }
+
+    if (issues.isNotEmpty) {
+      throw StateError(
+        'No puedes concluir la cotizacion porque ${issues.join(', ')}.',
+      );
+    }
+  }
+
+  Future<ProjectLookup?> _findProjectById(String projectId) async {
+    final local = _localProjects.where((project) => project.id == projectId).cast<ProjectLookup?>().firstWhere(
+          (project) => project != null,
+          orElse: () => null,
+        );
+    if (local != null) {
+      return local;
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(projectId)) {
+      return null;
+    }
+
+    try {
+      final row = await client
+          .from('projects')
+          .select('id, code, name, client_id, site_address, description, manager_name')
+          .eq('id', projectId)
+          .maybeSingle();
+      if (row == null) {
+        return null;
+      }
+      return ProjectLookup(
+        id: row['id'] as String? ?? projectId,
+        code: _normalizeProjectCode(row['code'] as String?, row['id'] as String? ?? projectId),
+        name: row['name'] as String? ?? 'Proyecto sin nombre',
+        clientId: row['client_id'] as String?,
+        siteAddress: row['site_address'] as String?,
+        description: row['description'] as String?,
+        managerName: row['manager_name'] as String?,
+      );
+    } catch (error) {
+      AppLogger.error('project_lookup_for_approval_failed', data: {'projectId': projectId, 'error': error.toString()});
+      return null;
     }
   }
 
@@ -519,10 +685,43 @@ class QuotesRepository {
         (item) => item.id == projectId,
         orElse: () => const ProjectLookup(id: '', code: '', name: ''),
       );
+      final localClientId = project.clientId?.trim() ?? '';
+      final localClient = localClientId.isEmpty ? null : findClientById(localClientId);
+      if (localClient != null) {
+        return QuoteContextInfo(
+          projectName: project.name,
+          clientName: localClient.name,
+          address: (project.siteAddress ?? '').trim(),
+          location: localClient.address,
+          description: project.description ?? '',
+        );
+      }
+
+      if (client != null && localClientId.isNotEmpty && _isUuid(localClientId)) {
+        try {
+          final clientRow = await client
+              .from('clients')
+              .select('business_name, city, state')
+              .eq('id', localClientId)
+              .single();
+          final clientName = clientRow['business_name'] as String? ?? '';
+          final city = clientRow['city'] as String? ?? '';
+          final state = clientRow['state'] as String? ?? '';
+          final location = [city, state].where((value) => value.trim().isNotEmpty).join(', ');
+          return QuoteContextInfo(
+            projectName: project.name,
+            clientName: clientName.isEmpty ? 'Cliente no disponible' : clientName,
+            address: (project.siteAddress ?? '').trim(),
+            location: location,
+            description: project.description ?? '',
+          );
+        } catch (_) {}
+      }
+
       return QuoteContextInfo(
         projectName: project.name,
-        clientName: 'Cliente no disponible',
-        address: '',
+        clientName: localClientId.isEmpty ? 'Cliente no asignado' : 'Cliente no disponible',
+        address: (project.siteAddress ?? '').trim(),
         location: '',
         description: project.description ?? '',
       );

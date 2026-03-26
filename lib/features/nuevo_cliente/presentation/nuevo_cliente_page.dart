@@ -15,7 +15,9 @@ import '../../../core/widgets/rema_panels.dart';
 import '../../clientes/data/client_metadata_repository.dart';
 
 class NuevoClientePage extends StatefulWidget {
-  const NuevoClientePage({super.key});
+  const NuevoClientePage({super.key, this.returnTo});
+
+  final String? returnTo;
 
   @override
   State<NuevoClientePage> createState() => _NuevoClientePageState();
@@ -255,16 +257,26 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
 
       await _metadataRepository.ensureSectorLabel(normalizedSector);
 
-      final inserted = await client.from('clients').insert({
+      final basePayload = {
         'business_name': businessName,
+        'contact_name': contactName,
         'rfc': rfc,
         'phone': phone,
         'email': email,
         'address_line': _addressController.text.trim(),
         'city': _composedLocation(),
-        'notes': 'Contacto principal: $contactName',
         'sector_label': normalizedSector,
-      }).select('id').single();
+      };
+      Map<String, dynamic> inserted;
+      try {
+        inserted = await client.from('clients').insert(basePayload).select('id').single();
+      } catch (_) {
+        final legacyPayload = {
+          ...basePayload,
+          'notes': contactName.isEmpty ? null : 'Contacto principal: $contactName',
+        }..remove('contact_name');
+        inserted = await client.from('clients').insert(legacyPayload).select('id').single();
+      }
 
       final clientId = inserted['id'] as String?;
       if (clientId != null && _logoBytes != null && _logoName != null) {
@@ -288,6 +300,15 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         return;
       }
       if (clientId != null && clientId.isNotEmpty) {
+        final returnTo = widget.returnTo?.trim();
+        if (returnTo == 'pop') {
+          context.pop(clientId);
+          return;
+        }
+        if (returnTo != null && returnTo.isNotEmpty) {
+          context.go('$returnTo?clientId=$clientId');
+          return;
+        }
         context.go('/clientes/$clientId');
         return;
       }
