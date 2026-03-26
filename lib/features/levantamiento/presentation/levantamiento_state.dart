@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:typed_data';
+
+import '../../cotizaciones/domain/quote_models.dart';
 
 class ActiveLevantamientoSession {
   const ActiveLevantamientoSession({
@@ -6,6 +9,14 @@ class ActiveLevantamientoSession {
     required this.universeId,
     required this.projectTypeId,
     this.quoteId,
+    this.projectKey,
+    this.projectName,
+    this.clientId,
+    this.clientName,
+    this.address,
+    this.evidenceCount = 0,
+    this.evidencePreviewList = const <Uint8List>[],
+    this.entries = const <SurveyEntryRecord>[],
     this.isCompleted = false,
   });
 
@@ -13,6 +24,15 @@ class ActiveLevantamientoSession {
   final String universeId;
   final String projectTypeId;
   final String? quoteId;
+  // Snapshot de los campos del formulario para restaurar al volver a la pantalla
+  final String? projectKey;
+  final String? projectName;
+  final String? clientId;
+  final String? clientName;
+  final String? address;
+  final int evidenceCount;
+  final List<Uint8List> evidencePreviewList;
+  final List<SurveyEntryRecord> entries;
   final bool isCompleted;
 
   bool get isActive => !isCompleted;
@@ -22,6 +42,14 @@ class ActiveLevantamientoSession {
     String? universeId,
     String? projectTypeId,
     String? quoteId,
+    String? projectKey,
+    String? projectName,
+    String? clientId,
+    String? clientName,
+    String? address,
+    int? evidenceCount,
+    List<Uint8List>? evidencePreviewList,
+    List<SurveyEntryRecord>? entries,
     bool? isCompleted,
   }) {
     return ActiveLevantamientoSession(
@@ -29,6 +57,14 @@ class ActiveLevantamientoSession {
       universeId: universeId ?? this.universeId,
       projectTypeId: projectTypeId ?? this.projectTypeId,
       quoteId: quoteId ?? this.quoteId,
+      projectKey: projectKey ?? this.projectKey,
+      projectName: projectName ?? this.projectName,
+      clientId: clientId ?? this.clientId,
+      clientName: clientName ?? this.clientName,
+      address: address ?? this.address,
+      evidenceCount: evidenceCount ?? this.evidenceCount,
+      evidencePreviewList: evidencePreviewList ?? this.evidencePreviewList,
+      entries: entries ?? this.entries,
       isCompleted: isCompleted ?? this.isCompleted,
     );
   }
@@ -51,13 +87,87 @@ class ActiveLevantamientoController
     required String universeId,
     required String projectTypeId,
     String? quoteId,
+    String? projectKey,
+    String? projectName,
+    String? clientId,
+    String? clientName,
+    String? address,
+    int evidenceCount = 0,
+    List<Uint8List> evidencePreviewList = const <Uint8List>[],
+    List<SurveyEntryRecord> entries = const <SurveyEntryRecord>[],
   }) {
     state = ActiveLevantamientoSession(
       projectId: projectId,
       universeId: universeId,
       projectTypeId: projectTypeId,
       quoteId: quoteId,
+      projectKey: projectKey,
+      projectName: projectName,
+      clientId: clientId,
+      clientName: clientName,
+      address: address,
+      evidenceCount: evidenceCount,
+      evidencePreviewList: evidencePreviewList,
+      entries: entries,
       isCompleted: false,
+    );
+  }
+
+  void addEntry({
+    required String description,
+    List<Uint8List> evidencePreviewList = const <Uint8List>[],
+    List<SurveyEvidenceMeta> evidenceMetadata = const <SurveyEvidenceMeta>[],
+  }) {
+    final current = state;
+    if (current == null) return;
+
+    final trimmed = description.trim();
+    final hasText = trimmed.isNotEmpty;
+    final hasEvidence = evidencePreviewList.isNotEmpty;
+    if (!hasText && !hasEvidence) {
+      return;
+    }
+
+    final latest = current.entries.isNotEmpty ? current.entries.last : null;
+    final isDuplicate = latest != null &&
+        latest.description.trim() == trimmed &&
+        latest.evidencePreviewList.length == evidencePreviewList.length;
+    if (isDuplicate) {
+      return;
+    }
+
+    final nextEntries = <SurveyEntryRecord>[
+      ...current.entries,
+      SurveyEntryRecord(
+        description: trimmed,
+        evidencePreviewList: evidencePreviewList,
+        evidenceMetadata: evidenceMetadata,
+      ),
+    ];
+
+    state = current.copyWith(
+      entries: nextEntries,
+      evidenceCount: evidencePreviewList.length,
+      evidencePreviewList: evidencePreviewList,
+    );
+  }
+
+  /// Actualiza solo el snapshot de campos del formulario sin cambiar el resto.
+  void updateSnapshot({
+    String? projectKey,
+    String? projectName,
+    String? clientId,
+    String? clientName,
+    String? address,
+  }) {
+    final current = state;
+    if (current == null) return;
+    state = current.copyWith(
+      projectKey: projectKey ?? current.projectKey,
+      projectName: projectName ?? current.projectName,
+      clientId: clientId ?? current.clientId,
+      clientName: clientName ?? current.clientName,
+      address: address ?? current.address,
     );
   }
 

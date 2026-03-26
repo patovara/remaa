@@ -1,4 +1,5 @@
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../../core/utils/client_input_rules.dart';
 import '../../../core/logging/app_logger.dart';
 import '../presentation/clientes_mock_data.dart';
 
@@ -22,15 +23,17 @@ class ClientResponsiblesRepository {
       return _sort(
         [
           for (final row in rows)
-            ClientResponsibleRecord(
-              id: row['id'] as String,
-              role: responsibleRoleFromCode(row['role'] as String? ?? 'supervisor'),
-              title: row['title'] as String? ?? '',
-              position: row['position'] as String? ?? '',
-              fullName: row['full_name'] as String? ?? '',
-              phone: row['phone'] as String? ?? '',
-              email: row['email'] as String? ?? '',
-              contactNotes: row['contact_notes'] as String? ?? '',
+            _normalizeResponsible(
+              ClientResponsibleRecord(
+                id: row['id'] as String,
+                role: responsibleRoleFromCode(row['role'] as String? ?? 'supervisor'),
+                title: row['title'] as String? ?? '',
+                position: row['position'] as String? ?? '',
+                fullName: row['full_name'] as String? ?? '',
+                phone: row['phone'] as String? ?? '',
+                email: row['email'] as String? ?? '',
+                contactNotes: row['contact_notes'] as String? ?? '',
+              ),
             ),
         ],
       );
@@ -47,24 +50,25 @@ class ClientResponsiblesRepository {
     required String clientId,
     required ClientResponsibleRecord record,
   }) async {
+    final normalizedRecord = _normalizeResponsible(record);
     if (!_canUseRemote(clientId)) {
-      return _saveLocal(clientId: clientId, record: record);
+      return _saveLocal(clientId: clientId, record: normalizedRecord);
     }
 
     try {
       final payload = <String, Object?>{
         'client_id': clientId,
-        'role': record.role.code,
-        'title': record.title,
-        'position': record.position,
-        'full_name': record.fullName,
-        'phone': record.phone,
-        'email': record.email,
-        'contact_notes': record.contactNotes,
+        'role': normalizedRecord.role.code,
+        'title': normalizedRecord.title,
+        'position': normalizedRecord.position,
+        'full_name': normalizedRecord.fullName,
+        'phone': normalizedRecord.phone,
+        'email': normalizedRecord.email,
+        'contact_notes': normalizedRecord.contactNotes,
       };
 
-      if (_isUuid(record.id)) {
-        payload['id'] = record.id;
+      if (_isUuid(normalizedRecord.id)) {
+        payload['id'] = normalizedRecord.id;
         await SupabaseBootstrap.client!.from('client_responsibles').upsert(payload);
       } else {
         await SupabaseBootstrap.client!.from('client_responsibles').insert(payload);
@@ -74,9 +78,9 @@ class ClientResponsiblesRepository {
     } catch (error) {
       AppLogger.error(
         'client_responsibles_save_failed',
-        data: {'client_id': clientId, 'responsible_id': record.id, 'error': error.toString()},
+        data: {'client_id': clientId, 'responsible_id': normalizedRecord.id, 'error': error.toString()},
       );
-      return _saveLocal(clientId: clientId, record: record);
+      return _saveLocal(clientId: clientId, record: normalizedRecord);
     }
   }
 
@@ -102,7 +106,7 @@ class ClientResponsiblesRepository {
 
   List<ClientResponsibleRecord> _fetchLocal(String clientId) {
     final items = _localStore[clientId] ?? const <ClientResponsibleRecord>[];
-    return _sort(List<ClientResponsibleRecord>.from(items));
+    return _sort([for (final item in items) _normalizeResponsible(item)]);
   }
 
   List<ClientResponsibleRecord> _saveLocal({
@@ -113,10 +117,20 @@ class ClientResponsiblesRepository {
     final next = [
       for (final item in current)
         if (item.id != record.id && item.role != record.role) item,
-      record,
+      _normalizeResponsible(record),
     ];
     _localStore[clientId] = _sort(next);
     return _fetchLocal(clientId);
+  }
+
+  ClientResponsibleRecord _normalizeResponsible(ClientResponsibleRecord record) {
+    return record.copyWith(
+      position: ClientInputRules.sanitizeTextOnly(record.position),
+      fullName: ClientInputRules.sanitizeTextOnly(record.fullName),
+      phone: ClientInputRules.digitsOnly(record.phone),
+      email: ClientInputRules.normalizeEmail(record.email),
+      contactNotes: record.contactNotes.trim(),
+    );
   }
 
   List<ClientResponsibleRecord> _deleteLocal({

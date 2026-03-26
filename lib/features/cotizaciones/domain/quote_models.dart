@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 class QuoteRecord {
   const QuoteRecord({
     required this.id,
@@ -169,4 +171,56 @@ class QuoteContextInfo {
       address.trim().isEmpty &&
       location.trim().isEmpty &&
       description.trim().isEmpty;
+}
+
+class SurveyEntryRecord {
+  const SurveyEntryRecord({
+    this.id,
+    required this.description,
+    this.evidencePreviewList = const <Uint8List>[],
+    this.evidenceMetadata = const <SurveyEvidenceMeta>[],
+    this.createdAt,
+  });
+
+  final String? id;
+  final String description;
+  final List<Uint8List> evidencePreviewList;
+  final List<SurveyEvidenceMeta> evidenceMetadata;
+  final DateTime? createdAt;
+}
+
+class SurveyEvidenceInput {
+  const SurveyEvidenceInput({
+    required this.bytes,
+    required this.originalName,
+    required this.fileSizeBytes,
+    this.mimeType,
+  });
+
+  final Uint8List bytes;
+  final String originalName;
+  final int fileSizeBytes;
+  final String? mimeType;
+}
+
+class SurveyEvidenceMeta {
+  const SurveyEvidenceMeta({
+    required this.objectPath,
+    required this.originalName,
+    required this.fileSizeBytes,
+    required this.sortOrder,
+    this.mimeType,
+    this.widthPx,
+    this.heightPx,
+    this.takenAt,
+  });
+
+  final String objectPath;
+  final String originalName;
+  final int fileSizeBytes;
+  final int sortOrder;
+  final String? mimeType;
+  final int? widthPx;
+  final int? heightPx;
+  final DateTime? takenAt;
 }

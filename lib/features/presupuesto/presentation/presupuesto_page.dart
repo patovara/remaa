@@ -15,6 +15,7 @@ import '../../cotizaciones/domain/quote_models.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../../cotizaciones/presentation/concepts_catalog_controller.dart';
 import '../../cotizaciones/presentation/quotes_controller.dart';
+import '../../levantamiento/presentation/levantamiento_state.dart';
 import 'quote_item_editor_dialog.dart';
 
 class PresupuestoPage extends ConsumerWidget {
@@ -27,8 +28,16 @@ class PresupuestoPage extends ConsumerWidget {
     final quotesState = ref.watch(quotesProvider);
     final itemsState = ref.watch(quoteItemsProvider(quoteId));
     final catalogState = ref.watch(conceptsCatalogProvider);
+    final projectsState = ref.watch(quoteProjectsProvider);
+    final activeLevantamiento = ref.watch(activeLevantamientoProvider);
     final currentQuote = _findQuote(quotesState.valueOrNull ?? const [], quoteId);
     final currentItems = itemsState.valueOrNull;
+    final projectById = {
+      for (final project in projectsState.valueOrNull ?? const <ProjectLookup>[])
+        project.id: project,
+    };
+    final currentProject =
+        currentQuote == null ? null : projectById[currentQuote.projectId];
 
     return PageFrame(
       title: 'Presupuesto',
@@ -37,20 +46,40 @@ class PresupuestoPage extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
+            onPressed: currentQuote != null
+                ? () async {
+                    final persistedEntries = await ref
+                        .read(projectSurveyEntriesProvider(currentQuote.projectId).future)
+                        .catchError((_) => const <SurveyEntryRecord>[]);
+                    if (!context.mounted) {
+                      return;
+                    }
+                    await _showProjectDescription(
+                      context,
+                      currentQuote,
+                      currentProject,
+                      activeLevantamiento,
+                      persistedEntries,
+                    );
+                  }
+                : null,
+            icon: const Icon(Icons.description_outlined, color: Colors.black),
+          ),
+          IconButton(
             onPressed: currentQuote != null && currentItems != null
-                ? () => _printQuote(context, quote: currentQuote, items: currentItems)
+                ? () => _printQuote(context, ref: ref, quote: currentQuote, items: currentItems)
                 : null,
             icon: const Icon(Icons.print_outlined),
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
-                ? () => _downloadQuote(context, quote: currentQuote, items: currentItems)
+                ? () => _downloadQuote(context, ref: ref, quote: currentQuote, items: currentItems)
                 : null,
             icon: const Icon(Icons.download_outlined),
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
-                ? () => _shareQuote(context, quote: currentQuote, items: currentItems)
+                ? () => _shareQuote(context, ref: ref, quote: currentQuote, items: currentItems)
                 : null,
             icon: const Icon(Icons.share_outlined),
           ),
@@ -68,6 +97,18 @@ class PresupuestoPage extends ConsumerWidget {
               quote: quote,
               items: items,
               contextState: ref.watch(quoteContextProvider(quote.projectId)),
+              universeLabel: _labelById(
+                quote.universeId,
+                catalogState.valueOrNull?.universes.map((item) => (item.id, item.name)).toList() ??
+                    const <(String, String)>[],
+              ),
+              projectTypeLabel: _labelById(
+                quote.projectTypeId,
+                catalogState.valueOrNull?.projectTypes
+                        .map((item) => (item.id, item.name))
+                        .toList() ??
+                    const <(String, String)>[],
+              ),
               onAddItem: () => _openItemDialog(context, ref, quote, null, catalogState),
               onEditItem: (item) => _openItemDialog(context, ref, quote, item, catalogState),
               onDeleteItem: (item) => ref.read(quoteItemsProvider(quote.id).notifier).remove(item.id),
@@ -99,6 +140,15 @@ class PresupuestoPage extends ConsumerWidget {
       }
     }
     return null;
+  }
+
+  String _labelById(String id, List<(String, String)> options) {
+    for (final option in options) {
+      if (option.$1 == id) {
+        return option.$2;
+      }
+    }
+    return id;
   }
 
   Future<void> _openItemDialog(
@@ -135,10 +185,11 @@ class PresupuestoPage extends ConsumerWidget {
 
   Future<void> _printQuote(
     BuildContext context, {
+    required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
-    final bytes = await _buildQuotePdf(quote: quote, items: items);
+    final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
       format: PdfPageFormat.letter,
@@ -148,10 +199,11 @@ class PresupuestoPage extends ConsumerWidget {
 
   Future<void> _downloadQuote(
     BuildContext context, {
+    required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
-    final bytes = await _buildQuotePdf(quote: quote, items: items);
+    final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
     await Printing.sharePdf(
       bytes: bytes,
       filename: 'cotizacion_${quote.quoteNumber}.pdf',
@@ -163,10 +215,11 @@ class PresupuestoPage extends ConsumerWidget {
 
   Future<void> _shareQuote(
     BuildContext context, {
+    required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
-    final bytes = await _buildQuotePdf(quote: quote, items: items);
+    final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
     await Printing.sharePdf(
       bytes: bytes,
       filename: 'cotizacion_${quote.quoteNumber}.pdf',
@@ -176,7 +229,112 @@ class PresupuestoPage extends ConsumerWidget {
     }
   }
 
+  Future<void> _showProjectDescription(
+    BuildContext context,
+    QuoteRecord quote,
+    ProjectLookup? project,
+    ActiveLevantamientoSession? activeLevantamiento,
+    List<SurveyEntryRecord> persistedEntries,
+  ) async {
+    final description = project?.description?.trim() ?? '';
+    final activeMatchesQuote =
+        activeLevantamiento != null && activeLevantamiento.quoteId == quote.id;
+    final sessionEntries = activeMatchesQuote
+        ? activeLevantamiento.entries
+      : const <SurveyEntryRecord>[];
+    final hasSessionEntries = sessionEntries.isNotEmpty;
+    final mergedEntries = <SurveyEntryRecord>[...persistedEntries];
+    for (final entry in sessionEntries) {
+      final duplicate = mergedEntries.any(
+        (item) =>
+            item.description.trim() == entry.description.trim() &&
+            item.evidencePreviewList.length == entry.evidencePreviewList.length,
+      );
+      if (!duplicate) {
+        mergedEntries.add(entry);
+      }
+    }
+    mergedEntries.sort((a, b) {
+      final left = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final right = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return left.compareTo(right);
+    });
+    final parsedDescriptions = hasSessionEntries
+        ? <String>[]
+        : description
+                .split('\n\n---\n\n')
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .toList();
+    final hasDescriptions = hasSessionEntries || parsedDescriptions.isNotEmpty;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Descripcion de levantamiento'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                project == null
+                    ? 'Proyecto no encontrado para ${quote.quoteNumber}.'
+                    : '${project.code} - ${project.name}',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 12),
+              if (project?.siteAddress != null && project!.siteAddress!.trim().isNotEmpty) ...[
+                Text(
+                  project.siteAddress!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: RemaColors.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (!hasDescriptions)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: RemaColors.surfaceLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Este proyecto no tiene descripcion capturada en levantamiento.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              if (mergedEntries.isNotEmpty)
+                ...mergedEntries
+                    .map((entry) => _LevantamientoEntryCard(entry: entry))
+                    .toList(),
+              if (mergedEntries.isEmpty)
+                ...parsedDescriptions
+                    .map((entry) => _LevantamientoEntryCard(
+                          entry: SurveyEntryRecord(description: entry),
+                        ))
+                    .toList(),
+            ],
+          ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<Uint8List> _buildQuotePdf({
+    required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
@@ -185,6 +343,50 @@ class PresupuestoPage extends ConsumerWidget {
     final watermark = await _loadWatermarkImage();
     final money = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
     final dateLabel = quote.validUntil != null ? _date(quote.validUntil!) : _date(DateTime.now());
+    final quoteContext =
+      await ref.read(quotesProvider.notifier).fetchQuoteContext(projectId: quote.projectId);
+    final catalog = await ref.read(conceptsCatalogProvider.future);
+    final activeLevantamiento = ref.read(activeLevantamientoProvider);
+    final persistedEntries = await ref
+        .read(projectSurveyEntriesProvider(quote.projectId).future)
+        .catchError((_) => const <SurveyEntryRecord>[]);
+    final activeMatchesQuote =
+        activeLevantamiento != null && activeLevantamiento.quoteId == quote.id;
+    final sessionEntries =
+        activeMatchesQuote ? activeLevantamiento.entries : const <SurveyEntryRecord>[];
+    final mergedEntries = <SurveyEntryRecord>[...persistedEntries];
+    for (final entry in sessionEntries) {
+      final duplicate = mergedEntries.any(
+        (item) =>
+            item.description.trim() == entry.description.trim() &&
+            item.evidencePreviewList.length == entry.evidencePreviewList.length,
+      );
+      if (!duplicate) {
+        mergedEntries.add(entry);
+      }
+    }
+    final universeLabel = _labelById(
+      quote.universeId,
+      [for (final item in catalog.universes) (item.id, item.name)],
+    );
+    final projectTypeLabel = _labelById(
+      quote.projectTypeId,
+      [for (final item in catalog.projectTypes) (item.id, item.name)],
+    );
+    final evidenceEntries = mergedEntries
+        .where((entry) => entry.evidencePreviewList.any((bytes) => bytes.isNotEmpty))
+        .toList();
+    if (evidenceEntries.isEmpty && activeLevantamiento?.quoteId == quote.id) {
+      final fallback = activeLevantamiento?.evidencePreviewList ?? const <Uint8List>[];
+      if (fallback.any((bytes) => bytes.isNotEmpty)) {
+        evidenceEntries.add(
+          SurveyEntryRecord(
+            description: 'Evidencia de levantamiento',
+            evidencePreviewList: fallback,
+          ),
+        );
+      }
+    }
 
     pdf.addPage(
       pw.MultiPage(
@@ -195,7 +397,7 @@ class PresupuestoPage extends ConsumerWidget {
               ? (_) => pw.Positioned.fill(
                     child: pw.Center(
                       child: pw.Opacity(
-                        opacity: 0.30,
+                        opacity: 0.10,
                         child: pw.Image(watermark, width: 380, fit: pw.BoxFit.contain),
                       ),
                     ),
@@ -230,6 +432,44 @@ class PresupuestoPage extends ConsumerWidget {
             ],
           ),
           pw.SizedBox(height: 18),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(width: 0.7, color: PdfColors.black),
+            ),
+            child: pw.Column(
+              children: [
+                pw.Row(
+                  children: [
+                    pw.Expanded(child: _pdfHeaderField('Proyecto', quoteContext.projectName)),
+                    pw.SizedBox(width: 8),
+                    pw.Expanded(child: _pdfHeaderField('Cliente', quoteContext.clientName)),
+                  ],
+                ),
+                pw.SizedBox(height: 6),
+                pw.Row(
+                  children: [
+                    pw.Expanded(child: _pdfHeaderField('Direccion', quoteContext.address)),
+                    pw.SizedBox(width: 8),
+                    pw.Expanded(child: _pdfHeaderField('Ubicacion', quoteContext.location)),
+                  ],
+                ),
+                pw.SizedBox(height: 6),
+                pw.Row(
+                  children: [
+                    pw.Expanded(child: _pdfHeaderField('Universo', universeLabel)),
+                    pw.SizedBox(width: 8),
+                    pw.Expanded(child: _pdfHeaderField('Tipo de remodelacion', projectTypeLabel)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (evidenceEntries.isNotEmpty) ...[
+            pw.SizedBox(height: 10),
+            _pdfEvidenceBlocks(entries: evidenceEntries),
+          ],
+          pw.SizedBox(height: 12),
           pw.Table(
             border: pw.TableBorder.all(width: 0.5),
             columnWidths: {
@@ -302,11 +542,61 @@ class PresupuestoPage extends ConsumerWidget {
   }
 }
 
+pw.Widget _pdfEvidenceBlocks({
+  required List<SurveyEntryRecord> entries,
+}) {
+  // Aplanar todas las imágenes de todas las entradas en una sola lista
+  final allImages = [
+    for (final entry in entries)
+      for (final bytes in entry.evidencePreviewList)
+        if (bytes.isNotEmpty) pw.MemoryImage(bytes),
+  ];
+
+  if (allImages.isEmpty) {
+    return pw.SizedBox.shrink();
+  }
+
+  return pw.Container(
+    padding: const pw.EdgeInsets.all(8),
+    decoration: pw.BoxDecoration(
+      border: pw.Border.all(width: 0.6, color: PdfColors.grey600),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Registro fotografico',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.start,
+          children: [
+            for (final image in allImages) ...[
+              pw.Container(
+                width: 120,
+                height: 90,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(width: 0.4, color: PdfColors.grey500),
+                ),
+                child: pw.Image(image, fit: pw.BoxFit.cover),
+              ),
+              pw.SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 class _BudgetView extends StatelessWidget {
   const _BudgetView({
     required this.quote,
     required this.items,
     required this.contextState,
+    required this.universeLabel,
+    required this.projectTypeLabel,
     required this.onAddItem,
     required this.onEditItem,
     required this.onDeleteItem,
@@ -315,13 +605,16 @@ class _BudgetView extends StatelessWidget {
   final QuoteRecord quote;
   final List<QuoteItemRecord> items;
   final AsyncValue<QuoteContextInfo> contextState;
+  final String universeLabel;
+  final String projectTypeLabel;
   final VoidCallback onAddItem;
   final ValueChanged<QuoteItemRecord> onEditItem;
   final ValueChanged<QuoteItemRecord> onDeleteItem;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Align(
+      alignment: Alignment.topLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 980),
         child: RemaPanel(
@@ -377,7 +670,8 @@ class _BudgetView extends StatelessWidget {
                       _ContextField(label: 'Cliente', value: context.clientName),
                       _ContextField(label: 'Direccion', value: context.address),
                       _ContextField(label: 'Ubicacion', value: context.location),
-                      _ContextField(label: 'Descripcion', value: context.description),
+                      _ContextField(label: 'Universo', value: universeLabel),
+                      _ContextField(label: 'Tipo de remodelacion', value: projectTypeLabel),
                     ],
                   ),
                 ),
@@ -544,6 +838,91 @@ class _ContextField extends StatelessWidget {
   }
 }
 
+class _LevantamientoEntryCard extends StatelessWidget {
+  const _LevantamientoEntryCard({required this.entry});
+
+  final SurveyEntryRecord entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDescription = entry.description.trim().isNotEmpty;
+    final hasEvidence = entry.evidencePreviewList.isNotEmpty;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: RemaColors.surfaceLow,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hasDescription ? entry.description : 'Sin descripcion de texto en este registro.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (hasEvidence) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final imageBytes in entry.evidencePreviewList)
+                  _EvidenceThumb(imageBytes: imageBytes),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EvidenceThumb extends StatelessWidget {
+  const _EvidenceThumb({required this.imageBytes});
+
+  final Uint8List imageBytes;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _openImagePreview(context, imageBytes),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: 88,
+          height: 88,
+          child: Image.memory(imageBytes, fit: BoxFit.cover),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _openImagePreview(BuildContext context, Uint8List imageBytes) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black87,
+    builder: (context) => GestureDetector(
+      onTap: () => Navigator.of(context).pop(),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: GestureDetector(
+            onTap: () {},
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4.0,
+              child: Image.memory(imageBytes, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 String _money(double value) {
   final formatter = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
   return formatter.format(value);
@@ -561,6 +940,24 @@ pw.Widget _pdfCell(String value, {bool isHeader = false}) {
         fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),
       softWrap: true,
+    ),
+  );
+}
+
+pw.Widget _pdfHeaderField(String label, String value) {
+  final safe = value.trim().isEmpty ? '-' : value.trim();
+  return pw.RichText(
+    text: pw.TextSpan(
+      children: [
+        pw.TextSpan(
+          text: '$label: ',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5),
+        ),
+        pw.TextSpan(
+          text: safe,
+          style: const pw.TextStyle(fontSize: 8.5),
+        ),
+      ],
     ),
   );
 }

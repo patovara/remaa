@@ -44,14 +44,14 @@ class RemaShell extends ConsumerWidget {
         body: Row(
           children: [
             _DesktopNav(location: location, navItems: navItems),
-            Expanded(child: child),
+            Expanded(child: SelectionArea(child: child)),
           ],
         ),
       );
     }
 
     return Scaffold(
-      body: child,
+      body: SelectionArea(child: child),
       bottomNavigationBar: _MobileNav(location: location, navItems: navItems),
       floatingActionButton: location == '/clientes'
           ? FloatingActionButton(

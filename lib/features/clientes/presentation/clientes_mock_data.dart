@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 enum ResponsibleRole { supervisor, gerente }
@@ -72,6 +74,7 @@ class ClientRecord {
   const ClientRecord({
     required this.id,
     required this.name,
+    this.rfc,
     required this.sector,
     required this.badge,
     required this.activeProjects,
@@ -81,10 +84,14 @@ class ClientRecord {
     required this.phone,
     required this.address,
     required this.responsibles,
+    this.logoPath,
+    this.logoBytes,
+    this.isHidden = false,
   });
 
   final String id;
   final String name;
+  final String? rfc;
   final String sector;
   final String badge;
   final String activeProjects;
@@ -94,6 +101,45 @@ class ClientRecord {
   final String phone;
   final String address;
   final List<ClientResponsibleRecord> responsibles;
+  final String? logoPath;
+  final Uint8List? logoBytes;
+  final bool isHidden;
+
+  ClientRecord copyWith({
+    String? id,
+    String? name,
+    String? rfc,
+    String? sector,
+    String? badge,
+    String? activeProjects,
+    String? months,
+    IconData? icon,
+    String? contactEmail,
+    String? phone,
+    String? address,
+    List<ClientResponsibleRecord>? responsibles,
+    String? logoPath,
+    Uint8List? logoBytes,
+    bool? isHidden,
+  }) {
+    return ClientRecord(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      rfc: rfc ?? this.rfc,
+      sector: sector ?? this.sector,
+      badge: badge ?? this.badge,
+      activeProjects: activeProjects ?? this.activeProjects,
+      months: months ?? this.months,
+      icon: icon ?? this.icon,
+      contactEmail: contactEmail ?? this.contactEmail,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
+      responsibles: responsibles ?? this.responsibles,
+      logoPath: logoPath ?? this.logoPath,
+      logoBytes: logoBytes ?? this.logoBytes,
+      isHidden: isHidden ?? this.isHidden,
+    );
+  }
 }
 
 ClientRecord? findClientById(String clientId) {
@@ -109,7 +155,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'hotel-live-aqua',
     name: 'Hotel Live Aqua',
-    sector: 'Sector Hospitalidad',
+    sector: 'HOTELERO',
     badge: 'Premium',
     activeProjects: '03',
     months: '12',
@@ -143,7 +189,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'residencia-valle-alto',
     name: 'Residencia Valle Alto',
-    sector: 'Sector Privado',
+    sector: 'RESIDENCIAL',
     badge: 'Residencial',
     activeProjects: '01',
     months: '04',
@@ -167,7 +213,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'plaza-san-jeronimo',
     name: 'Plaza San Jeronimo',
-    sector: 'Sector Retail',
+    sector: 'COMERCIAL',
     badge: 'Comercial',
     activeProjects: '02',
     months: '08',
@@ -191,7 +237,7 @@ const mockClients = <ClientRecord>[
   ClientRecord(
     id: 'corporativo-gdi',
     name: 'Corporativo GDI',
-    sector: 'Sector Corporativo',
+    sector: 'COMERCIAL',
     badge: 'Activo',
     activeProjects: '05',
     months: '18',

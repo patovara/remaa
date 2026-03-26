@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,37 +25,44 @@ class LevantamientoPage extends ConsumerStatefulWidget {
 }
 
 class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
-  static const List<String> _defaultResponsibles = [
-    'Arq. Daniel M.',
-    'Arq. Sofia R.',
-    'Arq. Elena G.',
-  ];
-
   final _projectKeyController = TextEditingController();
-  final _projectNameController = TextEditingController(text: 'Residencia Olivos');
-  final _clientController = TextEditingController(text: 'Ing. Roberto Mendez');
-  final _addressController = TextEditingController(
-    text: 'Av. de la Reforma 222, Juarez, Cuauhtemoc, CDMX',
-  );
-  final _notesController = TextEditingController(
-    text: 'Describa el estado actual del terreno, accesos, servicios disponibles y requerimientos especificos del cliente detectados durante la visita.',
-  );
+  final _projectNameController = TextEditingController();
+  final _clientController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _notesController = TextEditingController();
 
   DateTime _selectedDate = DateTime.now();
-  String _selectedArchitect = _defaultResponsibles.first;
-  List<String> _responsibleOptions = List<String>.from(_defaultResponsibles);
   String? _selectedClientId;
-  String? _boundProjectId;
   String? _selectedProjectId;
   String? _selectedUniverseId;
   String? _selectedProjectTypeId;
   bool _isCreatingQuote = false;
-  bool _isCreatingProject = false;
   final List<_PickedMedia> _photos = [];
 
   @override
   void initState() {
     super.initState();
+    // Restaurar campos del formulario si hay una sesión activa
+    final active = ref.read(activeLevantamientoProvider);
+    if (active != null && active.isActive) {
+      if (active.projectKey?.isNotEmpty == true) {
+        _projectKeyController.text = active.projectKey!;
+      }
+      if (active.projectName?.isNotEmpty == true) {
+        _projectNameController.text = active.projectName!;
+      }
+      if (active.clientName?.isNotEmpty == true) {
+        _clientController.text = active.clientName!;
+      }
+      if (active.address?.isNotEmpty == true) {
+        _addressController.text = active.address!;
+      }
+      _selectedClientId = active.clientId;
+      _selectedProjectId = active.projectId;
+      if (active.entries.isNotEmpty) {
+        _notesController.text = active.entries.last.description;
+      }
+    }
   }
 
   @override
@@ -68,6 +76,13 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   }
 
   Future<void> _pickPhotos() async {
+    const maxPhotosPerEntry = 2;
+    final remaining = maxPhotosPerEntry - _photos.length;
+    if (remaining <= 0) {
+      showRemaMessage(context, 'Maximo 2 fotos por cada descripcion.');
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
@@ -78,19 +93,33 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       return;
     }
 
-    setState(() {
-      _photos.addAll(
-        result.files.map(
-          (file) => _PickedMedia(
-            name: file.name,
-            bytes: file.bytes,
-            size: file.size,
-          ),
+    final selectedFiles = result.files.toList();
+    final acceptedFiles = selectedFiles.take(remaining).toList();
+    final normalizedMedia = <_PickedMedia>[];
+    for (final file in acceptedFiles) {
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        continue;
+      }
+      final optimized = await _optimizeImageBytes(bytes);
+      normalizedMedia.add(
+        _PickedMedia(
+          name: file.name,
+          bytes: optimized,
+          size: optimized.length,
         ),
       );
+    }
+
+    setState(() {
+      _photos.addAll(normalizedMedia);
     });
 
-    showRemaMessage(context, 'Se agregaron ${result.files.length} imagenes al levantamiento.');
+    if (acceptedFiles.length < selectedFiles.length) {
+      showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
+      return;
+    }
+    showRemaMessage(context, 'Se agregaron ${acceptedFiles.length} imagenes al levantamiento.');
   }
 
   void _removePhoto(_PickedMedia photo) {
@@ -111,11 +140,10 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   Future<void> _goToQuote() async {
     final active = ref.read(activeLevantamientoProvider);
     final selectedUniverseId = _selectedUniverseId;
-    final selectedProjectId = _selectedProjectId;
     final selectedProjectTypeId = _selectedProjectTypeId;
 
-    if (selectedUniverseId == null || selectedProjectId == null || selectedProjectTypeId == null) {
-      showRemaMessage(context, 'Selecciona proyecto, universo y tipo de proyecto para continuar.');
+    if (selectedUniverseId == null || selectedProjectTypeId == null) {
+      showRemaMessage(context, 'Selecciona universo y tipo de proyecto para continuar.');
       return;
     }
 
@@ -128,24 +156,48 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     }
 
     if (active != null && active.isActive && active.quoteId != null) {
+      await _syncActiveQuoteContextAndEntries(active);
       context.go('/presupuesto/${active.quoteId}');
       return;
     }
 
     setState(() => _isCreatingQuote = true);
     try {
+      final selectedProjectId =
+          await _resolveProjectIdForQuote() ?? _selectedProjectId;
+      if (selectedProjectId == null || selectedProjectId.isEmpty) {
+        if (mounted) {
+          showRemaMessage(context, 'No se pudo preparar el proyecto para la cotizacion.');
+        }
+        return;
+      }
+
       final projectName = _projectNameController.text.trim();
-      final manager = _selectedArchitect.trim();
+      final manager = '';
       final address = _addressController.text.trim();
       final notes = _notesController.text.trim();
       final projectKey = await _ensureProjectKey();
+      final entry = _buildCurrentEntry();
+      final composedDescription = _composeDescriptions(
+        entries: entry == null ? const <SurveyEntryRecord>[] : <SurveyEntryRecord>[entry],
+        fallbackDescription: notes,
+      );
+
+      if (entry != null) {
+        final evidenceInputs = _currentEvidenceInputs();
+        await ref.read(quotesProvider.notifier).appendSurveyEntry(
+              projectId: selectedProjectId,
+              description: entry.description,
+          evidenceInputs: evidenceInputs,
+            );
+      }
 
       await ref.read(quotesProvider.notifier).updateProjectContext(
             projectId: selectedProjectId,
             name: projectName.isEmpty ? 'Proyecto sin nombre' : projectName,
             managerName: manager,
             address: address,
-            description: notes,
+        description: composedDescription,
             clientId: _selectedClientId,
           );
 
@@ -165,6 +217,14 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
             universeId: selectedUniverseId,
             projectTypeId: selectedProjectTypeId,
             quoteId: quote.id,
+            projectKey: _projectKeyController.text.trim(),
+            projectName: _projectNameController.text.trim(),
+            clientId: _selectedClientId,
+            clientName: _clientController.text.trim(),
+            address: _addressController.text.trim(),
+            evidenceCount: _photos.length,
+            evidencePreviewList: _previewPhotos(),
+            entries: entry == null ? const <SurveyEntryRecord>[] : <SurveyEntryRecord>[entry],
           );
 
       showRemaMessage(context, 'Levantamiento asociado a ${quote.quoteNumber}.');
@@ -173,6 +233,48 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       if (mounted) {
         setState(() => _isCreatingQuote = false);
       }
+    }
+  }
+
+  Future<String?> _resolveProjectIdForQuote() async {
+    final selectedId = _selectedProjectId?.trim();
+    if (selectedId != null && selectedId.isNotEmpty) {
+      return selectedId;
+    }
+
+    final active = ref.read(activeLevantamientoProvider);
+    if (active != null && active.projectId.trim().isNotEmpty) {
+      final activeProjectId = active.projectId.trim();
+      if (mounted) {
+        setState(() => _selectedProjectId = activeProjectId);
+      }
+      return activeProjectId;
+    }
+
+    try {
+      final code = await _ensureProjectKey();
+      final created = await ref.read(quotesProvider.notifier).createProject(
+            input: NewProjectInput(
+              code: code,
+              name: _projectNameController.text.trim().isEmpty
+                  ? 'Proyecto sin nombre'
+                  : _projectNameController.text.trim(),
+              clientId: _selectedClientId,
+              siteAddress: _addressController.text.trim(),
+              description: _notesController.text.trim(),
+              managerName: null,
+            ),
+          );
+
+      if (mounted) {
+        setState(() => _selectedProjectId = created.id);
+      }
+      return created.id;
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, 'No se pudo crear el proyecto: $error');
+      }
+      return null;
     }
   }
 
@@ -199,188 +301,53 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   }
 
   Future<void> _openClientSelector() async {
+    final active = ref.read(activeLevantamientoProvider);
+    final projectDataLocked = active != null && active.isActive && active.quoteId != null;
+    if (projectDataLocked) {
+      showRemaMessage(
+        context,
+        'Cliente bloqueado mientras la cotizacion en curso siga activa. Finaliza el levantamiento para editarlo.',
+      );
+      return;
+    }
+
     final selected = await showDialog<ClientRecord>(
       context: context,
       builder: (_) => const _ClientSelectorDialog(),
     );
     if (selected != null && mounted) {
+      final address = selected.address.trim();
       setState(() {
         _clientController.text = selected.name;
         _selectedClientId = selected.id;
+        if (address.isNotEmpty && address.toLowerCase() != 'sin dirección') {
+          _addressController.text = address;
+        }
       });
-      await _loadResponsiblesForClient(
-        clientId: selected.id,
-        localFallback: selected.responsibles,
-      );
-    }
-  }
 
-  Future<void> _loadResponsiblesForClient({
-    required String? clientId,
-    List<ClientResponsibleRecord> localFallback = const [],
-  }) async {
-    final localNames = [
-      for (final record in localFallback)
-        if (record.fullName.trim().isNotEmpty) record.fullName.trim(),
-    ];
-
-    if (localNames.isNotEmpty || clientId == null || clientId.isEmpty) {
-      _applyResponsibles(localNames);
-      return;
-    }
-
-    if (!_isUuid(clientId) || SupabaseBootstrap.client == null) {
-      _applyResponsibles(const []);
-      return;
-    }
-
-    try {
-      final rows = await SupabaseBootstrap.client!
-          .from('client_responsibles')
-          .select('full_name')
-          .eq('client_id', clientId)
-          .order('created_at', ascending: true);
-      final names = [
-        for (final row in rows)
-          ((row['full_name'] as String?) ?? '').trim(),
-      ].where((item) => item.isNotEmpty).toList();
-      _applyResponsibles(names);
-    } catch (_) {
-      _applyResponsibles(const []);
-    }
-  }
-
-  void _applyResponsibles(List<String> values) {
-    final next = values.isEmpty ? List<String>.from(_defaultResponsibles) : values;
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _responsibleOptions = next;
-      if (!next.contains(_selectedArchitect)) {
-        _selectedArchitect = next.first;
-      }
-    });
-  }
-
-  Future<void> _handleProjectChanged(String projectId, List<ProjectLookup> projects) async {
-    setState(() => _selectedProjectId = projectId);
-    await _bindProjectDetails(projectId, projects);
-  }
-
-  Future<void> _bindProjectDetails(String? projectId, List<ProjectLookup> projects) async {
-    if (projectId == null || _boundProjectId == projectId) {
-      return;
-    }
-    _boundProjectId = projectId;
-
-    ProjectLookup? selected;
-    for (final project in projects) {
-      if (project.id == projectId) {
-        selected = project;
-        break;
-      }
-    }
-    if (selected == null) {
-      return;
-    }
-    final selectedProject = selected;
-
-    if (mounted) {
-      setState(() {
-        if (selectedProject.name.trim().isNotEmpty) {
-          _projectNameController.text = selectedProject.name;
+      // Solo generar folio nuevo si no tenemos uno ya (evita duplicar PRJ001→PRJ002)
+      final existingKey = _projectKeyController.text.trim();
+      final sessionKey = active?.projectKey?.trim() ?? '';
+      if (existingKey.isEmpty && sessionKey.isNotEmpty) {
+        // Restaurar clave de sesión antes de intentar generar una nueva
+        _projectKeyController.text = sessionKey;
+      } else if (existingKey.isEmpty) {
+        await _ensureProjectKey();
+        if (!mounted) return;
+        final generated = _projectKeyController.text.trim();
+        if (generated.isNotEmpty) {
+          showRemaMessage(context, 'Folio de proyecto generado: $generated');
         }
-        if ((selectedProject.siteAddress ?? '').trim().isNotEmpty) {
-          _addressController.text = selectedProject.siteAddress!.trim();
-        }
-        if ((selectedProject.description ?? '').trim().isNotEmpty) {
-          _notesController.text = selectedProject.description!.trim();
-        }
-        if ((selectedProject.managerName ?? '').trim().isNotEmpty) {
-          _selectedArchitect = selectedProject.managerName!.trim();
-        }
-        _selectedClientId = selectedProject.clientId;
-      });
-    }
-
-    if (_selectedClientId == null || _selectedClientId!.isEmpty) {
-      _applyResponsibles(const []);
-      return;
-    }
-
-    await _bindClientById(_selectedClientId!);
-  }
-
-  Future<void> _bindClientById(String clientId) async {
-    final local = findClientById(clientId);
-    if (local != null) {
-      if (mounted) {
-        setState(() => _clientController.text = local.name);
       }
-      await _loadResponsiblesForClient(clientId: clientId, localFallback: local.responsibles);
-      return;
-    }
 
-    if (!_isUuid(clientId) || SupabaseBootstrap.client == null) {
-      await _loadResponsiblesForClient(clientId: clientId);
-      return;
-    }
-
-    try {
-      final row = await SupabaseBootstrap.client!
-          .from('clients')
-          .select('business_name')
-          .eq('id', clientId)
-          .maybeSingle();
-      final name = ((row?['business_name'] as String?) ?? '').trim();
-      if (mounted && name.isNotEmpty) {
-        setState(() => _clientController.text = name);
-      }
-    } catch (_) {}
-
-    await _loadResponsiblesForClient(clientId: clientId);
-  }
-
-  Future<void> _createProjectFromCurrentData() async {
-    if (_selectedClientId == null || _selectedClientId!.trim().isEmpty) {
-      showRemaMessage(context, 'Selecciona un cliente antes de crear el proyecto.');
-      return;
-    }
-
-    setState(() => _isCreatingProject = true);
-    try {
-      final code = await _ensureProjectKey();
-      final project = await ref.read(quotesProvider.notifier).createProject(
-            input: NewProjectInput(
-              code: code,
-              name: _projectNameController.text.trim().isEmpty
-                  ? 'Proyecto sin nombre'
-                  : _projectNameController.text.trim(),
-              clientId: _selectedClientId,
-              siteAddress: _addressController.text.trim(),
-              description: _notesController.text.trim(),
-              managerName: _selectedArchitect.trim(),
-            ),
-          );
-
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _selectedProjectId = project.id;
-        _boundProjectId = project.id;
-      });
-      ref.invalidate(quoteProjectsProvider);
-      showRemaMessage(context, 'Proyecto ${project.code} creado y seleccionado.');
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      showRemaMessage(context, 'No se pudo crear el proyecto: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _isCreatingProject = false);
+      // Actualizar snapshot con datos del nuevo cliente
+      if (active != null && active.isActive) {
+        ref.read(activeLevantamientoProvider.notifier).updateSnapshot(
+          clientId: selected.id,
+          clientName: selected.name,
+          address: address.isNotEmpty ? address : null,
+          projectKey: _projectKeyController.text.trim(),
+        );
       }
     }
   }
@@ -411,6 +378,141 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     );
   }
 
+  SurveyEntryRecord? _buildCurrentEntry() {
+    final description = _notesController.text.trim();
+    final evidenceInputs = _currentEvidenceInputs();
+    final evidence = [for (final input in evidenceInputs) input.bytes];
+    final metadata = [
+      for (var index = 0; index < evidenceInputs.length; index++)
+        SurveyEvidenceMeta(
+          objectPath: '',
+          originalName: evidenceInputs[index].originalName,
+          fileSizeBytes: evidenceInputs[index].fileSizeBytes,
+          sortOrder: index,
+          mimeType: evidenceInputs[index].mimeType,
+        ),
+    ];
+    if (description.isEmpty && evidence.isEmpty) {
+      return null;
+    }
+    return SurveyEntryRecord(
+      description: description,
+      evidencePreviewList: evidence,
+      evidenceMetadata: metadata,
+    );
+  }
+
+  List<SurveyEvidenceInput> _currentEvidenceInputs() {
+    final inputs = <SurveyEvidenceInput>[];
+    for (final photo in _photos) {
+      final bytes = photo.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        continue;
+      }
+      inputs.add(
+        SurveyEvidenceInput(
+          bytes: bytes,
+          originalName: photo.name,
+          fileSizeBytes: photo.size,
+          mimeType: _guessMimeType(photo.name),
+        ),
+      );
+      if (inputs.length == 2) {
+        break;
+      }
+    }
+    return inputs;
+  }
+
+  String _guessMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    return 'image/jpeg';
+  }
+
+  Future<Uint8List> _optimizeImageBytes(Uint8List input) async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        input,
+        targetWidth: 600,
+      );
+      final frame = await codec.getNextFrame();
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) {
+        return input;
+      }
+      return data.buffer.asUint8List();
+    } catch (_) {
+      return input;
+    }
+  }
+
+  String _composeDescriptions({
+    required List<SurveyEntryRecord> entries,
+    required String fallbackDescription,
+  }) {
+    final unique = <String>{};
+    final ordered = <String>[];
+
+    for (final entry in entries) {
+      final text = entry.description.trim();
+      if (text.isNotEmpty && unique.add(text)) {
+        ordered.add(text);
+      }
+    }
+
+    final fallback = fallbackDescription.trim();
+    if (fallback.isNotEmpty && unique.add(fallback)) {
+      ordered.add(fallback);
+    }
+
+    if (ordered.isEmpty) {
+      return '';
+    }
+    return ordered.join('\n\n---\n\n');
+  }
+
+  Future<void> _syncActiveQuoteContextAndEntries(ActiveLevantamientoSession active) async {
+    final notifier = ref.read(activeLevantamientoProvider.notifier);
+    final entry = _buildCurrentEntry();
+    if (entry != null) {
+      final evidenceInputs = _currentEvidenceInputs();
+      await ref.read(quotesProvider.notifier).appendSurveyEntry(
+            projectId: active.projectId,
+            quoteId: active.quoteId,
+            description: entry.description,
+            evidenceInputs: evidenceInputs,
+          );
+      notifier.addEntry(
+        description: entry.description,
+        evidencePreviewList: entry.evidencePreviewList,
+        evidenceMetadata: entry.evidenceMetadata,
+      );
+    }
+
+    final updated = ref.read(activeLevantamientoProvider) ?? active;
+    final description = _composeDescriptions(
+      entries: updated.entries,
+      fallbackDescription: _notesController.text.trim(),
+    );
+    if (description.isEmpty) {
+      return;
+    }
+
+    final projectName = (updated.projectName ?? _projectNameController.text).trim();
+    final address = (updated.address ?? _addressController.text).trim();
+    await ref.read(quotesProvider.notifier).updateProjectContext(
+          projectId: updated.projectId,
+          name: projectName.isEmpty ? 'Proyecto sin nombre' : projectName,
+          managerName: '',
+          address: address,
+          description: description,
+          clientId: updated.clientId ?? _selectedClientId,
+        );
+  }
+
   List<ProjectTypeCatalogItem> _allowedProjectTypes(
     List<ProjectTypeCatalogItem> items,
   ) {
@@ -422,24 +524,28 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     return [for (final item in items) if (isAllowed(item.name)) item];
   }
 
+  List<Uint8List> _previewPhotos() {
+    final previews = <Uint8List>[];
+    for (final photo in _photos) {
+      if (photo.bytes != null && photo.bytes!.isNotEmpty) {
+        previews.add(photo.bytes!);
+      }
+    }
+    return previews;
+  }
+
   void _primeSelections({
-    required List<ProjectLookup> projects,
     required List<UniverseCatalogItem> universes,
     required List<ProjectTypeCatalogItem> projectTypes,
     required ActiveLevantamientoSession? active,
   }) {
-    String? nextProjectId = _selectedProjectId;
     String? nextUniverseId = _selectedUniverseId;
     String? nextProjectTypeId = _selectedProjectTypeId;
 
     if (active != null && active.isActive) {
-      nextProjectId = active.projectId;
       nextUniverseId = active.universeId;
       nextProjectTypeId = active.projectTypeId;
     } else {
-      if (nextProjectId == null && projects.isNotEmpty) {
-        nextProjectId = projects.first.id;
-      }
       if (nextUniverseId == null && universes.isNotEmpty) {
         nextUniverseId = universes.first.id;
       }
@@ -448,8 +554,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       }
     }
 
-    final changed = nextProjectId != _selectedProjectId ||
-        nextUniverseId != _selectedUniverseId ||
+    final changed = nextUniverseId != _selectedUniverseId ||
         nextProjectTypeId != _selectedProjectTypeId;
 
     if (!changed) {
@@ -461,34 +566,31 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         return;
       }
       setState(() {
-        _selectedProjectId = nextProjectId;
         _selectedUniverseId = nextUniverseId;
         _selectedProjectTypeId = nextProjectTypeId;
       });
-      _bindProjectDetails(nextProjectId, projects);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final catalogState = ref.watch(conceptsCatalogProvider);
-    final projectsState = ref.watch(quoteProjectsProvider);
     final activeLevantamiento = ref.watch(activeLevantamientoProvider);
 
     final universes = catalogState.valueOrNull?.universes ?? const <UniverseCatalogItem>[];
     final projectTypes = _allowedProjectTypes(
       catalogState.valueOrNull?.projectTypes ?? const <ProjectTypeCatalogItem>[],
     );
-    final projects = projectsState.valueOrNull ?? const <ProjectLookup>[];
 
     _primeSelections(
-      projects: projects,
       universes: universes,
       projectTypes: projectTypes,
       active: activeLevantamiento,
     );
 
     final universeLocked = activeLevantamiento != null && activeLevantamiento.isActive;
+    final projectDataLocked =
+        activeLevantamiento != null && activeLevantamiento.isActive && activeLevantamiento.quoteId != null;
 
     return PageFrame(
       title: 'Levantamiento de Proyecto',
@@ -499,19 +601,9 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           final details = _ProjectDetailsPanel(
             selectedDate: _selectedDate,
             projectKeyController: _projectKeyController,
-            selectedArchitect: _selectedArchitect,
-            responsibleOptions: _responsibleOptions,
-            onArchitectChanged: (value) => setState(() => _selectedArchitect = value),
             projectNameController: _projectNameController,
             clientController: _clientController,
             onClientTap: _openClientSelector,
-            projects: projects,
-            selectedProjectId: _selectedProjectId,
-            onProjectChanged: universeLocked
-                ? null
-              : (value) => _handleProjectChanged(value, projects),
-            onCreateProject: _isCreatingProject ? null : _createProjectFromCurrentData,
-            creatingProject: _isCreatingProject,
             universes: universes,
             selectedUniverseId: _selectedUniverseId,
             onUniverseChanged: universeLocked
@@ -534,8 +626,8 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
                 ? null
                 : (value) => setState(() => _selectedProjectTypeId = value),
             showCatalogWarning: catalogState.hasError,
-            showProjectsWarning: projectsState.hasError,
             universeLocked: universeLocked,
+            projectDataLocked: projectDataLocked,
           );
           final media = _EvidencePanel(
             photos: _photos,
@@ -544,7 +636,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           );
           final location = _LocationPanel(
             addressController: _addressController,
-            onCopyCoordinates: _copyCoordinates,
           );
           final notes = _DescriptionPanel(
             notesController: _notesController,
@@ -606,17 +697,9 @@ class _ProjectDetailsPanel extends StatelessWidget {
   const _ProjectDetailsPanel({
     required this.selectedDate,
     required this.projectKeyController,
-    required this.selectedArchitect,
-    required this.responsibleOptions,
-    required this.onArchitectChanged,
     required this.projectNameController,
     required this.clientController,
     required this.onClientTap,
-    required this.projects,
-    required this.selectedProjectId,
-    required this.onProjectChanged,
-    required this.onCreateProject,
-    required this.creatingProject,
     required this.universes,
     required this.selectedUniverseId,
     required this.onUniverseChanged,
@@ -624,23 +707,15 @@ class _ProjectDetailsPanel extends StatelessWidget {
     required this.selectedProjectTypeId,
     required this.onProjectTypeChanged,
     required this.showCatalogWarning,
-    required this.showProjectsWarning,
     required this.universeLocked,
+    required this.projectDataLocked,
   });
 
   final DateTime selectedDate;
   final TextEditingController projectKeyController;
-  final String selectedArchitect;
-  final List<String> responsibleOptions;
-  final ValueChanged<String> onArchitectChanged;
   final TextEditingController projectNameController;
   final TextEditingController clientController;
   final VoidCallback onClientTap;
-  final List<ProjectLookup> projects;
-  final String? selectedProjectId;
-  final ValueChanged<String>? onProjectChanged;
-  final VoidCallback? onCreateProject;
-  final bool creatingProject;
   final List<UniverseCatalogItem> universes;
   final String? selectedUniverseId;
   final ValueChanged<String>? onUniverseChanged;
@@ -648,8 +723,8 @@ class _ProjectDetailsPanel extends StatelessWidget {
   final String? selectedProjectTypeId;
   final ValueChanged<String>? onProjectTypeChanged;
   final bool showCatalogWarning;
-  final bool showProjectsWarning;
   final bool universeLocked;
+  final bool projectDataLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -682,74 +757,34 @@ class _ProjectDetailsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: _UnderlinedField(
-                  label: 'Clave proyecto',
-                  controller: projectKeyController,
-                ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: _DropdownField(
-                  label: 'Responsable',
-                  value: selectedArchitect,
-                  items: responsibleOptions,
-                  onChanged: onArchitectChanged,
-                ),
-              ),
-            ],
+          _UnderlinedField(
+            label: 'Clave proyecto',
+            controller: projectKeyController,
+            enabled: !projectDataLocked,
           ),
           const SizedBox(height: 20),
           _UnderlinedField(
             label: 'Nombre del proyecto',
             controller: projectNameController,
+            enabled: !projectDataLocked,
           ),
           const SizedBox(height: 20),
           _UnderlinedField(
             label: 'Cliente',
             controller: clientController,
             suffixIcon: Icons.person_search,
-            onSuffixTap: onClientTap,
+            onSuffixTap: projectDataLocked ? null : onClientTap,
+            enabled: !projectDataLocked,
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: selectedProjectId,
-                  decoration: const InputDecoration(labelText: 'Proyecto de levantamiento'),
-                  items: [
-                    for (final project in projects)
-                      DropdownMenuItem<String>(
-                        value: project.id,
-                        child: Text(project.label),
-                      ),
-                  ],
-                  onChanged: onProjectChanged == null
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            onProjectChanged!(value);
-                          }
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: onCreateProject,
-                icon: creatingProject
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add_business_outlined),
-                label: const Text('Nuevo proyecto'),
-              ),
-            ],
-          ),
+          if (projectDataLocked) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Cliente, clave y nombre del proyecto bloqueados hasta finalizar el levantamiento activo.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: RemaColors.onSurfaceVariant,
+                  ),
+            ),
+          ],
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             initialValue: selectedUniverseId,
@@ -790,7 +825,7 @@ class _ProjectDetailsPanel extends StatelessWidget {
                     }
                   },
           ),
-          if (showCatalogWarning || showProjectsWarning) ...[
+          if (showCatalogWarning) ...[
             const SizedBox(height: 12),
             Text(
               'Algunos catalogos no cargaron. Se usara fallback local cuando aplique.',
@@ -858,11 +893,9 @@ class _EvidencePanel extends StatelessWidget {
 class _LocationPanel extends StatelessWidget {
   const _LocationPanel({
     required this.addressController,
-    required this.onCopyCoordinates,
   });
 
   final TextEditingController addressController;
-  final VoidCallback onCopyCoordinates;
 
   @override
   Widget build(BuildContext context) {
@@ -870,90 +903,16 @@ class _LocationPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RemaSectionHeader(
-            title: 'Ubicacion y Georreferencia',
-            trailing: TextButton.icon(
-              onPressed: onCopyCoordinates,
-              icon: const Icon(Icons.content_copy, size: 16),
-              label: const Text('Copiar coordenadas'),
-            ),
-          ),
+          const RemaSectionHeader(title: 'Ubicacion'),
           const SizedBox(height: 24),
-          Container(
-            height: 320,
-            decoration: BoxDecoration(
-              color: RemaColors.surfaceHighest,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: Colors.grey.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          RemaColors.surfaceHighest,
-                          RemaColors.surfaceLow,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircleAvatar(
-                        radius: 24,
-                        backgroundColor: RemaColors.primaryDark,
-                        child: Icon(Icons.location_on, color: Colors.white),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Mapa pendiente de integracion',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Ingresa coordenadas manualmente en el campo inferior',
-                        style: TextStyle(
-                          color: Colors.grey.withValues(alpha: 0.7),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    color: Colors.white.withValues(alpha: 0.92),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('19.4326 N, 99.1332 W'),
-                        Text('CDMX, MX'),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
           _UnderlinedField(
-            label: 'Direccion completa (o DD.DDDD, DD.DDDD para coordenadas)',
+            label: 'Direccion completa',
             controller: addressController,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Mapa y georreferencia deshabilitados temporalmente.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
@@ -988,7 +947,7 @@ class _DescriptionPanel extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Esta descripcion se conserva para contexto tecnico del levantamiento y debe reflejarse en la cotizacion.',
+            'Esta descripcion se guarda solo como apoyo interno para preparar la cotizacion.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -1141,14 +1100,18 @@ class _UnderlinedField extends StatelessWidget {
   const _UnderlinedField({
     required this.label,
     required this.controller,
+    this.enabled = true,
     this.suffixIcon,
     this.onSuffixTap,
+    this.hintText,
   });
 
   final String label;
   final TextEditingController controller;
+  final bool enabled;
   final IconData? suffixIcon;
   final VoidCallback? onSuffixTap;
+  final String? hintText;
 
   @override
   Widget build(BuildContext context) {
@@ -1159,7 +1122,9 @@ class _UnderlinedField extends StatelessWidget {
         const SizedBox(height: 8),
         TextField(
           controller: controller,
+          enabled: enabled,
           decoration: InputDecoration(
+            hintText: hintText ?? 'Ingresa $label',
             suffixIcon: suffixIcon != null
                 ? onSuffixTap != null
                     ? IconButton(icon: Icon(suffixIcon), onPressed: onSuffixTap)

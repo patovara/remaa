@@ -4,13 +4,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 
+import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import '../domain/concept_generation.dart';
 import '../domain/quote_models.dart';
+import '../../clientes/presentation/clientes_mock_data.dart';
 import 'concepts_catalog_controller.dart';
 import 'quotes_controller.dart';
 
@@ -28,6 +32,11 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   @override
   Widget build(BuildContext context) {
     final quotesAsync = ref.watch(quotesProvider);
+    final projectsAsync = ref.watch(quoteProjectsProvider);
+    final projectById = {
+      for (final project in projectsAsync.valueOrNull ?? const <ProjectLookup>[])
+        project.id: project,
+    };
 
     return PageFrame(
       title: 'Gestion de Cotizaciones',
@@ -86,14 +95,27 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                       for (final quote in filtered)
                         _QuoteRow(
                           quote: quote,
+                          onViewProjectDescription: () =>
+                              _showProjectDescription(context, quote, projectById[quote.projectId]),
                           onEdit: () => context.go('/presupuesto/${quote.id}'),
                           onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
                           onAttachPdf: () => _attachApprovalPdf(quote),
+                          onPreviewPdf: quote.hasApprovalPdf
+                              ? () => _previewApprovalPdf(context, quote)
+                              : null,
+                          onGoToActas: quote.status == 'approved'
+                              ? () => _goToActas(context, quote)
+                              : null,
                           onApprove: quote.status == 'draft'
                               ? () => _changeStatus(quote.id, 'approved')
                               : null,
-                          onDecline: quote.status != 'declined'
+                          onDecline: quote.status != 'declined' &&
+                              quote.status != 'acta_finalizada' &&
+                              !quote.hasApprovalPdf
                               ? () => _changeStatus(quote.id, 'declined')
+                              : null,
+                          onReactivate: quote.status == 'declined'
+                              ? () => _changeStatus(quote.id, 'draft')
                               : null,
                         ),
                   ],
@@ -140,8 +162,12 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     try {
       await ref.read(quotesProvider.notifier).updateStatus(quoteId: quoteId, status: newStatus);
       if (mounted) {
-        final label = newStatus == 'approved' ? 'Aprobada' : 'Declinada';
-        showRemaMessage(context, 'Cotizacion marcada como $label.');
+        final label = switch (newStatus) {
+          'approved' => 'Aprobada',
+          'declined' => 'Declinada',
+          _ => 'Reactivada',
+        };
+        showRemaMessage(context, 'Cotizacion $label.');
       }
     } catch (error) {
       if (mounted) {
@@ -180,6 +206,70 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     } catch (error) {
       if (mounted) {
         showRemaMessage(context, '$error');
+      }
+    }
+  }
+
+  Future<void> _previewApprovalPdf(BuildContext context, QuoteRecord quote) async {
+    if (quote.approvalPdfPath == null || quote.approvalPdfPath!.isEmpty) {
+      showRemaMessage(context, 'No hay PDF adjunto para previsualizar.');
+      return;
+    }
+
+    try {
+      final client = SupabaseBootstrap.client;
+      if (client == null) {
+        showRemaMessage(context, 'No hay conexion activa con Supabase.');
+        return;
+      }
+
+      // Descargar el PDF desde storage
+      final bytes = await client.storage
+          .from('quote-approvals')
+          .download(quote.approvalPdfPath!);
+
+      if (!mounted) return;
+
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        format: PdfPageFormat.letter,
+        name: 'confirmacion_pedido_${quote.quoteNumber}.pdf',
+      );
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, 'No se pudo cargar el PDF: $error');
+      }
+    }
+  }
+
+  Future<void> _goToActas(BuildContext context, QuoteRecord quote) async {
+    try {
+      final client = SupabaseBootstrap.client;
+      if (client == null) {
+        showRemaMessage(context, 'No hay conexion activa con Supabase.');
+        return;
+      }
+
+      // Obtener el proyecto para extraer el clientId
+      final projectRow = await client
+          .from('projects')
+          .select('client_id')
+          .eq('id', quote.projectId)
+          .single();
+
+      final clientId = projectRow['client_id'] as String?;
+      if (clientId == null || clientId.isEmpty) {
+        showRemaMessage(context, 'Este proyecto no tiene cliente asignado.');
+        return;
+      }
+
+      if (!mounted) return;
+
+      // Navegar a ACTAS con el clientId
+      context.push('/actas?clientId=$clientId&quoteId=${quote.id}');
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, 'Error al cargar datos del cliente: $error');
       }
     }
   }
@@ -236,6 +326,68 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     }
     showRemaMessage(context, 'Cotizacion ${quote.quoteNumber} creada.');
     context.go('/presupuesto/${quote.id}');
+  }
+
+  Future<void> _showProjectDescription(
+    BuildContext context,
+    QuoteRecord quote,
+    ProjectLookup? project,
+  ) async {
+    final description = project?.description?.trim() ?? '';
+    final hasDescription = description.isNotEmpty;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Descripcion de levantamiento'),
+        content: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                project == null
+                    ? 'Proyecto no encontrado para ${quote.quoteNumber}.'
+                    : '${project.code} - ${project.name}',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 12),
+              if (project?.siteAddress != null && project!.siteAddress!.trim().isNotEmpty) ...[
+                Text(
+                  project.siteAddress!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: RemaColors.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+              ],
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: RemaColors.surfaceLow,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  hasDescription
+                      ? description
+                      : 'Este proyecto no tiene descripcion capturada en levantamiento.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -321,6 +473,10 @@ class _StatusBadge extends StatelessWidget {
         bg = const Color(0xFFFFDDDD);
         label = 'Declinada';
         break;
+      case 'acta_finalizada':
+        bg = const Color(0xFFD0E8FF);
+        label = 'Acta Final';
+        break;
       default:
         bg = const Color(0xFFFFDEA0);
         label = 'Pendiente';
@@ -349,6 +505,7 @@ class _StatusFilterBar extends StatelessWidget {
       ('draft', 'Pendientes'),
       ('approved', 'Aprobadas'),
       ('declined', 'Declinadas'),
+      ('acta_finalizada', 'Acta finalizada'),
     ];
     return Wrap(
       spacing: 8,
@@ -401,19 +558,27 @@ class _HeaderCell extends StatelessWidget {
 class _QuoteRow extends StatelessWidget {
   const _QuoteRow({
     required this.quote,
+    required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
     required this.onAttachPdf,
+    this.onPreviewPdf,
     this.onApprove,
     this.onDecline,
+    this.onReactivate,
+    this.onGoToActas,
   });
 
   final QuoteRecord quote;
+  final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
   final VoidCallback onAttachPdf;
+  final VoidCallback? onPreviewPdf;
   final VoidCallback? onApprove;
   final VoidCallback? onDecline;
+  final VoidCallback? onReactivate;
+  final VoidCallback? onGoToActas;
 
   @override
   Widget build(BuildContext context) {
@@ -446,6 +611,25 @@ class _QuoteRow extends StatelessWidget {
                   color: quote.hasApprovalPdf ? Colors.green : Colors.grey,
                   size: 18,
                 ),
+                if (quote.hasApprovalPdf) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.visibility_outlined,
+                    color: Colors.blue,
+                    size: 18,
+                  ),
+                ],
+                if (quote.status == 'acta_finalizada') ...[
+                  const SizedBox(width: 6),
+                  const Tooltip(
+                    message: 'Pago pendiente',
+                    child: Icon(
+                      Icons.payments_outlined,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -454,6 +638,12 @@ class _QuoteRow extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  onPressed: onViewProjectDescription,
+                  icon: const Icon(Icons.description_outlined),
+                  tooltip: 'Ver descripcion del levantamiento',
+                  color: RemaColors.primaryDark,
+                ),
                 IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar'),
                 IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
                 IconButton(
@@ -461,6 +651,13 @@ class _QuoteRow extends StatelessWidget {
                   icon: const Icon(Icons.attach_file),
                   tooltip: quote.hasApprovalPdf ? 'Reemplazar PDF pedido' : 'Adjuntar PDF pedido',
                 ),
+                if (onPreviewPdf != null)
+                  IconButton(
+                    onPressed: onPreviewPdf,
+                    icon: const Icon(Icons.visibility),
+                    tooltip: 'Previsualizar PDF',
+                    color: Colors.blue,
+                  ),
                 if (onApprove != null)
                   IconButton(
                     onPressed: onApprove,
@@ -474,6 +671,20 @@ class _QuoteRow extends StatelessWidget {
                     icon: const Icon(Icons.cancel_outlined),
                     tooltip: 'Declinar',
                     color: Colors.red,
+                  ),
+                if (onReactivate != null)
+                  IconButton(
+                    onPressed: onReactivate,
+                    icon: const Icon(Icons.undo),
+                    tooltip: 'Reactivar cotización',
+                    color: Colors.orange,
+                  ),
+                if (onGoToActas != null)
+                  IconButton(
+                    onPressed: onGoToActas,
+                    icon: const Icon(Icons.assignment_outlined),
+                    tooltip: 'Ir a ACTAS',
+                    color: Colors.purple,
                   ),
               ],
             ),

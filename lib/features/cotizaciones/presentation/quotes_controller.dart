@@ -29,6 +29,10 @@ final quoteContextProvider = FutureProvider.family<QuoteContextInfo, String>((re
   return ref.read(quotesRepositoryProvider).fetchQuoteContext(projectId: projectId);
 });
 
+final projectSurveyEntriesProvider = FutureProvider.family<List<SurveyEntryRecord>, String>((ref, projectId) {
+  return ref.read(quotesRepositoryProvider).fetchSurveyEntries(projectId: projectId);
+});
+
 class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
   late final QuotesRepository _repository = ref.read(quotesRepositoryProvider);
 
@@ -85,6 +89,21 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
 
   Future<QuoteContextInfo> fetchQuoteContext({required String projectId}) {
     return _repository.fetchQuoteContext(projectId: projectId);
+  }
+
+  Future<SurveyEntryRecord?> appendSurveyEntry({
+    required String projectId,
+    String? quoteId,
+    required String description,
+    required List<SurveyEvidenceInput> evidenceInputs,
+  }) {
+    ref.invalidate(projectSurveyEntriesProvider(projectId));
+    return _repository.appendSurveyEntry(
+      projectId: projectId,
+      quoteId: quoteId,
+      description: description,
+      evidenceInputs: evidenceInputs,
+    );
   }
 
   Future<void> setTotals({

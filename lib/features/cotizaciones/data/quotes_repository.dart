@@ -40,6 +40,8 @@ class QuotesRepository {
     'seed-quote-001': [],
   };
 
+  static final Map<String, List<SurveyEntryRecord>> _localSurveyEntries = {};
+
   Future<List<ProjectLookup>> fetchProjects() async {
     final client = SupabaseBootstrap.client;
     if (client == null) {
@@ -578,6 +580,226 @@ class QuotesRepository {
     }
   }
 
+  Future<SurveyEntryRecord?> appendSurveyEntry({
+    required String projectId,
+    String? quoteId,
+    required String description,
+    required List<SurveyEvidenceInput> evidenceInputs,
+  }) async {
+    final trimmed = description.trim();
+    final hasText = trimmed.isNotEmpty;
+    final sanitizedInputs = [
+      for (final input in evidenceInputs)
+        if (input.bytes.isNotEmpty) input,
+    ];
+    final limitedInputs =
+        sanitizedInputs.length <= 2 ? sanitizedInputs : sanitizedInputs.sublist(0, 2);
+    final hasEvidence = limitedInputs.isNotEmpty;
+    if (!hasText && !hasEvidence) {
+      return null;
+    }
+
+    final client = SupabaseBootstrap.client;
+    final canRemote = client != null && _isUuid(projectId);
+    if (!canRemote) {
+      final local = SurveyEntryRecord(
+        id: 'local-entry-${DateTime.now().millisecondsSinceEpoch}',
+        description: trimmed,
+        evidencePreviewList: [for (final input in limitedInputs) input.bytes],
+        evidenceMetadata: [
+          for (var index = 0; index < limitedInputs.length; index++)
+            SurveyEvidenceMeta(
+              objectPath: 'local://$projectId/${DateTime.now().millisecondsSinceEpoch}_$index',
+              originalName: limitedInputs[index].originalName,
+              fileSizeBytes: limitedInputs[index].fileSizeBytes,
+              sortOrder: index,
+              mimeType: limitedInputs[index].mimeType,
+            ),
+        ],
+        createdAt: DateTime.now(),
+      );
+      final items = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+      items.add(local);
+      _localSurveyEntries[projectId] = items;
+      return local;
+    }
+
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final quoteFolder = _isUuid(quoteId ?? '') ? quoteId! : 'no-quote';
+      final evidencePaths = <String>[];
+
+      final evidenceMetaMaps = <Map<String, Object?>>[];
+      for (var index = 0; index < limitedInputs.length; index++) {
+        final input = limitedInputs[index];
+        final ext = _guessImageExtension(input.originalName);
+        final objectPath = '$projectId/$quoteFolder/${timestamp}_$index.$ext';
+        await client.storage.from('survey-photos').uploadBinary(
+              objectPath,
+              input.bytes,
+              fileOptions: const FileOptions(upsert: true),
+            );
+        evidencePaths.add(objectPath);
+        evidenceMetaMaps.add({
+          'object_path': objectPath,
+          'original_name': input.originalName,
+          'mime_type': input.mimeType,
+          'file_size_bytes': input.fileSizeBytes,
+          'sort_order': index,
+          'width_px': null,
+          'height_px': null,
+          'taken_at': null,
+        });
+      }
+
+      final payload = <String, Object?>{
+        'project_id': projectId,
+        'description': _asNullable(trimmed),
+        'evidence_paths': evidencePaths,
+        'evidence_meta': evidenceMetaMaps,
+      };
+      if (_isUuid(quoteId ?? '')) {
+        payload['quote_id'] = quoteId;
+      }
+
+      final inserted = await client
+          .from('project_survey_entries')
+          .insert(payload)
+          .select('id, description, created_at')
+          .single();
+
+      return SurveyEntryRecord(
+        id: inserted['id'] as String?,
+        description: inserted['description'] as String? ?? trimmed,
+        evidencePreviewList: [for (final input in limitedInputs) input.bytes],
+        evidenceMetadata: [
+          for (var index = 0; index < limitedInputs.length; index++)
+            SurveyEvidenceMeta(
+              objectPath: evidencePaths[index],
+              originalName: limitedInputs[index].originalName,
+              fileSizeBytes: limitedInputs[index].fileSizeBytes,
+              sortOrder: index,
+              mimeType: limitedInputs[index].mimeType,
+            ),
+        ],
+        createdAt: _toDateTime(inserted['created_at']),
+      );
+    } catch (error) {
+      AppLogger.error('survey_entry_append_failed', data: {'error': error.toString()});
+      final local = SurveyEntryRecord(
+        id: 'local-entry-${DateTime.now().millisecondsSinceEpoch}',
+        description: trimmed,
+        evidencePreviewList: [for (final input in limitedInputs) input.bytes],
+        evidenceMetadata: [
+          for (var index = 0; index < limitedInputs.length; index++)
+            SurveyEvidenceMeta(
+              objectPath: 'local://$projectId/${DateTime.now().millisecondsSinceEpoch}_$index',
+              originalName: limitedInputs[index].originalName,
+              fileSizeBytes: limitedInputs[index].fileSizeBytes,
+              sortOrder: index,
+              mimeType: limitedInputs[index].mimeType,
+            ),
+        ],
+        createdAt: DateTime.now(),
+      );
+      final items = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+      items.add(local);
+      _localSurveyEntries[projectId] = items;
+      return local;
+    }
+  }
+
+  Future<List<SurveyEntryRecord>> fetchSurveyEntries({required String projectId}) async {
+    final client = SupabaseBootstrap.client;
+    final localItems = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+
+    if (client == null || !_isUuid(projectId)) {
+      return localItems;
+    }
+
+    try {
+      final rows = await client
+          .from('project_survey_entries')
+          .select('id, description, evidence_paths, evidence_meta, created_at')
+          .eq('project_id', projectId)
+          .order('created_at', ascending: true);
+
+      final entries = <SurveyEntryRecord>[];
+      for (final row in rows) {
+        final evidencePathsDynamic = row['evidence_paths'];
+        final evidencePaths = <String>[
+          if (evidencePathsDynamic is List)
+            for (final item in evidencePathsDynamic)
+              if (item is String && item.trim().isNotEmpty) item.trim(),
+        ];
+
+        final evidenceMetaDynamic = row['evidence_meta'];
+        final evidenceMeta = <SurveyEvidenceMeta>[];
+        if (evidenceMetaDynamic is List) {
+          for (final item in evidenceMetaDynamic) {
+            if (item is Map<String, dynamic>) {
+              final objectPath = (item['object_path'] as String? ?? '').trim();
+              if (objectPath.isEmpty) continue;
+              evidenceMeta.add(
+                SurveyEvidenceMeta(
+                  objectPath: objectPath,
+                  originalName: item['original_name'] as String? ?? objectPath,
+                  fileSizeBytes: (item['file_size_bytes'] as num?)?.toInt() ?? 0,
+                  sortOrder: (item['sort_order'] as num?)?.toInt() ?? evidenceMeta.length,
+                  mimeType: item['mime_type'] as String?,
+                  widthPx: (item['width_px'] as num?)?.toInt(),
+                  heightPx: (item['height_px'] as num?)?.toInt(),
+                  takenAt: _toDateTime(item['taken_at']),
+                ),
+              );
+            }
+          }
+        }
+
+        final sources = evidenceMeta.isNotEmpty
+            ? evidenceMeta.map((meta) => meta.objectPath).toList()
+            : evidencePaths;
+
+        final evidence = <Uint8List>[];
+        if (sources.isNotEmpty) {
+          final downloads = await Future.wait(
+            sources.map((path) async {
+              try {
+                final bytes = await client.storage.from('survey-photos').download(path);
+                return bytes.isNotEmpty ? bytes : null;
+              } catch (_) {
+                return null;
+              }
+            }),
+          );
+          for (final bytes in downloads) {
+            if (bytes != null) {
+              evidence.add(bytes);
+            }
+          }
+        }
+
+        entries.add(
+          SurveyEntryRecord(
+            id: row['id'] as String?,
+            description: row['description'] as String? ?? '',
+            evidencePreviewList: evidence,
+            evidenceMetadata: evidenceMeta,
+            createdAt: _toDateTime(row['created_at']),
+          ),
+        );
+      }
+
+      if (entries.isEmpty) {
+        return localItems;
+      }
+      return [...entries, ...localItems];
+    } catch (error) {
+      AppLogger.error('survey_entries_fetch_failed', data: {'error': error.toString()});
+      return localItems;
+    }
+  }
+
   List<QuoteRecord> get _sortedLocalQuotes {
     final quotes = List<QuoteRecord>.from(_localQuotes);
     quotes.sort((a, b) => b.quoteNumber.compareTo(a.quoteNumber));
@@ -751,6 +973,17 @@ class QuotesRepository {
       return 'CNST';
     }
     return 'GEN';
+  }
+
+  String _guessImageExtension(String originalName) {
+    final parts = originalName.toLowerCase().split('.');
+    if (parts.length > 1) {
+      final ext = parts.last.trim();
+      if (ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'webp') {
+        return ext;
+      }
+    }
+    return 'jpg';
   }
 
   String _normalizeProjectCode(String? code, String projectId) {

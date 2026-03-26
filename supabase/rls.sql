@@ -3,6 +3,7 @@ alter table public.clients enable row level security;
 alter table public.client_responsibles enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_surveys enable row level security;
+alter table public.project_survey_entries enable row level security;
 alter table public.quotes enable row level security;
 alter table public.quote_items enable row level security;
 alter table public.universes enable row level security;
@@ -55,6 +56,22 @@ create policy attribute_options_read_all on public.attribute_options for select 
 
 drop policy if exists concept_closures_read_all on public.concept_closures;
 create policy concept_closures_read_all on public.concept_closures for select to anon, authenticated using (true);
+
+drop policy if exists project_survey_entries_read_all on public.project_survey_entries;
+create policy project_survey_entries_read_all on public.project_survey_entries
+for select to anon, authenticated using (true);
+
+drop policy if exists project_survey_entries_insert_all on public.project_survey_entries;
+create policy project_survey_entries_insert_all on public.project_survey_entries
+for insert to anon, authenticated with check (true);
+
+drop policy if exists project_survey_entries_update_all on public.project_survey_entries;
+create policy project_survey_entries_update_all on public.project_survey_entries
+for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists project_survey_entries_delete_all on public.project_survey_entries;
+create policy project_survey_entries_delete_all on public.project_survey_entries
+for delete to anon, authenticated using (true);
 
 -- Escritura del catalogo solo para admin autenticado.
 drop policy if exists universes_insert_admin on public.universes;

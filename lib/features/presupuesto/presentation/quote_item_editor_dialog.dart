@@ -30,8 +30,8 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   final _unitController = TextEditingController();
-  final _quantityController = TextEditingController(text: '1');
-  final _unitPriceController = TextEditingController(text: '0');
+  final _quantityController = TextEditingController();
+  final _unitPriceController = TextEditingController();
   final NumberFormat _moneyInputFormat = NumberFormat('#,##0.##', 'en_US');
 
   ConceptTemplateCatalogItem? _selectedTemplate;
@@ -188,7 +188,10 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
                   ..._buildAttributeSelectors(template),
                 TextFormField(
                   controller: _unitController,
-                  decoration: const InputDecoration(labelText: 'Unidad'),
+                  decoration: const InputDecoration(
+                    labelText: 'Unidad',
+                    hintText: 'Ej. m2',
+                  ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Ingresa la unidad.';
@@ -204,7 +207,10 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
                       child: TextFormField(
                         controller: _quantityController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Cantidad'),
+                        decoration: const InputDecoration(
+                          labelText: 'Cantidad',
+                          hintText: 'Ej. 1.00',
+                        ),
                         validator: (value) {
                           final parsed = double.tryParse((value ?? '').trim());
                           if (parsed == null || parsed <= 0) {
@@ -219,7 +225,10 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
                       child: TextFormField(
                         controller: _unitPriceController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Precio unitario'),
+                        decoration: const InputDecoration(
+                          labelText: 'Precio unitario',
+                          hintText: 'Ej. 1250.00',
+                        ),
                         onChanged: _onUnitPriceChanged,
                         validator: (value) {
                           final parsed = _parseMoneyInput(value ?? '');
@@ -236,7 +245,10 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
                 TextFormField(
                   controller: _descriptionController,
                   maxLines: 6,
-                  decoration: const InputDecoration(labelText: 'Descripcion final'),
+                  decoration: const InputDecoration(
+                    labelText: 'Descripcion final',
+                    hintText: 'Describe el concepto final para la cotizacion',
+                  ),
                   onChanged: (_) => _manualDescriptionEdit = true,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {

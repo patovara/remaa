@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -6,34 +7,46 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/config/company_profile.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
+import '../../clientes/data/client_responsibles_repository.dart';
+import '../../clientes/presentation/clientes_mock_data.dart';
+import '../../levantamiento/presentation/levantamiento_state.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum _ActaRole { staff, admin }
 
-class ActasPage extends StatefulWidget {
-  const ActasPage({super.key});
+class ActasPage extends ConsumerStatefulWidget {
+  const ActasPage({super.key, this.clientId, this.quoteId});
+
+  final String? clientId;
+  final String? quoteId;
 
   @override
-  State<ActasPage> createState() => _ActasPageState();
+  ConsumerState<ActasPage> createState() => _ActasPageState();
 }
 
-class _ActasPageState extends State<ActasPage> {
+class _ActasPageState extends ConsumerState<ActasPage> {
   final _formatter = DateFormat('dd/MM/yyyy');
+  final _responsiblesRepository = ClientResponsiblesRepository();
+  static final RegExp _textOnlyPattern = RegExp(r'^[A-ZÁÉÍÓÚÜÑ ]+$');
+  static final RegExp _hour24Pattern = RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$');
 
-  final _clienteController = TextEditingController(text: 'Residencial Las Lomas S.A.');
-  final _razonSocialController = TextEditingController(text: 'Residencial Las Lomas S.A. de C.V.');
-  final _direccionController = TextEditingController(text: 'Blvd. Virreyes #405, Lomas de Chapultepec, CDMX');
-  final _ubicacionController = TextEditingController(text: 'CDMX');
-  final _horaEstablecidaController = TextEditingController(text: '10:00');
-  final _servicioController = TextEditingController(text: 'Suministro e instalacion de cristal templado para mampara');
-  final _gerenteClienteController = TextEditingController(text: 'Gerente del cliente');
-  final _responsableController = TextEditingController(text: 'Arq. Roberto Mendez');
-  final _tituloResponsableController = TextEditingController(text: 'Supervisor de Obra');
-  final _puestoResponsableController = TextEditingController(text: 'Representante tecnico del cliente');
+  final _clienteController = TextEditingController();
+  final _razonSocialController = TextEditingController();
+  final _direccionController = TextEditingController();
+  final _ubicacionController = TextEditingController();
+  final _horaEstablecidaController = TextEditingController();
+  final _servicioController = TextEditingController();
+  final _gerenteClienteController = TextEditingController();
+  final _puestoGerenteController = TextEditingController();
+  final _responsableController = TextEditingController();
+  final _puestoResponsableController = TextEditingController();
 
   final _fechaInicioController = TextEditingController();
   final _fechaConclusionController = TextEditingController();
@@ -49,7 +62,476 @@ class _ActasPageState extends State<ActasPage> {
   _PickedMedia? _fotoDespues;
   final List<_PickedMedia> _fotosDurante = [];
 
+  ClientRecord? _loadedClient;
+  bool _isLoadingClient = false;
+  String? _missingResponsiblesError;
+  bool _actaFinalizada = false;
+
   bool get _isAdmin => _role == _ActaRole.admin;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshClientData(showFeedback: false);
+    if (widget.quoteId != null && widget.quoteId!.isNotEmpty) {
+      _loadServiceDescriptionFromQuote(widget.quoteId!);
+      _checkActaStatus(widget.quoteId!);
+    }
+    // Cargar automáticamente evidencia del levantamiento o desde registros persistidos
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadEvidenceForActa();
+    });
+  }
+
+  Future<void> _loadServiceDescriptionFromQuote(String quoteId) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) {
+      return;
+    }
+
+    try {
+      final rows = await client
+          .from('quote_items')
+          .select('concept, unit, quantity, created_at')
+          .eq('quote_id', quoteId)
+          .order('created_at', ascending: true);
+
+      final concepts = <String>[];
+      for (var index = 0; index < rows.length; index++) {
+        final row = rows[index];
+        final concept = (row['concept'] as String? ?? '').trim();
+        if (concept.isNotEmpty) {
+          final quantity = row['quantity'] as num?;
+          final unit = (row['unit'] as String? ?? '').trim();
+          final normalizedConcept = concept.replaceAll(RegExp(r'\s+'), ' ').trim();
+          final prefix = quantity != null && quantity > 0
+              ? '${index + 1}. ${_formatDecimal(quantity.toDouble())} ${unit.isEmpty ? 'UN' : unit} - '
+              : '${index + 1}. ';
+          concepts.add('$prefix$normalizedConcept');
+        }
+      }
+
+      if (!mounted || concepts.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _servicioController.text = concepts.join('\n');
+      });
+    } catch (error) {
+      AppLogger.error(
+        'actas_load_service_description_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
+    }
+  }
+
+  Future<void> _checkActaStatus(String quoteId) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) return;
+    try {
+      final row = await client
+          .from('quotes')
+          .select('status')
+          .eq('id', quoteId)
+          .single();
+      final status = row['status'] as String? ?? '';
+      if (mounted && status == 'acta_finalizada') {
+        setState(() => _actaFinalizada = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadEvidenceForActa() async {
+    final loadedFromActive = _loadEvidenceFromActiveLevantamiento();
+    if (loadedFromActive) {
+      return;
+    }
+    await _loadEvidenceFromPersistedSurveyEntries();
+  }
+
+  bool _loadEvidenceFromActiveLevantamiento() {
+    final activeLevantamiento = ref.read(activeLevantamientoProvider);
+    if (activeLevantamiento == null) {
+      return false;
+    }
+
+    final evidenceList = <Uint8List>[
+      ...activeLevantamiento.evidencePreviewList,
+      for (final entry in activeLevantamiento.entries)
+        for (final bytes in entry.evidencePreviewList)
+          if (bytes.isNotEmpty) bytes,
+    ];
+    if (evidenceList.isEmpty) {
+      return false;
+    }
+
+    if (!mounted) {
+      return false;
+    }
+
+    _applyEvidenceImages(evidenceList);
+
+    if (mounted && evidenceList.isNotEmpty) {
+      showRemaMessage(
+        context,
+        'Se cargaron ${evidenceList.length} imagen(es) del levantamiento automaticamente.',
+      );
+    }
+    return true;
+  }
+
+  Future<void> _loadEvidenceFromPersistedSurveyEntries() async {
+    final quoteId = widget.quoteId?.trim();
+    final client = SupabaseBootstrap.client;
+    if (quoteId == null || quoteId.isEmpty || client == null || !_isUuid(quoteId)) {
+      return;
+    }
+
+    try {
+      final quoteRow = await client
+          .from('quotes')
+          .select('project_id')
+          .eq('id', quoteId)
+          .maybeSingle();
+      final projectId = (quoteRow?['project_id'] as String? ?? '').trim();
+      if (projectId.isEmpty || !_isUuid(projectId)) {
+        return;
+      }
+
+      final rows = await client
+          .from('project_survey_entries')
+          .select('evidence_paths, evidence_meta, created_at')
+          .eq('project_id', projectId)
+          .order('created_at', ascending: true);
+
+      final objectPaths = <String>[];
+      for (final row in rows) {
+        final evidenceMetaDynamic = row['evidence_meta'];
+        if (evidenceMetaDynamic is List) {
+          for (final item in evidenceMetaDynamic) {
+            if (item is Map<String, dynamic>) {
+              final path = (item['object_path'] as String? ?? '').trim();
+              if (path.isNotEmpty) {
+                objectPaths.add(path);
+              }
+            }
+          }
+        }
+
+        if (objectPaths.isEmpty) {
+          final evidencePathsDynamic = row['evidence_paths'];
+          if (evidencePathsDynamic is List) {
+            for (final item in evidencePathsDynamic) {
+              if (item is String && item.trim().isNotEmpty) {
+                objectPaths.add(item.trim());
+              }
+            }
+          }
+        }
+      }
+
+      if (objectPaths.isEmpty) {
+        return;
+      }
+
+      final downloaded = await Future.wait(
+        objectPaths.map((path) async {
+          try {
+            final bytes = await client.storage.from('survey-photos').download(path);
+            return bytes.isEmpty ? null : bytes;
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      final evidenceList = [for (final bytes in downloaded) if (bytes != null) bytes];
+      if (evidenceList.isEmpty || !mounted) {
+        return;
+      }
+
+      _applyEvidenceImages(evidenceList);
+      showRemaMessage(
+        context,
+        'Se cargaron ${evidenceList.length} imagen(es) del levantamiento desde la base.',
+      );
+    } catch (error) {
+      AppLogger.error(
+        'actas_load_persisted_evidence_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
+    }
+  }
+
+  void _applyEvidenceImages(List<Uint8List> evidenceList) {
+    if (!mounted || evidenceList.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      if (_fotoAntes == null) {
+        _fotoAntes = _PickedMedia(
+          name: 'antes_${DateTime.now().millisecondsSinceEpoch}.png',
+          bytes: evidenceList.first,
+          size: evidenceList.first.length,
+        );
+      }
+
+      if (_fotosDurante.isEmpty && evidenceList.length > 1) {
+        for (var index = 1; index < evidenceList.length; index++) {
+          _fotosDurante.add(
+            _PickedMedia(
+              name: 'durante_${index}_${DateTime.now().millisecondsSinceEpoch}.png',
+              bytes: evidenceList[index],
+              size: evidenceList[index].length,
+            ),
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> _finalizeActa() async {
+    if (widget.quoteId == null) return;
+    if (!_validateForFinalization()) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Finalizar Acta'),
+        content: const Text(
+          '¿Confirmas que el acta ha sido entregada y la cotización queda pendiente de pago?\n\n'
+          'Esta acción marcará la cotización como "Acta finalizada / Pago pendiente".',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    if (!_isUuid(widget.quoteId!)) {
+      setState(() => _actaFinalizada = true);
+      showRemaMessage(
+        context,
+        'Acta finalizada solo localmente. La cotizacion actual es demo y no puede sincronizarse con la base de datos.',
+      );
+      return;
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null) {
+      showRemaMessage(context, 'No hay conexion activa con Supabase.');
+      return;
+    }
+    try {
+      await client
+          .from('quotes')
+          .update({'status': 'acta_finalizada'})
+          .eq('id', widget.quoteId!);
+      if (!mounted) return;
+      setState(() => _actaFinalizada = true);
+      showRemaMessage(context, 'Acta finalizada. La cotizacion queda pendiente de pago.');
+    } catch (error) {
+      if (!mounted) return;
+      AppLogger.error('actas_finalize_failed',
+          data: {'quoteId': widget.quoteId, 'error': error.toString()});
+      showRemaMessage(context, 'Error al finalizar acta: $error');
+    }
+  }
+
+  Future<void> _loadClientData(String clientId) async {
+    setState(() => _isLoadingClient = true);
+    try {
+      final client = SupabaseBootstrap.client;
+      if (client == null || !_isUuid(clientId)) {
+        _loadMockClient(clientId);
+      } else {
+        await _loadSupabaseClient(clientId);
+      }
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, 'No se pudo cargar el cliente: $error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingClient = false);
+      }
+    }
+  }
+
+  Future<void> _refreshClientData({bool showFeedback = true}) async {
+    final clientId = await _resolveClientId();
+    if (clientId == null || clientId.isEmpty) {
+      if (mounted && showFeedback) {
+        showRemaMessage(context, 'No se pudo identificar el cliente para actualizar datos del acta.');
+      }
+      return;
+    }
+    await _loadClientData(clientId);
+    if (mounted && showFeedback) {
+      showRemaMessage(context, 'Datos del cliente actualizados.');
+    }
+  }
+
+  Future<String?> _resolveClientId() async {
+    final directClientId = widget.clientId?.trim();
+    if (directClientId != null && directClientId.isNotEmpty) {
+      return directClientId;
+    }
+
+    final activeLevantamiento = ref.read(activeLevantamientoProvider);
+    final activeClientId = activeLevantamiento?.clientId?.trim();
+    if (activeClientId != null && activeClientId.isNotEmpty) {
+      return activeClientId;
+    }
+
+    final quoteId = widget.quoteId?.trim();
+    final client = SupabaseBootstrap.client;
+    if (quoteId == null || quoteId.isEmpty || client == null || !_isUuid(quoteId)) {
+      return null;
+    }
+
+    try {
+      final quoteRow = await client.from('quotes').select('project_id').eq('id', quoteId).single();
+      final projectId = quoteRow['project_id'] as String?;
+      if (projectId == null || projectId.isEmpty || !_isUuid(projectId)) {
+        return null;
+      }
+      final projectRow = await client.from('projects').select('client_id').eq('id', projectId).single();
+      final clientId = projectRow['client_id'] as String?;
+      return clientId?.trim();
+    } catch (error) {
+      AppLogger.error(
+        'actas_resolve_client_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
+      return null;
+    }
+  }
+
+  void _loadMockClient(String clientId) {
+    // Buscar en mock data
+    final client = _findMockClient(clientId);
+    if (client != null) {
+      _loadClientIntoControllers(client);
+    }
+  }
+
+  Future<void> _loadSupabaseClient(String clientId) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null) return;
+
+    try {
+      final row = await client
+          .from('clients')
+          .select('id, business_name, city, state, address_line')
+          .eq('id', clientId)
+          .single();
+
+      final name = row['business_name'] as String? ?? '';
+      final address = row['address_line'] as String? ?? '';
+      final city = row['city'] as String? ?? '';
+      final state = row['state'] as String? ?? '';
+      final location = [city, state].where((v) => v.isNotEmpty).join(', ');
+      final responsibles = await _responsiblesRepository.fetchByClientId(clientId);
+
+      if (mounted) {
+        setState(() {
+          _loadedClient = ClientRecord(
+            id: clientId,
+            name: name,
+            sector: '',
+            badge: '',
+            activeProjects: '',
+            months: '',
+            icon: Icons.business,
+            contactEmail: '',
+            phone: '',
+            address: address,
+            responsibles: responsibles,
+          );
+          _clienteController.text = name;
+          _razonSocialController.text = name;
+          _direccionController.text = address;
+          _ubicacionController.text = location;
+          _applyResponsiblesToActa(responsibles);
+        });
+      }
+    } catch (e) {
+      AppLogger.error('actas_load_client_failed', data: {'clientId': clientId, 'error': e.toString()});
+    }
+  }
+
+  ClientRecord? _findMockClient(String clientId) {
+    try {
+      return mockClients.firstWhere((c) => c.id == clientId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _loadClientIntoControllers(ClientRecord client) {
+    setState(() {
+      _loadedClient = client;
+      _clienteController.text = client.name;
+      _razonSocialController.text = client.name;
+      _direccionController.text = client.address;
+      _ubicacionController.text = client.address;
+      _applyResponsiblesToActa(client.responsibles);
+    });
+  }
+
+  void _applyResponsiblesToActa(List<ClientResponsibleRecord> responsibles) {
+    final supervisor = responsibles
+        .where((item) => item.role == ResponsibleRole.supervisor)
+        .cast<ClientResponsibleRecord?>()
+        .firstWhere((item) => item != null, orElse: () => null);
+    final gerente = responsibles
+        .where((item) => item.role == ResponsibleRole.gerente)
+        .cast<ClientResponsibleRecord?>()
+        .firstWhere((item) => item != null, orElse: () => null);
+
+    if (responsibles.length < 2 || supervisor == null || gerente == null) {
+      _missingResponsiblesError =
+          'No se encontraron ambos responsables guardados para este cliente. Puedes capturarlos manualmente o actualizar datos.';
+    } else {
+      _missingResponsiblesError = null;
+    }
+
+    if (supervisor != null) {
+      _responsableController.text = _sanitizeTextOnly(supervisor.fullName);
+      _puestoResponsableController.text = _sanitizeTextOnly(supervisor.position);
+    }
+
+    if (gerente != null) {
+      _gerenteClienteController.text = _sanitizeTextOnly(gerente.fullName);
+      _puestoGerenteController.text = _sanitizeTextOnly(gerente.position);
+    }
+  }
+
+  String _sanitizeTextOnly(String value) {
+    final collapsed = value
+        .replaceAll(RegExp(r'[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return collapsed.toUpperCase();
+  }
+
+  bool _isUuid(String value) {
+    final uuidPattern = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
+    );
+    return uuidPattern.hasMatch(value);
+  }
 
   @override
   void dispose() {
@@ -60,8 +542,8 @@ class _ActasPageState extends State<ActasPage> {
     _horaEstablecidaController.dispose();
     _servicioController.dispose();
     _gerenteClienteController.dispose();
+    _puestoGerenteController.dispose();
     _responsableController.dispose();
-    _tituloResponsableController.dispose();
     _puestoResponsableController.dispose();
     _fechaInicioController.dispose();
     _fechaConclusionController.dispose();
@@ -88,13 +570,14 @@ class _ActasPageState extends State<ActasPage> {
       showRemaMessage(context, 'No se pudo leer la imagen seleccionada.');
       return;
     }
+    final optimized = await _optimizeImageBytes(bytes);
 
     setState(() {
       setTarget(
         _PickedMedia(
           name: file.name,
-          bytes: bytes,
-          size: file.size,
+          bytes: optimized,
+          size: optimized.length,
         ),
       );
     });
@@ -111,21 +594,40 @@ class _ActasPageState extends State<ActasPage> {
       return;
     }
 
-    setState(() {
-      _fotosDurante.addAll(
-        result.files
-            .where((file) => file.bytes != null)
-            .map(
-              (file) => _PickedMedia(
-                name: file.name,
-                bytes: file.bytes!,
-                size: file.size,
-              ),
-            ),
+    final optimizedMedia = <_PickedMedia>[];
+    for (final file in result.files.where((item) => item.bytes != null)) {
+      final optimized = await _optimizeImageBytes(file.bytes!);
+      optimizedMedia.add(
+        _PickedMedia(
+          name: file.name,
+          bytes: optimized,
+          size: optimized.length,
+        ),
       );
+    }
+
+    setState(() {
+      _fotosDurante.addAll(optimizedMedia);
     });
 
-    showRemaMessage(context, 'Se agregaron ${result.files.length} fotos de avance.');
+    showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos de avance.');
+  }
+
+  Future<Uint8List> _optimizeImageBytes(Uint8List input) async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        input,
+        targetWidth: 600,
+      );
+      final frame = await codec.getNextFrame();
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) {
+        return input;
+      }
+      return data.buffer.asUint8List();
+    } catch (_) {
+      return input;
+    }
   }
 
   Future<void> _selectDate(TextEditingController controller) async {
@@ -154,7 +656,72 @@ class _ActasPageState extends State<ActasPage> {
   }
 
   bool _validateForPdf() {
+    final errors = _collectValidationErrors();
+    if (errors.isNotEmpty) {
+      showRemaMessage(
+        context,
+        'Faltan o son invalidos estos campos: ${errors.join(', ')}.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateForFinalization() {
+    final errors = _collectValidationErrors();
+    if (errors.isNotEmpty) {
+      showRemaMessage(
+        context,
+        'No se puede finalizar el acta. Revisa: ${errors.join(', ')}.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  List<String> _collectValidationErrors() {
     final missing = <String>[];
+
+    if (_clienteController.text.trim().isEmpty) {
+      missing.add('Cliente');
+    }
+    if (_razonSocialController.text.trim().isEmpty) {
+      missing.add('Razon social');
+    }
+    if (_direccionController.text.trim().isEmpty) {
+      missing.add('Direccion');
+    }
+    if (_ubicacionController.text.trim().isEmpty) {
+      missing.add('Ubicacion');
+    }
+    if (_servicioController.text.trim().isEmpty) {
+      missing.add('Descripcion del servicio');
+    }
+    if (_responsableController.text.trim().isEmpty) {
+      missing.add('Supervisor del cliente');
+    } else if (!_textOnlyPattern.hasMatch(_responsableController.text.trim())) {
+      missing.add('Supervisor del cliente solo texto');
+    }
+    if (_puestoResponsableController.text.trim().isEmpty) {
+      missing.add('Puesto del supervisor');
+    } else if (!_textOnlyPattern.hasMatch(_puestoResponsableController.text.trim())) {
+      missing.add('Puesto del supervisor solo texto');
+    }
+    if (_gerenteClienteController.text.trim().isEmpty) {
+      missing.add('Gerente del cliente');
+    } else if (!_textOnlyPattern.hasMatch(_gerenteClienteController.text.trim())) {
+      missing.add('Gerente del cliente solo texto');
+    }
+    if (_puestoGerenteController.text.trim().isEmpty) {
+      missing.add('Puesto del gerente');
+    } else if (!_textOnlyPattern.hasMatch(_puestoGerenteController.text.trim())) {
+      missing.add('Puesto del gerente solo texto');
+    }
+    if (_horaEstablecidaController.text.trim().isEmpty) {
+      missing.add('Hora establecida por usuario');
+    } else if (!_hour24Pattern.hasMatch(_horaEstablecidaController.text.trim())) {
+      missing.add('Hora en formato 24 hrs');
+    }
 
     if (_fechaInicioController.text.trim().isEmpty) {
       missing.add('Fecha de inicio');
@@ -169,15 +736,18 @@ class _ActasPageState extends State<ActasPage> {
       missing.add('Fecha de aprobacion del pedido');
     }
 
-    if (missing.isNotEmpty) {
-      showRemaMessage(
-        context,
-        'Faltan campos requeridos: ${missing.join(', ')}.',
-      );
-      return false;
+    if (_fotoIngreso == null && _fotoAntes == null && _fotoDespues == null && _fotosDurante.isEmpty) {
+      missing.add('Registro fotografico');
     }
 
-    return true;
+    return missing;
+  }
+
+  String _formatDecimal(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
   }
 
   Future<Uint8List> _buildPdfBytes() async {
@@ -219,7 +789,7 @@ class _ActasPageState extends State<ActasPage> {
                 pw.Positioned.fill(
                   child: pw.Center(
                     child: pw.Opacity(
-                      opacity: 0.30,
+                      opacity: 0.10,
                       child: pw.Image(
                         watermark,
                         width: 380,
@@ -246,7 +816,9 @@ class _ActasPageState extends State<ActasPage> {
                         _gerenteClienteController.text.trim().isEmpty
                             ? '{nombre_del_gerente_del_cliente}'
                             : _gerenteClienteController.text.trim(),
-                        'Gerente del cliente',
+                        _puestoGerenteController.text.trim().isEmpty
+                            ? '{nombre_del_puesto_del_gerente_del_cliente}'
+                            : _puestoGerenteController.text.trim(),
                       ),
                       _signatureBlock(
                         _responsableController.text.trim().isEmpty
@@ -301,6 +873,7 @@ class _ActasPageState extends State<ActasPage> {
               ),
               pw.SizedBox(height: 12),
               pw.Wrap(
+                alignment: pw.WrapAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
                 children: [
@@ -308,8 +881,9 @@ class _ActasPageState extends State<ActasPage> {
                     pw.Container(
                       width: 240,
                       height: 140,
+                      alignment: pw.Alignment.center,
                       decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
-                      child: pw.Image(image, fit: pw.BoxFit.cover),
+                      child: pw.Image(image, fit: pw.BoxFit.contain),
                     ),
                   if (duranteImages.isEmpty)
                     pw.Container(
@@ -355,14 +929,15 @@ class _ActasPageState extends State<ActasPage> {
       'fecha_aprobacion_del_pedido': _fechaAprobacionPedidoController.text.trim(),
         'fecha_aprobacion_pedido': _fechaAprobacionPedidoController.text.trim(),
       'razon_social_del_cliente': _razonSocialController.text.trim(),
-      'titulo_del_responsable_del_cliente': _tituloResponsableController.text.trim(),
-      'titulo_del_supervisor_del_cliente': _tituloResponsableController.text.trim(),
+      'titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+      'titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
         'razon_social_facturacion': _razonSocialController.text.trim(),
       'nombre_del_gerente_del_cliente': _gerenteClienteController.text.trim(),
       'nombre_del_supervisor_del_cliente': _responsableController.text.trim(),
       'nombre_del_responsable_del_cliente': _responsableController.text.trim(),
-      'nombre_del_titulo_del_responsable_del_cliente': _tituloResponsableController.text.trim(),
-      'nombre_del_titulo_del_supervisor_del_cliente': _tituloResponsableController.text.trim(),
+      'nombre_del_titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+      'nombre_del_titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+      'nombre_del_puesto_del_gerente_del_cliente': _puestoGerenteController.text.trim(),
       'nombre_del_puesto_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
       'nombre_del_puesto_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
       'fecha_de_inicio': _fechaInicioController.text.trim(),
@@ -431,7 +1006,26 @@ class _ActasPageState extends State<ActasPage> {
       subtitle: 'Flujo final de cierre: cuerpo de acta y reporte fotografico.',
       trailing: Wrap(
         spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          if (widget.quoteId != null && widget.quoteId!.isNotEmpty && _isAdmin)
+            _actaFinalizada
+                ? Chip(
+                    avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    label: const Text('ACTA FINALIZADA'),
+                    backgroundColor: const Color(0xFFDFF4DD),
+                    side: BorderSide.none,
+                  )
+                : ElevatedButton.icon(
+                    onPressed: _finalizeActa,
+                    icon: const Icon(Icons.task_alt),
+                    label: const Text('Finalizar Acta'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
           OutlinedButton.icon(
             onPressed: _previewPdf,
             icon: const Icon(Icons.print_outlined),
@@ -447,23 +1041,65 @@ class _ActasPageState extends State<ActasPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_missingResponsiblesError != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEBEE),
+                border: Border.all(color: Colors.red.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Responsables Incompletos',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _missingResponsiblesError!,
+                          style: TextStyle(color: Colors.red.shade700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           _RoleAndSteps(
             role: _role,
             step: _step,
             onRoleChanged: (role) => setState(() => _role = role),
             onStepChanged: (step) => setState(() => _step = step),
           ),
+          if (_isLoadingClient) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 3),
+          ],
           const SizedBox(height: 20),
           if (_step == 0)
             _ActaBodyStep(
               isAdmin: _isAdmin,
+              isLoadingClient: _isLoadingClient,
               clienteController: _clienteController,
               razonSocialController: _razonSocialController,
               direccionController: _direccionController,
               servicioController: _servicioController,
               gerenteClienteController: _gerenteClienteController,
               responsableController: _responsableController,
-              tituloResponsableController: _tituloResponsableController,
+              puestoGerenteController: _puestoGerenteController,
               puestoResponsableController: _puestoResponsableController,
               fechaInicioController: _fechaInicioController,
               fechaConclusionController: _fechaConclusionController,
@@ -473,6 +1109,7 @@ class _ActasPageState extends State<ActasPage> {
               horaEstablecidaController: _horaEstablecidaController,
               actaTemplateController: _actaTemplateController,
               onPickDate: _selectDate,
+              onRefreshClientData: _refreshClientData,
             )
           else
             _PhotoReportStep(
@@ -518,13 +1155,14 @@ class _ActasPageState extends State<ActasPage> {
         pw.SizedBox(height: 6),
         pw.Container(
           width: double.infinity,
-          height: 170,
+          height: 380,
+          alignment: pw.Alignment.center,
           decoration: pw.BoxDecoration(
             border: pw.Border.all(color: PdfColors.grey300),
             color: PdfColors.grey100,
           ),
           child: image != null
-              ? pw.Image(image, fit: pw.BoxFit.cover)
+              ? pw.Image(image, fit: pw.BoxFit.contain)
               : pw.Center(child: pw.Text('Sin evidencia cargada')),
         ),
       ],
@@ -736,13 +1374,14 @@ class _RoleAndSteps extends StatelessWidget {
 class _ActaBodyStep extends StatelessWidget {
   const _ActaBodyStep({
     required this.isAdmin,
+    required this.isLoadingClient,
     required this.clienteController,
     required this.razonSocialController,
     required this.direccionController,
     required this.servicioController,
     required this.gerenteClienteController,
     required this.responsableController,
-    required this.tituloResponsableController,
+    required this.puestoGerenteController,
     required this.puestoResponsableController,
     required this.fechaInicioController,
     required this.fechaConclusionController,
@@ -752,16 +1391,18 @@ class _ActaBodyStep extends StatelessWidget {
     required this.horaEstablecidaController,
     required this.actaTemplateController,
     required this.onPickDate,
+    required this.onRefreshClientData,
   });
 
   final bool isAdmin;
+  final bool isLoadingClient;
   final TextEditingController clienteController;
   final TextEditingController razonSocialController;
   final TextEditingController direccionController;
   final TextEditingController servicioController;
   final TextEditingController gerenteClienteController;
   final TextEditingController responsableController;
-  final TextEditingController tituloResponsableController;
+  final TextEditingController puestoGerenteController;
   final TextEditingController puestoResponsableController;
   final TextEditingController fechaInicioController;
   final TextEditingController fechaConclusionController;
@@ -771,6 +1412,7 @@ class _ActaBodyStep extends StatelessWidget {
   final TextEditingController horaEstablecidaController;
   final TextEditingController actaTemplateController;
   final ValueChanged<TextEditingController> onPickDate;
+  final Future<void> Function({bool showFeedback}) onRefreshClientData;
 
   @override
   Widget build(BuildContext context) {
@@ -780,7 +1422,16 @@ class _ActaBodyStep extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const RemaSectionHeader(title: 'Datos base (BBDD)'),
+              Row(
+                children: [
+                  const Expanded(child: RemaSectionHeader(title: 'Datos base (BBDD)')),
+                  TextButton.icon(
+                    onPressed: isLoadingClient ? null : () => onRefreshClientData(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Actualizar'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               _ActaField(label: 'Cliente', controller: clienteController),
               const SizedBox(height: 16),
@@ -790,7 +1441,11 @@ class _ActaBodyStep extends StatelessWidget {
               const SizedBox(height: 16),
               _ActaField(label: 'Ubicacion', controller: ubicacionController),
               const SizedBox(height: 16),
-              _ActaField(label: 'Descripcion del servicio', controller: servicioController, maxLines: 2),
+              _ActaField(
+                label: 'Descripcion del servicio',
+                controller: servicioController,
+                maxLines: 6,
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -798,21 +1453,43 @@ class _ActaBodyStep extends StatelessWidget {
                     child: _ActaField(
                       label: 'Supervisor del cliente',
                       controller: responsableController,
+                      forceUppercase: true,
+                      allowOnlyText: true,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: _ActaField(
-                      label: 'Titulo del supervisor',
-                      controller: tituloResponsableController,
+                      label: 'Puesto del supervisor',
+                      controller: puestoResponsableController,
+                      forceUppercase: true,
+                      allowOnlyText: true,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              _ActaField(label: 'Puesto del supervisor', controller: puestoResponsableController),
-              const SizedBox(height: 16),
-              _ActaField(label: 'Gerente del cliente', controller: gerenteClienteController),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ActaField(
+                      label: 'Gerente del cliente',
+                      controller: gerenteClienteController,
+                      forceUppercase: true,
+                      allowOnlyText: true,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _ActaField(
+                      label: 'Puesto del gerente',
+                      controller: puestoGerenteController,
+                      forceUppercase: true,
+                      allowOnlyText: true,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -837,6 +1514,9 @@ class _ActaBodyStep extends StatelessWidget {
                     child: _ActaField(
                       label: 'Hora establecida por usuario',
                       controller: horaEstablecidaController,
+                      forceUppercase: false,
+                      isHour24: true,
+                      hintText: 'Ej. 18:30',
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -867,6 +1547,7 @@ class _ActaBodyStep extends StatelessWidget {
                       label: 'Numero de pedido',
                       controller: numeroPedidoController,
                       enabled: isAdmin,
+                      forceUppercase: true,
                       helperText: isAdmin ? null : 'Solo admin puede capturar este campo.',
                     ),
                   ),
@@ -887,6 +1568,7 @@ class _ActaBodyStep extends StatelessWidget {
                 label: 'Plantilla base del acta (motor de reemplazo)',
                 controller: actaTemplateController,
                 maxLines: 10,
+                forceUppercase: false,
               ),
             ],
           ),
@@ -1011,14 +1693,22 @@ class _ActaField extends StatelessWidget {
     required this.controller,
     this.maxLines = 1,
     this.enabled = true,
+    this.forceUppercase = true,
     this.helperText,
+    this.hintText,
+    this.allowOnlyText = false,
+    this.isHour24 = false,
   });
 
   final String label;
   final TextEditingController controller;
   final int maxLines;
   final bool enabled;
+  final bool forceUppercase;
   final String? helperText;
+  final String? hintText;
+  final bool allowOnlyText;
+  final bool isHour24;
 
   @override
   Widget build(BuildContext context) {
@@ -1026,10 +1716,61 @@ class _ActaField extends StatelessWidget {
       controller: controller,
       maxLines: maxLines,
       enabled: enabled,
+      keyboardType: isHour24 ? TextInputType.datetime : TextInputType.text,
+      textCapitalization: forceUppercase ? TextCapitalization.characters : TextCapitalization.sentences,
+      inputFormatters: [
+        if (allowOnlyText)
+          FilteringTextInputFormatter.allow(RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]')),
+        if (isHour24) const _Hour24TextFormatter(),
+        if (forceUppercase && !isHour24) const _UpperCaseTextFormatter(),
+      ],
       decoration: InputDecoration(
         labelText: label,
+        hintText: hintText ?? 'Ingresa $label',
         helperText: helperText,
       ),
+    );
+  }
+}
+
+class _UpperCaseTextFormatter extends TextInputFormatter {
+  const _UpperCaseTextFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final upper = newValue.text.toUpperCase();
+    return newValue.copyWith(
+      text: upper,
+      selection: newValue.selection,
+      composing: TextRange.empty,
+    );
+  }
+}
+
+class _Hour24TextFormatter extends TextInputFormatter {
+  const _Hour24TextFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final clamped = digits.length > 4 ? digits.substring(0, 4) : digits;
+    final buffer = StringBuffer();
+    for (var index = 0; index < clamped.length; index++) {
+      if (index == 2) {
+        buffer.write(':');
+      }
+      buffer.write(clamped[index]);
+    }
+    final text = buffer.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }
@@ -1058,6 +1799,7 @@ class _DateField extends StatelessWidget {
       onTap: enabled ? onTap : null,
       decoration: InputDecoration(
         labelText: label,
+        hintText: 'Selecciona $label',
         helperText: helperText,
         suffixIcon: const Icon(Icons.event),
       ),

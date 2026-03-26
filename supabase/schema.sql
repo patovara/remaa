@@ -72,6 +72,20 @@ create table if not exists public.project_surveys (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.project_survey_entries (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  quote_id uuid references public.quotes(id) on delete set null,
+  description text,
+  evidence_paths text[] not null default '{}',
+  evidence_meta jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint project_survey_entries_evidence_paths_max_two check (coalesce(cardinality(evidence_paths), 0) <= 2),
+  constraint project_survey_entries_evidence_meta_is_array check (jsonb_typeof(evidence_meta) = 'array'),
+  constraint project_survey_entries_evidence_meta_max_two check (jsonb_array_length(evidence_meta) <= 2)
+);
+
 create table if not exists public.quotes (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -340,6 +354,7 @@ create table if not exists public.audit_logs (
 create index if not exists idx_projects_client_id on public.projects(client_id);
 create index if not exists idx_client_responsibles_client_id on public.client_responsibles(client_id);
 create index if not exists idx_project_surveys_project_id on public.project_surveys(project_id);
+create index if not exists idx_project_survey_entries_project_id on public.project_survey_entries(project_id);
 create index if not exists idx_quotes_project_id on public.quotes(project_id);
 create index if not exists idx_quotes_universe_id on public.quotes(universe_id);
 create index if not exists idx_quotes_project_type_id on public.quotes(project_type_id);

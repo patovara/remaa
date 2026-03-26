@@ -59,8 +59,11 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/actas',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: ActasPage(),
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: ActasPage(
+              clientId: state.uri.queryParameters['clientId'],
+              quoteId: state.uri.queryParameters['quoteId'],
+            ),
           ),
         ),
         GoRoute(
