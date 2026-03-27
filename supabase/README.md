@@ -48,6 +48,7 @@ Nota:
 
 - Bucket privado: client-documents
 - Bucket privado: survey-photos
+- Bucket privado: acta-files
 
 ## Nota sobre cPanel y BanaHosting
 

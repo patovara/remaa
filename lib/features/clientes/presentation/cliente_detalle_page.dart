@@ -34,6 +34,8 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
   ClientRecord? _resolvedClient;
   late final Future<ClientRecord?> _clientFuture = _resolveClient();
   ClientRecord? _editedClient;
+  bool _isClientSummaryEditing = false;
+  bool _isEditingResponsibles = false;
 
   bool _isUuid(String value) {
     final uuidPattern = RegExp(
@@ -54,20 +56,11 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     }
 
     try {
-      Map<String, dynamic>? row;
-      try {
-        row = await SupabaseBootstrap.client!
-            .from('clients')
-        .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city, sector_label, logo_path, is_hidden')
-            .eq('id', widget.clientId)
-            .maybeSingle();
-      } catch (_) {
-        row = await SupabaseBootstrap.client!
-            .from('clients')
-        .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city')
-            .eq('id', widget.clientId)
-            .maybeSingle();
-      }
+      final row = await SupabaseBootstrap.client!
+          .from('clients')
+          .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city, sector_label, logo_path, is_hidden')
+          .eq('id', widget.clientId)
+          .maybeSingle();
 
       if (row == null) {
         return null;
@@ -123,20 +116,63 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     return items;
   }
 
+  _ClientQuoteCounters _buildQuoteCounters({
+    required String clientId,
+    required AsyncValue<List<QuoteRecord>> quotesAsync,
+    required AsyncValue<List<ProjectLookup>> projectsAsync,
+  }) {
+    if (quotesAsync.valueOrNull == null || projectsAsync.valueOrNull == null) {
+      return const _ClientQuoteCounters.loading();
+    }
+
+    final projectIds = projectsAsync.valueOrNull!
+        .where((project) => project.clientId == clientId)
+        .map((project) => project.id)
+        .toSet();
+    final clientQuotes = quotesAsync.valueOrNull!
+        .where((quote) => projectIds.contains(quote.projectId))
+        .toList();
+
+    final activeProjectIds = <String>{
+      for (final quote in clientQuotes)
+        if (quote.isApproved || quote.isActaFinalizada || quote.isPaid) quote.projectId,
+    };
+
+    final pendingQuotes = clientQuotes.where((quote) => quote.isDraft || quote.isConcluded).length;
+    final declinedQuotes = clientQuotes.where((quote) => quote.isDeclined).length;
+
+    return _ClientQuoteCounters(
+      activeProjects: activeProjectIds.length,
+      pendingQuotes: pendingQuotes,
+      declinedQuotes: declinedQuotes,
+    );
+  }
+
   List<ClientResponsibleRecord> get _currentResponsibles {
     final currentState = ref.read(clientResponsiblesProvider(widget.clientId));
     return _sorted(currentState.valueOrNull ?? _resolvedClient?.responsibles ?? const []);
   }
 
   Future<void> _addResponsible() async {
+    if (_isClientSummaryEditing) {
+      _showMessage(
+        ScaffoldMessenger.of(context),
+        'Guarda o cancela la edicion de la ficha del cliente antes de modificar responsables.',
+      );
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     final responsibles = _currentResponsibles;
+    setState(() => _isEditingResponsibles = true);
     final created = await showDialog<ClientResponsibleRecord>(
       context: context,
       builder: (context) => ResponsibleEditorDialog(
         takenRoles: responsibles.map((item) => item.role).toSet(),
       ),
     );
+    if (mounted) {
+      setState(() => _isEditingResponsibles = false);
+    }
 
     if (!mounted || created == null) {
       return;
@@ -156,8 +192,16 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
   }
 
   Future<void> _editResponsible(ClientResponsibleRecord responsible) async {
+    if (_isClientSummaryEditing) {
+      _showMessage(
+        ScaffoldMessenger.of(context),
+        'Guarda o cancela la edicion de la ficha del cliente antes de modificar responsables.',
+      );
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     final responsibles = _currentResponsibles;
+    setState(() => _isEditingResponsibles = true);
     final updated = await showDialog<ClientResponsibleRecord>(
       context: context,
       builder: (context) => ResponsibleEditorDialog(
@@ -168,6 +212,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
             .toSet(),
       ),
     );
+    if (mounted) {
+      setState(() => _isEditingResponsibles = false);
+    }
 
     if (!mounted || updated == null) {
       return;
@@ -187,7 +234,15 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
   }
 
   Future<void> _deleteResponsible(ClientResponsibleRecord responsible) async {
+    if (_isClientSummaryEditing) {
+      _showMessage(
+        ScaffoldMessenger.of(context),
+        'Guarda o cancela la edicion de la ficha del cliente antes de modificar responsables.',
+      );
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isEditingResponsibles = true);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -207,6 +262,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
         ],
       ),
     );
+    if (mounted) {
+      setState(() => _isEditingResponsibles = false);
+    }
 
     if (!mounted || confirmed != true) {
       return;
@@ -239,6 +297,8 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
   @override
   Widget build(BuildContext context) {
     final responsiblesState = ref.watch(clientResponsiblesProvider(widget.clientId));
+    final quotesAsync = ref.watch(quotesProvider);
+    final projectsAsync = ref.watch(quoteProjectsProvider);
     return FutureBuilder<ClientRecord?>(
       future: _clientFuture,
       builder: (context, snapshot) {
@@ -278,16 +338,25 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 1080;
               final effectiveClient = _editedClient ?? client;
+              final quoteCounters = _buildQuoteCounters(
+                clientId: widget.clientId,
+                quotesAsync: quotesAsync,
+                projectsAsync: projectsAsync,
+              );
               final responsibleItemsFinal = _sorted(responsiblesState.valueOrNull ?? effectiveClient.responsibles);
               final summary = _ClientSummaryPanel(
                 client: effectiveClient,
+                quoteCounters: quoteCounters,
                 onClientUpdated: (updated) => setState(() => _editedClient = updated),
                 metadataRepository: _metadataRepository,
+                isResponsiblesEditing: _isEditingResponsibles,
+                onEditingChanged: (value) => setState(() => _isClientSummaryEditing = value),
               );
               final responsiblesPanel = _ResponsiblesPanel(
                 responsibles: responsibleItemsFinal,
                 isLoading: responsiblesState.isLoading && !responsiblesState.hasValue,
                 canAddMore: responsibleItemsFinal.length < ResponsibleRole.values.length,
+                isClientEditing: _isClientSummaryEditing,
                 onAdd: _addResponsible,
                 onEdit: _editResponsible,
                 onDelete: _deleteResponsible,
@@ -307,7 +376,7 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                           const SizedBox(height: 24),
                           _ClientQuotesPanel(
                             clientId: widget.clientId,
-                            onCreateQuote: () => context.go('/cotizaciones'),
+                            onCreateQuote: () => context.go('/cotizaciones?clientId=${widget.clientId}&new=1'),
                           ),
                         ],
                       ),
@@ -326,7 +395,7 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                   const SizedBox(height: 20),
                   _ClientQuotesPanel(
                     clientId: widget.clientId,
-                    onCreateQuote: () => context.go('/cotizaciones'),
+                    onCreateQuote: () => context.go('/cotizaciones?clientId=${widget.clientId}&new=1'),
                   ),
                 ],
               );
@@ -341,13 +410,19 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
 class _ClientSummaryPanel extends StatefulWidget {
   const _ClientSummaryPanel({
     required this.client,
+    required this.quoteCounters,
     required this.onClientUpdated,
     required this.metadataRepository,
+    required this.onEditingChanged,
+    required this.isResponsiblesEditing,
   });
 
   final ClientRecord client;
+  final _ClientQuoteCounters quoteCounters;
   final ValueChanged<ClientRecord> onClientUpdated;
   final ClientMetadataRepository metadataRepository;
+  final ValueChanged<bool> onEditingChanged;
+  final bool isResponsiblesEditing;
 
   @override
   State<_ClientSummaryPanel> createState() => _ClientSummaryPanelState();
@@ -409,6 +484,11 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     _selectedSector = _normalizeSectorSelection(widget.client.sector);
     _logoBytes = widget.client.logoBytes;
     _loadSectorLabels();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.onEditingChanged(_isEditing);
+      }
+    });
   }
 
   @override
@@ -636,6 +716,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
           _logoName = null;
           _isEditing = false;
         });
+        widget.onEditingChanged(false);
       }
     } catch (_) {
       // keep editing on error
@@ -755,7 +836,12 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                             label: Text(client.isHidden ? 'Restaurar' : 'Ocultar'),
                           ),
                           TextButton.icon(
-                            onPressed: () => setState(() => _isEditing = true),
+                            onPressed: widget.isResponsiblesEditing
+                                ? null
+                                : () {
+                                    setState(() => _isEditing = true);
+                                    widget.onEditingChanged(true);
+                                  },
                             icon: const Icon(Icons.edit_outlined, size: 18),
                             label: const Text('Editar'),
                           ),
@@ -935,6 +1021,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                                 _sectorError = null;
                                 _isEditing = false;
                               });
+                              widget.onEditingChanged(false);
                             },
                       child: const Text('Cancelar'),
                     ),
@@ -981,14 +1068,21 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                   Expanded(
                     child: _SummaryMetric(
                       label: 'Proyectos activos',
-                      value: client.activeProjects,
+                      value: widget.quoteCounters.displayActiveProjects,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: _SummaryMetric(
-                      label: 'Meses relacion',
-                      value: client.months,
+                      label: 'Cotizaciones pendientes',
+                      value: widget.quoteCounters.displayPendingQuotes,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _SummaryMetric(
+                      label: 'Cotizaciones declinadas',
+                      value: widget.quoteCounters.displayDeclinedQuotes,
                     ),
                   ),
                 ],
@@ -1007,6 +1101,7 @@ class _ResponsiblesPanel extends StatelessWidget {
     required this.isLoading,
     required this.hasError,
     required this.canAddMore,
+    required this.isClientEditing,
     required this.onAdd,
     required this.onEdit,
     required this.onDelete,
@@ -1017,6 +1112,7 @@ class _ResponsiblesPanel extends StatelessWidget {
   final bool isLoading;
   final bool hasError;
   final bool canAddMore;
+  final bool isClientEditing;
   final VoidCallback onAdd;
   final ValueChanged<ClientResponsibleRecord> onEdit;
   final ValueChanged<ClientResponsibleRecord> onDelete;
@@ -1032,14 +1128,16 @@ class _ResponsiblesPanel extends StatelessWidget {
             title: 'Responsables',
             icon: Icons.how_to_reg_outlined,
             trailing: FilledButton.icon(
-              onPressed: canAddMore ? onAdd : null,
+              onPressed: canAddMore && !isClientEditing ? onAdd : null,
               icon: const Icon(Icons.add),
               label: const Text('Agregar'),
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            canAddMore
+            isClientEditing
+                ? 'La ficha del cliente esta en edicion. Guarda o cancela esos cambios antes de actualizar responsables.'
+                : canAddMore
                 ? 'Administra supervisor y gerente del cliente. Si Supabase esta configurado, los cambios se sincronizan; si no, la pantalla sigue funcionando en modo local.'
                 : 'El expediente ya tiene los dos roles cubiertos. Edita o elimina alguno si necesitas cambiarlo.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant),
@@ -1089,6 +1187,7 @@ class _ResponsiblesPanel extends StatelessWidget {
             for (final responsible in responsibles) ...[
               _ResponsibleCard(
                 responsible: responsible,
+                isEnabled: !isClientEditing,
                 onEdit: () => onEdit(responsible),
                 onDelete: () => onDelete(responsible),
               ),
@@ -1103,11 +1202,13 @@ class _ResponsiblesPanel extends StatelessWidget {
 class _ResponsibleCard extends StatelessWidget {
   const _ResponsibleCard({
     required this.responsible,
+    required this.isEnabled,
     required this.onEdit,
     required this.onDelete,
   });
 
   final ClientResponsibleRecord responsible;
+  final bool isEnabled;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -1139,12 +1240,12 @@ class _ResponsibleCard extends StatelessWidget {
               ),
               const Spacer(),
               IconButton(
-                onPressed: onEdit,
+                onPressed: isEnabled ? onEdit : null,
                 tooltip: 'Editar responsable',
                 icon: const Icon(Icons.edit_outlined),
               ),
               IconButton(
-                onPressed: onDelete,
+                onPressed: isEnabled ? onDelete : null,
                 tooltip: 'Eliminar responsable',
                 icon: const Icon(Icons.delete_outline),
               ),
@@ -1261,6 +1362,31 @@ class _SummaryMetric extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ClientQuoteCounters {
+  const _ClientQuoteCounters({
+    required this.activeProjects,
+    required this.pendingQuotes,
+    required this.declinedQuotes,
+  }) : isLoading = false;
+
+  const _ClientQuoteCounters.loading()
+      : activeProjects = 0,
+        pendingQuotes = 0,
+        declinedQuotes = 0,
+        isLoading = true;
+
+  final int activeProjects;
+  final int pendingQuotes;
+  final int declinedQuotes;
+  final bool isLoading;
+
+  String get displayActiveProjects => isLoading ? '--' : activeProjects.toString().padLeft(2, '0');
+
+  String get displayPendingQuotes => isLoading ? '--' : pendingQuotes.toString().padLeft(2, '0');
+
+  String get displayDeclinedQuotes => isLoading ? '--' : declinedQuotes.toString().padLeft(2, '0');
 }
 
 class _EditableLogoCard extends StatelessWidget {

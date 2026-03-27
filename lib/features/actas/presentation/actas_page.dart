@@ -1,7 +1,9 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -21,6 +23,289 @@ import '../../cotizaciones/data/quotes_repository.dart';
 import '../../cotizaciones/domain/quote_models.dart';
 import '../../cotizaciones/presentation/quotes_controller.dart';
 import '../../levantamiento/presentation/levantamiento_state.dart';
+
+Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) async {
+  final pdf = pw.Document();
+  final logoBytes = payload['logoBytes'] as Uint8List?;
+  final watermarkBytes = payload['watermarkBytes'] as Uint8List?;
+  final logo = logoBytes != null && logoBytes.isNotEmpty ? pw.MemoryImage(logoBytes) : null;
+  final watermark =
+      watermarkBytes != null && watermarkBytes.isNotEmpty ? pw.MemoryImage(watermarkBytes) : null;
+
+  final ingresoBytes = payload['ingresoBytes'] as Uint8List?;
+  final antesBytes = payload['antesBytes'] as Uint8List?;
+  final despuesBytes = payload['despuesBytes'] as Uint8List?;
+  final duranteBytes = (payload['duranteBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
+
+  final ingresoImage = ingresoBytes != null && ingresoBytes.isNotEmpty ? pw.MemoryImage(ingresoBytes) : null;
+  final antesImage = antesBytes != null && antesBytes.isNotEmpty ? pw.MemoryImage(antesBytes) : null;
+  final despuesImage = despuesBytes != null && despuesBytes.isNotEmpty ? pw.MemoryImage(despuesBytes) : null;
+  final duranteImages = [
+    for (final bytes in duranteBytes)
+      if (bytes.isNotEmpty) pw.MemoryImage(bytes),
+  ];
+
+  final renderedActa = payload['renderedActa'] as String? ?? '';
+  final gerenteNombre = payload['gerenteNombre'] as String? ?? '{nombre_del_gerente_del_cliente}';
+  final gerentePuesto = payload['gerentePuesto'] as String? ?? '{nombre_del_puesto_del_gerente_del_cliente}';
+  final responsableNombre = payload['responsableNombre'] as String? ?? '{nombre_del_responsable_del_cliente}';
+  final responsablePuesto = payload['responsablePuesto'] as String? ?? '{nombre_del_puesto_del_responsable_del_cliente}';
+  final brandName = payload['brandName'] as String? ?? CompanyProfile.brandName;
+  final legalName = payload['legalName'] as String? ?? CompanyProfile.legalName;
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.letter,
+      margin: const pw.EdgeInsets.all(36),
+      build: (context) {
+        return pw.Stack(
+          children: [
+            if (watermark != null)
+              pw.Positioned.fill(
+                child: pw.Center(
+                  child: pw.Opacity(
+                    opacity: 0.10,
+                    child: pw.Image(
+                      watermark,
+                      width: 380,
+                      fit: pw.BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+                pw.SizedBox(height: 16),
+                pw.Text(renderedActa, style: const pw.TextStyle(fontSize: 11)),
+                pw.Spacer(),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _buildSignatureBlock(gerenteNombre, gerentePuesto),
+                    _buildSignatureBlock(responsableNombre, responsablePuesto),
+                    _buildSignatureBlock('ING. MIGUEL VAZQUEZ', 'GRUPO REMAA'),
+                  ],
+                ),
+                pw.SizedBox(height: 16),
+                _buildPageFooter(1),
+              ],
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  pdf.addPage(
+    _buildPhotoPage(
+      logo: logo,
+      brandName: brandName,
+      legalName: legalName,
+      title: 'REPORTE FOTOGRAFICO - INGRESO A INSTALACIONES',
+      image: ingresoImage,
+      page: 2,
+    ),
+  );
+  pdf.addPage(
+    _buildPhotoPage(
+      logo: logo,
+      brandName: brandName,
+      legalName: legalName,
+      title: 'REPORTE FOTOGRAFICO - ANTES',
+      image: antesImage,
+      page: 3,
+    ),
+  );
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.letter,
+      margin: const pw.EdgeInsets.all(36),
+      build: (context) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+            pw.SizedBox(height: 20),
+            pw.Text(
+              'REPORTE FOTOGRAFICO - DURANTE',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Wrap(
+              alignment: pw.WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final image in duranteImages)
+                  pw.Container(
+                    width: 240,
+                    height: 140,
+                    alignment: pw.Alignment.center,
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
+                    child: pw.Image(image, fit: pw.BoxFit.contain),
+                  ),
+                if (duranteImages.isEmpty)
+                  pw.Container(
+                    width: 240,
+                    height: 140,
+                    alignment: pw.Alignment.center,
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.grey300),
+                      color: PdfColors.grey100,
+                    ),
+                    child: pw.Text('Sin evidencia cargada'),
+                  ),
+              ],
+            ),
+            pw.Spacer(),
+            _buildPageFooter(4),
+          ],
+        );
+      },
+    ),
+  );
+
+  pdf.addPage(
+    _buildPhotoPage(
+      logo: logo,
+      brandName: brandName,
+      legalName: legalName,
+      title: 'REPORTE FOTOGRAFICO - DESPUÉS',
+      image: despuesImage,
+      page: 5,
+    ),
+  );
+
+  return pdf.save();
+}
+
+pw.Widget _buildPdfHeader({
+  required pw.MemoryImage? logo,
+  required String brandName,
+  required String legalName,
+}) {
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: 92,
+            height: 46,
+            alignment: pw.Alignment.centerLeft,
+            child: logo != null
+                ? pw.Image(logo, fit: pw.BoxFit.contain)
+                : pw.Text(
+                    brandName,
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                  ),
+          ),
+          pw.Spacer(),
+          pw.SizedBox(
+            width: 280,
+            child: pw.Text(
+              legalName,
+              textAlign: pw.TextAlign.right,
+              style: const pw.TextStyle(fontSize: 9),
+            ),
+          ),
+        ],
+      ),
+      pw.SizedBox(height: 8),
+      pw.Center(
+        child: pw.Text(
+          'ACTA ENTREGA - RECEPCIÓN',
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+        ),
+      ),
+    ],
+  );
+}
+
+pw.Widget _buildPageFooter(int page) {
+  return pw.Align(
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text('Pagina $page de 5', style: const pw.TextStyle(fontSize: 9)),
+  );
+}
+
+pw.Page _buildPhotoPage({
+  required pw.MemoryImage? logo,
+  required String brandName,
+  required String legalName,
+  required String title,
+  required pw.MemoryImage? image,
+  required int page,
+}) {
+  return pw.Page(
+    pageFormat: PdfPageFormat.letter,
+    margin: const pw.EdgeInsets.all(36),
+    build: (context) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+          pw.SizedBox(height: 20),
+          _buildPhotoSection(title, image),
+          pw.Spacer(),
+          _buildPageFooter(page),
+        ],
+      );
+    },
+  );
+}
+
+pw.Widget _buildPhotoSection(String title, pw.MemoryImage? image) {
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.SizedBox(height: 6),
+      pw.Container(
+        width: double.infinity,
+        height: 380,
+        alignment: pw.Alignment.center,
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey300),
+          color: PdfColors.grey100,
+        ),
+        child: image != null
+            ? pw.Image(image, fit: pw.BoxFit.contain)
+            : pw.Center(child: pw.Text('Sin evidencia cargada')),
+      ),
+    ],
+  );
+}
+
+pw.Widget _buildSignatureBlock(String title, String subtitle) {
+  return pw.Container(
+    width: 165,
+    padding: const pw.EdgeInsets.only(top: 18),
+    decoration: const pw.BoxDecoration(
+      border: pw.Border(top: pw.BorderSide(color: PdfColors.black)),
+    ),
+    child: pw.Column(
+      children: [
+        pw.Text(
+          title,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Text(
+          subtitle,
+          textAlign: pw.TextAlign.center,
+          style: const pw.TextStyle(fontSize: 8),
+        ),
+      ],
+    ),
+  );
+}
 
 enum _ActaRole { staff, admin }
 
@@ -68,6 +353,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
   ClientRecord? _loadedClient;
   bool _isLoadingClient = false;
+  bool _isGeneratingPdf = false;
+  String? _pdfGenerationMessage;
   String? _missingResponsiblesError;
   bool _actaFinalizada = false;
 
@@ -314,14 +601,18 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     if (confirmed != true || !mounted) return;
 
     try {
-      final bytes = await _buildPdfBytes();
+      final bytes = await _runPdfGeneration(
+        message: 'Tu documento se esta generando, te notificaremos cuando este listo.',
+        task: _buildPdfBytes,
+      );
       final order = _numeroPedidoController.text.trim().isEmpty
           ? widget.quoteId!
           : _numeroPedidoController.text.trim().replaceAll(' ', '_');
-      await ref.read(quotesRepositoryProvider).saveActaDocument(
+      final savedInSupabase = await ref.read(quotesRepositoryProvider).saveActaDocument(
             quoteId: widget.quoteId!,
             bytes: bytes,
             fileName: 'acta_entrega_$order.pdf',
+            photos: _buildActaPhotoInputs(),
           );
       await ref.read(quotesProvider.notifier).updateStatus(
             quoteId: widget.quoteId!,
@@ -329,7 +620,13 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           );
       if (!mounted) return;
       setState(() => _actaFinalizada = true);
-      showRemaMessage(context, 'Acta finalizada y guardada localmente. La cotizacion queda por cobrar.');
+      showRemaMessage(
+        context,
+        savedInSupabase
+        ? 'Acta finalizada y guardada en Supabase. La cotizacion queda por cobrar.'
+        : 'Acta finalizada y guardada localmente. La cotizacion queda por cobrar.',
+      );
+      context.go('/cotizaciones');
     } catch (error) {
       if (!mounted) return;
       AppLogger.error('actas_finalize_failed',
@@ -580,6 +877,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           name: optimized.fileName,
           bytes: optimized.bytes,
           size: optimized.bytes.length,
+          mimeType: optimized.mimeType,
         ),
       );
     });
@@ -610,6 +908,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
             name: optimized.fileName,
             bytes: optimized.bytes,
             size: optimized.bytes.length,
+            mimeType: optimized.mimeType,
           ),
         );
       } on ImageOptimizationException catch (error) {
@@ -641,11 +940,22 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
   Future<void> _selectDate(TextEditingController controller) async {
     try {
+      final firstDate = _pickerFirstDateFor(controller);
+      final lastDate = _pickerLastDateFor(controller);
+      if (lastDate.isBefore(firstDate)) {
+        showRemaMessage(context, 'Primero captura una fecha compatible para continuar.');
+        return;
+      }
+
       final selected = await showDatePicker(
         context: context,
-        initialDate: DateTime.now(),
-        firstDate: DateTime(2020),
-        lastDate: DateTime(2040),
+        initialDate: _pickerInitialDateFor(
+          controller: controller,
+          firstDate: firstDate,
+          lastDate: lastDate,
+        ),
+        firstDate: firstDate,
+        lastDate: lastDate,
       );
 
       if (selected == null) {
@@ -807,6 +1117,75 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
   }
 
+  DateTime _pickerFirstDateFor(TextEditingController controller) {
+    if (identical(controller, _fechaConclusionController)) {
+      return _tryParseDate(_fechaInicioController.text) ?? DateTime(2020);
+    }
+    return DateTime(2020);
+  }
+
+  DateTime _pickerLastDateFor(TextEditingController controller) {
+    if (identical(controller, _fechaAprobacionPedidoController)) {
+      final conclusion = _tryParseDate(_fechaConclusionController.text);
+      if (conclusion != null) {
+        return conclusion.subtract(const Duration(days: 1));
+      }
+    }
+    return DateTime(2040);
+  }
+
+  DateTime _pickerInitialDateFor({
+    required TextEditingController controller,
+    required DateTime firstDate,
+    required DateTime lastDate,
+  }) {
+    final parsed = _tryParseDate(controller.text) ?? DateTime.now();
+    if (parsed.isBefore(firstDate)) {
+      return firstDate;
+    }
+    if (parsed.isAfter(lastDate)) {
+      return lastDate;
+    }
+    return parsed;
+  }
+
+  List<ActaPhotoAssetInput> _buildActaPhotoInputs() {
+    final photos = <ActaPhotoAssetInput>[];
+
+    void addPhoto(String slot, _PickedMedia? media) {
+      if (media == null || media.bytes.isEmpty) {
+        return;
+      }
+      photos.add(
+        ActaPhotoAssetInput(
+          slot: slot,
+          fileName: media.name,
+          bytes: media.bytes,
+          fileSizeBytes: media.size,
+          mimeType: media.mimeType ?? _guessMimeType(media.name),
+        ),
+      );
+    }
+
+    addPhoto('ingreso', _fotoIngreso);
+    addPhoto('antes', _fotoAntes);
+    addPhoto('despues', _fotoDespues);
+
+    for (var index = 0; index < _fotosDurante.length; index++) {
+      addPhoto('durante_${index + 1}', _fotosDurante[index]);
+    }
+
+    return photos;
+  }
+
+  String _guessMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    return 'image/jpeg';
+  }
+
   String _formatDecimal(double value) {
     if (value == value.roundToDouble()) {
       return value.toStringAsFixed(0);
@@ -815,169 +1194,44 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   }
 
   Future<Uint8List> _buildPdfBytes() async {
-    final pdf = pw.Document();
-    final logo = await _loadHeaderLogo();
-    final watermark = await _loadWatermarkImage();
+    final logoBytes = await _loadAssetBytes('assets/images/logo_remaa.png');
+    final watermarkBytes = await _loadAssetBytes('assets/images/marca_agua_remaa.png');
 
-    pw.MemoryImage? ingresoImage;
-    pw.MemoryImage? antesImage;
-    pw.MemoryImage? despuesImage;
-    final duranteImages = <pw.MemoryImage>[];
-
-    if (_fotoIngreso != null) {
-      ingresoImage = pw.MemoryImage(_fotoIngreso!.bytes);
-    }
-    if (_fotoAntes != null) {
-      antesImage = pw.MemoryImage(_fotoAntes!.bytes);
-    }
-    if (_fotoDespues != null) {
-      despuesImage = pw.MemoryImage(_fotoDespues!.bytes);
-    }
-    for (final media in _fotosDurante.take(4)) {
-      duranteImages.add(pw.MemoryImage(media.bytes));
-    }
-
-    final renderedActa = _renderTemplate(
-      _actaTemplateController.text,
-      _templateValues,
+    return compute(
+      _buildActaPdfBytesInBackground,
+      <String, Object?>{
+        'logoBytes': logoBytes,
+        'watermarkBytes': watermarkBytes,
+        'ingresoBytes': _fotoIngreso?.bytes,
+        'antesBytes': _fotoAntes?.bytes,
+        'despuesBytes': _fotoDespues?.bytes,
+        'duranteBytes': [for (final media in _fotosDurante.take(4)) media.bytes],
+        'renderedActa': _renderTemplate(_actaTemplateController.text, _templateValues),
+        'gerenteNombre': _gerenteClienteController.text.trim().isEmpty
+            ? '{nombre_del_gerente_del_cliente}'
+            : _gerenteClienteController.text.trim(),
+        'gerentePuesto': _puestoGerenteController.text.trim().isEmpty
+            ? '{nombre_del_puesto_del_gerente_del_cliente}'
+            : _puestoGerenteController.text.trim(),
+        'responsableNombre': _responsableController.text.trim().isEmpty
+            ? '{nombre_del_responsable_del_cliente}'
+            : _responsableController.text.trim(),
+        'responsablePuesto': _puestoResponsableController.text.trim().isEmpty
+            ? '{nombre_del_puesto_del_responsable_del_cliente}'
+            : _puestoResponsableController.text.trim(),
+        'brandName': CompanyProfile.brandName,
+        'legalName': CompanyProfile.legalName,
+      },
     );
+  }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(36),
-        build: (context) {
-          return pw.Stack(
-            children: [
-              if (watermark != null)
-                pw.Positioned.fill(
-                  child: pw.Center(
-                    child: pw.Opacity(
-                      opacity: 0.10,
-                      child: pw.Image(
-                        watermark,
-                        width: 380,
-                        fit: pw.BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _pdfHeader(logo),
-                  pw.SizedBox(height: 16),
-                  pw.Text(
-                    renderedActa,
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
-                  pw.Spacer(),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      _signatureBlock(
-                        _gerenteClienteController.text.trim().isEmpty
-                            ? '{nombre_del_gerente_del_cliente}'
-                            : _gerenteClienteController.text.trim(),
-                        _puestoGerenteController.text.trim().isEmpty
-                            ? '{nombre_del_puesto_del_gerente_del_cliente}'
-                            : _puestoGerenteController.text.trim(),
-                      ),
-                      _signatureBlock(
-                        _responsableController.text.trim().isEmpty
-                          ? '{nombre_del_responsable_del_cliente}'
-                            : _responsableController.text.trim(),
-                        _puestoResponsableController.text.trim().isEmpty
-                          ? '{nombre_del_puesto_del_responsable_del_cliente}'
-                            : _puestoResponsableController.text.trim(),
-                      ),
-                      _signatureBlock(
-                        'ING. MIGUEL VAZQUEZ',
-                        'GRUPO REMAA',
-                      ),
-                    ],
-                  ),
-                  pw.SizedBox(height: 16),
-                  _pageFooter(1),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    pdf.addPage(_photoPage(
-      logo: logo,
-      title: 'REPORTE FOTOGRAFICO - INGRESO A INSTALACIONES',
-      image: ingresoImage,
-      page: 2,
-    ));
-    pdf.addPage(_photoPage(
-      logo: logo,
-      title: 'REPORTE FOTOGRAFICO - ANTES',
-      image: antesImage,
-      page: 3,
-    ));
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.letter,
-        margin: const pw.EdgeInsets.all(36),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              _pdfHeader(logo),
-              pw.SizedBox(height: 20),
-              pw.Text(
-                'REPORTE FOTOGRAFICO - DURANTE',
-                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-              ),
-              pw.SizedBox(height: 12),
-              pw.Wrap(
-                alignment: pw.WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final image in duranteImages)
-                    pw.Container(
-                      width: 240,
-                      height: 140,
-                      alignment: pw.Alignment.center,
-                      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
-                      child: pw.Image(image, fit: pw.BoxFit.contain),
-                    ),
-                  if (duranteImages.isEmpty)
-                    pw.Container(
-                      width: 240,
-                      height: 140,
-                      alignment: pw.Alignment.center,
-                      decoration: pw.BoxDecoration(
-                        border: pw.Border.all(color: PdfColors.grey300),
-                        color: PdfColors.grey100,
-                      ),
-                      child: pw.Text('Sin evidencia cargada'),
-                    ),
-                ],
-              ),
-              pw.Spacer(),
-              _pageFooter(4),
-            ],
-          );
-        },
-      ),
-    );
-
-    pdf.addPage(_photoPage(
-      logo: logo,
-      title: 'REPORTE FOTOGRAFICO - DESPUÉS',
-      image: despuesImage,
-      page: 5,
-    ));
-
-    return pdf.save();
+  Future<Uint8List?> _loadAssetBytes(String assetPath) async {
+    try {
+      final data = await rootBundle.load(assetPath);
+      return data.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
   }
 
   Map<String, String> get _templateValues => {
@@ -1031,7 +1285,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       return;
     }
 
-    final bytes = await _buildPdfBytes();
+    final bytes = await _runPdfGeneration(
+      message: 'Generando previsualizacion del acta...',
+      task: _buildPdfBytes,
+    );
     if (!mounted) {
       return;
     }
@@ -1048,7 +1305,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       return;
     }
 
-    final bytes = await _buildPdfBytes();
+    final bytes = await _runPdfGeneration(
+      message: 'Generando PDF final del acta...',
+      task: _buildPdfBytes,
+    );
     final rawOrder = _numeroPedidoController.text.trim();
     final order = rawOrder.isEmpty ? 'sin_pedido' : rawOrder.replaceAll(' ', '_');
 
@@ -1061,6 +1321,28 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       return;
     }
     showRemaMessage(context, 'Acta PDF lista para descarga/compartir.');
+  }
+
+  Future<T> _runPdfGeneration<T>({
+    required String message,
+    required Future<T> Function() task,
+  }) async {
+    if (mounted) {
+      setState(() {
+        _isGeneratingPdf = true;
+        _pdfGenerationMessage = message;
+      });
+    }
+    try {
+      return await task();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingPdf = false;
+          _pdfGenerationMessage = null;
+        });
+      }
+    }
   }
 
   @override
@@ -1082,7 +1364,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                     side: BorderSide.none,
                   )
                 : ElevatedButton.icon(
-                    onPressed: _finalizeActa,
+                    onPressed: _isGeneratingPdf ? null : _finalizeActa,
                     icon: const Icon(Icons.task_alt),
                     label: const Text('Finalizar Acta'),
                     style: ElevatedButton.styleFrom(
@@ -1091,12 +1373,12 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                     ),
                   ),
           OutlinedButton.icon(
-            onPressed: _previewPdf,
+            onPressed: _isGeneratingPdf ? null : _previewPdf,
             icon: const Icon(Icons.print_outlined),
             label: const Text('Previsualizar'),
           ),
           ElevatedButton.icon(
-            onPressed: _downloadPdf,
+            onPressed: _isGeneratingPdf ? null : _downloadPdf,
             icon: const Icon(Icons.picture_as_pdf_outlined),
             label: const Text('Descargar PDF'),
           ),
@@ -1151,6 +1433,29 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           if (_isLoadingClient) ...[
             const SizedBox(height: 12),
             const LinearProgressIndicator(minHeight: 3),
+          ],
+          if (_isGeneratingPdf) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                border: Border.all(color: const Color(0xFFFFCC80)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _pdfGenerationMessage ?? 'Tu documento se esta generando, te notificaremos cuando este listo.',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(minHeight: 3),
+                ],
+              ),
+            ),
           ],
           const SizedBox(height: 20),
           if (_step == 0)
@@ -2000,9 +2305,11 @@ class _PickedMedia {
     required this.name,
     required this.bytes,
     required this.size,
+    this.mimeType,
   });
 
   final String name;
   final Uint8List bytes;
   final int size;
+  final String? mimeType;
 }

@@ -31,6 +31,36 @@ create table if not exists public.clients (
   updated_at timestamptz not null default now()
 );
 
+alter table public.clients
+  add column if not exists sector_label text;
+
+alter table public.clients
+  add column if not exists logo_path text;
+
+alter table public.clients
+  add column if not exists logo_mime_type text;
+
+alter table public.clients
+  add column if not exists is_hidden boolean not null default false;
+
+alter table public.clients
+  add column if not exists hidden_at timestamptz;
+
+create table if not exists public.client_sector_tags (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.client_sector_tags (name)
+values
+  ('HOTELERO'),
+  ('COMERCIAL'),
+  ('CONSTRUCTORA'),
+  ('RESIDENCIAL')
+on conflict (name) do nothing;
+
 create table if not exists public.client_responsibles (
   id uuid primary key default gen_random_uuid(),
   client_id uuid not null references public.clients(id) on delete cascade,
@@ -103,6 +133,17 @@ create table if not exists public.quotes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (quote_number)
+);
+
+create table if not exists public.quote_acta_assets (
+  quote_id uuid primary key references public.quotes(id) on delete cascade,
+  pdf_object_path text not null,
+  pdf_file_name text not null,
+  pdf_file_size_bytes integer not null default 0,
+  photo_meta jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint quote_acta_assets_photo_meta_is_array check (jsonb_typeof(photo_meta) = 'array')
 );
 
 do $$
@@ -443,7 +484,7 @@ from (
       'Paneles',
       'Remodelacion',
       'Panel de yeso',
-      'sistema de panel de yeso tipo {tipo_panel}, espesor {espesor}, con bastidor galvanizado',
+      'sistema de panel de yeso tipo {tipo_panel}, espesor {espesor}, con estructura {estructura} y acabado {acabado}',
       'm2',
       290.00::numeric
     )
@@ -476,7 +517,9 @@ join (
     ('Estructura metalica ligera', 'soldadura'),
     ('Estructura metalica ligera', 'acabado'),
     ('Panel de yeso', 'tipo_panel'),
-    ('Panel de yeso', 'espesor')
+    ('Panel de yeso', 'espesor'),
+    ('Panel de yeso', 'estructura'),
+    ('Panel de yeso', 'acabado')
 ) as attrs(template_name, name)
   on attrs.template_name = ct.name
 on conflict (concept_template_id, name) do nothing;
@@ -517,7 +560,11 @@ join (
     ('Panel de yeso', 'tipo_panel', 'RH'),
     ('Panel de yeso', 'tipo_panel', 'RF'),
     ('Panel de yeso', 'espesor', '1/2"'),
-    ('Panel de yeso', 'espesor', '5/8"')
+    ('Panel de yeso', 'espesor', '5/8"'),
+    ('Panel de yeso', 'estructura', 'Canal y poste 3 5/8"'),
+    ('Panel de yeso', 'estructura', 'Canal y poste 6"'),
+    ('Panel de yeso', 'acabado', 'Juntas con cinta y compuesto'),
+    ('Panel de yeso', 'acabado', 'Listo para pintura')
 ) as opts(template_name, attribute_name, value)
   on opts.template_name = ct.name and opts.attribute_name = ca.name
 on conflict (attribute_id, value) do nothing;
@@ -527,9 +574,17 @@ values ('client-documents', 'client-documents', false)
 on conflict (id) do nothing;
 
 insert into storage.buckets (id, name, public)
+values ('client-logos', 'client-logos', false)
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
 values ('survey-photos', 'survey-photos', false)
 on conflict (id) do nothing;
 
 insert into storage.buckets (id, name, public)
 values ('quote-approvals', 'quote-approvals', false)
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
+values ('acta-files', 'acta-files', false)
 on conflict (id) do nothing;

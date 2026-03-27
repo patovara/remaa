@@ -46,6 +46,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   String? _selectedProjectTypeId;
   bool _isCreatingQuote = false;
   final List<_PickedMedia> _photos = [];
+  ProviderSubscription<ActiveLevantamientoSession?>? _activeSessionSubscription;
 
   @override
   void initState() {
@@ -118,6 +119,15 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     _addressController.addListener(_persistDraftSnapshot);
     _notesController.addListener(_persistDraftSnapshot);
 
+    _activeSessionSubscription = ref.listenManual<ActiveLevantamientoSession?>(
+      activeLevantamientoProvider,
+      (previous, next) {
+        if (previous != null && previous.isActive && next == null) {
+          _resetForNewSurvey();
+        }
+      },
+    );
+
     _loadClientOptions();
   }
 
@@ -134,6 +144,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
   @override
   void dispose() {
+    _activeSessionSubscription?.close();
     _projectKeyController.removeListener(_persistDraftSnapshot);
     _projectNameController.removeListener(_persistDraftSnapshot);
     _addressController.removeListener(_persistDraftSnapshot);
@@ -144,6 +155,28 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     _addressController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _resetForNewSurvey() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _projectKeyController.clear();
+      _projectNameController.clear();
+      _clientController.clear();
+      _addressController.clear();
+      _notesController.clear();
+      _selectedClientId = null;
+      _selectedProjectId = null;
+      _selectedUniverseId = null;
+      _selectedProjectTypeId = null;
+      _clientErrorText = null;
+      _photos.clear();
+    });
+
+    _ensureProjectKey();
   }
 
   Future<void> _pickPhotos() async {
@@ -851,6 +884,22 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     return [for (final item in items) if (isAllowed(item.name)) item];
   }
 
+  List<ProjectTypeCatalogItem> _projectTypesForUniverse({
+    required ConceptCatalogSnapshot? catalog,
+    required String? universeId,
+    required List<ProjectTypeCatalogItem> fallback,
+  }) {
+    if (catalog == null || universeId == null || universeId.trim().isEmpty) {
+      return fallback;
+    }
+
+    final compatible = [
+      for (final item in catalog.projectTypesForUniverse(universeId))
+        if (fallback.any((allowed) => allowed.id == item.id)) item,
+    ];
+    return compatible.isNotEmpty ? compatible : fallback;
+  }
+
   List<Uint8List> _previewPhotos() {
     final previews = <Uint8List>[];
     for (final photo in _photos) {
@@ -862,6 +911,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   }
 
   void _primeSelections({
+    required ConceptCatalogSnapshot? catalog,
     required List<UniverseCatalogItem> universes,
     required List<ProjectTypeCatalogItem> projectTypes,
     required ActiveLevantamientoSession? active,
@@ -876,8 +926,16 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       if (nextUniverseId == null && universes.isNotEmpty) {
         nextUniverseId = universes.first.id;
       }
-      if (nextProjectTypeId == null && projectTypes.isNotEmpty) {
-        nextProjectTypeId = projectTypes.first.id;
+      final compatibleProjectTypes = _projectTypesForUniverse(
+        catalog: catalog,
+        universeId: nextUniverseId,
+        fallback: projectTypes,
+      );
+      if (nextProjectTypeId == null ||
+          !compatibleProjectTypes.any((item) => item.id == nextProjectTypeId)) {
+        nextProjectTypeId = compatibleProjectTypes.isNotEmpty
+            ? compatibleProjectTypes.first.id
+            : (projectTypes.isNotEmpty ? projectTypes.first.id : null);
       }
     }
 
@@ -904,13 +962,20 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   Widget build(BuildContext context) {
     final catalogState = ref.watch(conceptsCatalogProvider);
     final activeLevantamiento = ref.watch(activeLevantamientoProvider);
+    final catalogSnapshot = catalogState.valueOrNull;
 
-    final universes = catalogState.valueOrNull?.universes ?? const <UniverseCatalogItem>[];
+    final universes = catalogSnapshot?.universes ?? const <UniverseCatalogItem>[];
     final projectTypes = _allowedProjectTypes(
-      catalogState.valueOrNull?.projectTypes ?? const <ProjectTypeCatalogItem>[],
+      catalogSnapshot?.projectTypes ?? const <ProjectTypeCatalogItem>[],
+    );
+    final availableProjectTypes = _projectTypesForUniverse(
+      catalog: catalogSnapshot,
+      universeId: _selectedUniverseId,
+      fallback: projectTypes,
     );
 
     _primeSelections(
+      catalog: catalogSnapshot,
       universes: universes,
       projectTypes: projectTypes,
       active: activeLevantamiento,
@@ -952,10 +1017,24 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
                       );
                       return;
                     }
-                    setState(() => _selectedUniverseId = value);
+                    final compatibleProjectTypes = _projectTypesForUniverse(
+                      catalog: catalogSnapshot,
+                      universeId: value,
+                      fallback: projectTypes,
+                    );
+                    setState(() {
+                      _selectedUniverseId = value;
+                      if (!compatibleProjectTypes.any(
+                        (item) => item.id == _selectedProjectTypeId,
+                      )) {
+                        _selectedProjectTypeId = compatibleProjectTypes.isNotEmpty
+                            ? compatibleProjectTypes.first.id
+                            : null;
+                      }
+                    });
                     _persistDraftSnapshot();
                   },
-            projectTypes: projectTypes,
+            projectTypes: availableProjectTypes,
             selectedProjectTypeId: _selectedProjectTypeId,
             onProjectTypeChanged: universeLocked
                 ? null
@@ -1769,18 +1848,20 @@ class _ClientSelectorDialogState extends State<_ClientSelectorDialog> {
             .from('clients')
             .select('id, business_name, email, phone, address_line, city')
             .order('business_name');
-        final knownIds = base.map((c) => c.id).toSet();
+        final mergedByName = <String, ClientRecord>{
+          for (final client in base) _normalizedClientKey(client.name): client,
+        };
         for (final row in rows) {
           final id = (row['id'] as String? ?? '').trim();
           final name = (row['business_name'] as String? ?? '').trim();
-          if (id.isEmpty || name.isEmpty || knownIds.contains(id)) {
+          if (id.isEmpty || name.isEmpty) {
             continue;
           }
           final addr = [
             row['address_line'] as String? ?? '',
             row['city'] as String? ?? '',
           ].where((s) => s.isNotEmpty).join(', ');
-          base.add(ClientRecord(
+          mergedByName[_normalizedClientKey(name)] = ClientRecord(
             id: id,
             name: name,
             sector: 'Cliente',
@@ -1792,8 +1873,11 @@ class _ClientSelectorDialogState extends State<_ClientSelectorDialog> {
             phone: (row['phone'] as String? ?? '').trim(),
             address: addr.isEmpty ? 'Sin dirección' : addr,
             responsibles: const [],
-          ));
+          );
         }
+        base
+          ..clear()
+          ..addAll(mergedByName.values);
       } catch (_) {}
     }
     if (!mounted) return;
@@ -1803,6 +1887,8 @@ class _ClientSelectorDialogState extends State<_ClientSelectorDialog> {
       _isLoading = false;
     });
   }
+
+  String _normalizedClientKey(String value) => value.trim().toLowerCase();
 
   void _onSearch(String query) {
     final q = query.trim().toLowerCase();

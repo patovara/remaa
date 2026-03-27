@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 
+import '../../../core/config/env.dart';
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/utils/client_input_rules.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
@@ -257,7 +259,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
 
       await _metadataRepository.ensureSectorLabel(normalizedSector);
 
-      final basePayload = {
+      final basePayload = <String, Object?>{
         'business_name': businessName,
         'contact_name': contactName,
         'rfc': rfc,
@@ -267,18 +269,22 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         'city': _composedLocation(),
         'sector_label': normalizedSector,
       };
-      Map<String, dynamic> inserted;
-      try {
-        inserted = await client.from('clients').insert(basePayload).select('id').single();
-      } catch (_) {
-        final legacyPayload = {
-          ...basePayload,
-          'notes': contactName.isEmpty ? null : 'Contacto principal: $contactName',
-        }..remove('contact_name');
-        inserted = await client.from('clients').insert(legacyPayload).select('id').single();
-      }
+      AppLogger.info('client_create_started', data: {
+        'supabase_url': Env.supabaseUrl,
+        'business_name': businessName,
+        'has_contact_name': contactName.isNotEmpty,
+        'has_sector_label': normalizedSector.isNotEmpty,
+      });
+      final inserted = Map<String, dynamic>.from(
+        await client.from('clients').insert(basePayload).select('id').single() as Map,
+      );
 
       final clientId = inserted['id'] as String?;
+      AppLogger.info('client_create_succeeded', data: {
+        'supabase_url': Env.supabaseUrl,
+        'client_id': clientId,
+        'business_name': businessName,
+      });
       if (clientId != null && _logoBytes != null && _logoName != null) {
         final logoPath = await _metadataRepository.uploadLogo(
           clientId: clientId,
@@ -313,7 +319,11 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         return;
       }
       showRemaMessage(context, 'Cliente creado correctamente.');
-    } catch (_) {
+    } catch (error) {
+      AppLogger.error('client_create_failed', data: {
+        'supabase_url': Env.supabaseUrl,
+        'error': error.toString(),
+      });
       if (!mounted) {
         return;
       }
@@ -323,6 +333,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
       );
     }
   }
+
 
   Future<void> _uploadDocuments(dynamic supabase, String clientId) async {
     for (final doc in _documents) {

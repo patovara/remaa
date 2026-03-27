@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/admin_access.dart';
 import '../../../core/theme/rema_colors.dart';
+import '../../../core/utils/file_download.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
@@ -70,12 +71,32 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       child: catalogAsync.when(
         data: (snapshot) {
           _syncSelections(snapshot);
-          final visibleTemplates = _selectedUniverseId == null
+          final effectiveSelectedUniverseId = snapshot.universes.any(
+            (item) => item.id == _selectedUniverseId,
+          )
+              ? _selectedUniverseId
+              : (snapshot.universes.isEmpty ? null : snapshot.universes.first.id);
+          final effectiveSelectedProjectTypeId = snapshot.projectTypes.any(
+            (item) => item.id == _selectedProjectTypeId,
+          )
+              ? _selectedProjectTypeId
+              : (snapshot.projectTypes.isEmpty ? null : snapshot.projectTypes.first.id);
+          final effectiveImportProjectTypeId = snapshot.projectTypes.any(
+            (item) => item.id == _selectedImportProjectTypeId,
+          )
+              ? _selectedImportProjectTypeId
+              : (snapshot.projectTypes.isEmpty ? null : snapshot.projectTypes.first.id);
+          final visibleTemplates = effectiveSelectedUniverseId == null
               ? snapshot.templates
-              : snapshot.templatesForUniverse(_selectedUniverseId!);
-          final visibleAttributes = _selectedTemplateId == null
+              : snapshot.templatesForUniverse(effectiveSelectedUniverseId);
+          final effectiveSelectedTemplateId = visibleTemplates.any(
+            (item) => item.id == _selectedTemplateId,
+          )
+              ? _selectedTemplateId
+              : (visibleTemplates.isEmpty ? null : visibleTemplates.first.id);
+          final visibleAttributes = effectiveSelectedTemplateId == null
               ? const <ConceptAttributeCatalogItem>[]
-              : snapshot.attributesForTemplate(_selectedTemplateId!);
+              : snapshot.attributesForTemplate(effectiveSelectedTemplateId);
 
           return SingleChildScrollView(
             child: Column(
@@ -99,8 +120,8 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
                 const SizedBox(height: 24),
                 _TemplatesPanel(
                   snapshot: snapshot,
-                  selectedUniverseId: _selectedUniverseId,
-                  selectedProjectTypeId: _selectedProjectTypeId,
+                  selectedUniverseId: effectiveSelectedUniverseId,
+                  selectedProjectTypeId: effectiveSelectedProjectTypeId,
                   search: _templateSearch,
                   bulkPercentController: _bulkPercentController,
                   visibleTemplates: visibleTemplates,
@@ -118,7 +139,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
                 const SizedBox(height: 24),
                 _AttributesPanel(
                   snapshot: snapshot,
-                  selectedTemplateId: _selectedTemplateId,
+                  selectedTemplateId: effectiveSelectedTemplateId,
                   visibleTemplates: visibleTemplates,
                   visibleAttributes: visibleAttributes,
                   onTemplateChanged: (value) => setState(() => _selectedTemplateId = value),
@@ -132,9 +153,10 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
                 const SizedBox(height: 24),
                 _ImportPanel(
                   projectTypes: snapshot.projectTypes,
-                  selectedProjectTypeId: _selectedImportProjectTypeId,
+                  selectedProjectTypeId: effectiveImportProjectTypeId,
                   onProjectTypeChanged: (value) => setState(() => _selectedImportProjectTypeId = value),
                   onImport: _importCsv,
+                  onDownloadTemplate: _downloadCsvTemplate,
                   isImporting: _isImporting,
                   lastSummary: _lastImportSummary,
                   lastFileName: _lastImportFileName,
@@ -365,6 +387,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     if (confirmed != true) {
       return;
     }
+    if (_selectedTemplateId == template.id) {
+      setState(() => _selectedTemplateId = null);
+    }
     await _runMutation(
       action: () => ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
       successMessage: 'Concepto eliminado.',
@@ -513,6 +538,79 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
         setState(() => _isImporting = false);
       }
     }
+  }
+
+  Future<void> _downloadCsvTemplate() async {
+    final content = _buildCatalogCsvTemplate();
+    final saved = await saveTextFile(
+      fileName: 'catalogo_plantilla.csv',
+      content: content,
+      dialogTitle: 'Guardar plantilla CSV',
+    );
+    if (!mounted) {
+      return;
+    }
+    showRemaMessage(
+      context,
+      saved ? 'Plantilla CSV lista para descarga.' : 'No se pudo descargar la plantilla CSV.',
+    );
+  }
+
+  String _buildCatalogCsvTemplate() {
+    const rows = <List<String>>[
+      <String>[
+        'universe',
+        'concept',
+        'unit',
+        'base_price',
+        'attribute',
+        'option',
+        'project_type',
+        'base_description',
+      ],
+      <String>[
+        'Vidrio/Aluminio',
+        'Canceleria de aluminio',
+        'm2',
+        '1850',
+        'vidrio',
+        'Claro 6mm',
+        'Remodelacion',
+        'Suministro e instalacion de canceleria de aluminio.',
+      ],
+      <String>[
+        'Vidrio/Aluminio',
+        'Canceleria de aluminio',
+        'm2',
+        '1850',
+        'acabado',
+        'Natural',
+        'Remodelacion',
+        'Suministro e instalacion de canceleria de aluminio.',
+      ],
+      <String>[
+        'Paneles',
+        'Panel de yeso',
+        'm2',
+        '620',
+        'tipo_panel',
+        'RH',
+        'Remodelacion',
+        'Fabricacion de muro de panel de yeso.',
+      ],
+    ];
+
+    return rows.map(_csvRow).join('\n');
+  }
+
+  String _csvRow(List<String> values) {
+    return values.map((value) {
+      final escaped = value.replaceAll('"', '""');
+      if (escaped.contains(',') || escaped.contains('"') || escaped.contains('\n')) {
+        return '"$escaped"';
+      }
+      return escaped;
+    }).join(',');
   }
 
   Future<void> _bulkAdjustPrices(List<ConceptTemplateCatalogItem> templates) async {
@@ -927,6 +1025,7 @@ class _ImportPanel extends StatelessWidget {
     required this.selectedProjectTypeId,
     required this.onProjectTypeChanged,
     required this.onImport,
+    required this.onDownloadTemplate,
     required this.isImporting,
     required this.lastSummary,
     required this.lastFileName,
@@ -936,6 +1035,7 @@ class _ImportPanel extends StatelessWidget {
   final String? selectedProjectTypeId;
   final ValueChanged<String?> onProjectTypeChanged;
   final VoidCallback onImport;
+  final VoidCallback onDownloadTemplate;
   final bool isImporting;
   final CatalogImportSummary? lastSummary;
   final String? lastFileName;
@@ -949,12 +1049,23 @@ class _ImportPanel extends StatelessWidget {
           RemaSectionHeader(
             title: 'Importador CSV',
             icon: Icons.upload_file_outlined,
-            trailing: FilledButton.icon(
-              onPressed: isImporting ? null : onImport,
-              icon: isImporting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.file_upload_outlined),
-              label: Text(isImporting ? 'Importando...' : 'Subir CSV'),
+            trailing: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: isImporting ? null : onDownloadTemplate,
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Descargar plantilla'),
+                ),
+                FilledButton.icon(
+                  onPressed: isImporting ? null : onImport,
+                  icon: isImporting
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.file_upload_outlined),
+                  label: Text(isImporting ? 'Importando...' : 'Subir CSV'),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),

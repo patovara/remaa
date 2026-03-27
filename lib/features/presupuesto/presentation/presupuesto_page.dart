@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -178,6 +179,9 @@ class PresupuestoPage extends ConsumerWidget {
         _ => 'Estado actualizado.',
       };
       showRemaMessage(context, message);
+      if (nextStatus == QuoteStatus.concluded) {
+        context.go('/cotizaciones');
+      }
     } catch (error) {
       if (context.mounted) {
         showRemaMessage(context, '$error');

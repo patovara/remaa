@@ -46,6 +46,32 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
         widget.quote.projectTypeId,
       );
 
+  String get _universeLabel =>
+      widget.catalog.universeById(widget.quote.universeId)?.name ?? widget.quote.universeId;
+
+  String get _projectTypeLabel =>
+      widget.catalog.projectTypeById(widget.quote.projectTypeId)?.name ?? widget.quote.projectTypeId;
+
+  List<ProjectTypeCatalogItem> get _availableProjectTypesForUniverse =>
+      widget.catalog.projectTypesForUniverse(widget.quote.universeId);
+
+  String _missingTemplatesMessage() {
+    final alternatives = [
+      for (final item in _availableProjectTypesForUniverse)
+        if (item.id != widget.quote.projectTypeId) item.name,
+    ];
+
+    final parts = <String>[
+      'No hay conceptos disponibles para $_universeLabel + $_projectTypeLabel.',
+    ];
+    if (alternatives.isNotEmpty) {
+      parts.add('En el catalogo este universo si tiene conceptos para: ${alternatives.join(', ')}.');
+    } else {
+      parts.add('Revisa que la cotizacion se haya creado con el tipo de proyecto correcto.');
+    }
+    return parts.join(' ');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -156,8 +182,8 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
                       border: Border.all(color: Colors.red),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text(
-                      'No hay conceptos disponibles para este universo y tipo de proyecto. Agrega templates al catálogo.',
+                    child: Text(
+                      _missingTemplatesMessage(),
                       style: TextStyle(color: Colors.red),
                     ),
                   )

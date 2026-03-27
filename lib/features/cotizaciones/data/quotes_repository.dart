@@ -9,6 +9,7 @@ import '../domain/quote_models.dart';
 
 class QuotesRepository {
   static int _localProjectKeySeq = 1;
+  static const String _actaBucket = 'acta-files';
 
   static final List<ProjectLookup> _localProjects = [
     const ProjectLookup(
@@ -456,29 +457,144 @@ class QuotesRepository {
       return updated;
     } catch (error) {
       AppLogger.error('quotes_attach_approval_pdf_failed', data: {'error': error.toString()});
+      final message = error.toString().toLowerCase();
+      if (message.contains('row-level security') || message.contains('unauthorized')) {
+        throw StateError(
+          'No se pudo adjuntar el PDF del pedido. Revisa permisos del bucket quote-approvals en storage.',
+        );
+      }
       throw StateError('No se pudo adjuntar el PDF del pedido.');
     }
   }
 
-  Future<void> saveActaDocument({
+  Future<bool> saveActaDocument({
     required String quoteId,
     required Uint8List bytes,
     required String fileName,
+    List<ActaPhotoAssetInput> photos = const <ActaPhotoAssetInput>[],
   }) async {
     if (bytes.isEmpty) {
       throw StateError('No se pudo generar el PDF del acta.');
     }
 
-    _localActaDocuments[quoteId] = ActaDocumentRecord(
+    final now = DateTime.now();
+    final localRecord = ActaDocumentRecord(
       quoteId: quoteId,
       fileName: fileName,
       bytes: bytes,
-      createdAt: DateTime.now(),
+      createdAt: now,
     );
+    _localActaDocuments[quoteId] = localRecord;
+
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) {
+      return false;
+    }
+
+    try {
+      final timestamp = now.millisecondsSinceEpoch;
+      final pdfObjectPath = '$quoteId/pdf/${timestamp}_${_sanitizeStorageName(fileName)}';
+      await client.storage.from(_actaBucket).uploadBinary(
+            pdfObjectPath,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'application/pdf', upsert: true),
+          );
+
+      final photoMetaMaps = <Map<String, Object?>>[];
+      for (var index = 0; index < photos.length; index++) {
+        final photo = photos[index];
+        if (photo.bytes.isEmpty) {
+          continue;
+        }
+        final ext = _guessImageExtension(photo.fileName);
+        final photoObjectPath = '$quoteId/photos/${timestamp}_${index}_${photo.slot}.$ext';
+        await client.storage.from(_actaBucket).uploadBinary(
+              photoObjectPath,
+              photo.bytes,
+              fileOptions: FileOptions(
+                contentType: photo.mimeType ?? 'image/jpeg',
+                upsert: true,
+              ),
+            );
+        photoMetaMaps.add({
+          'slot': photo.slot,
+          'object_path': photoObjectPath,
+          'file_name': photo.fileName,
+          'file_size_bytes': photo.fileSizeBytes,
+          'mime_type': photo.mimeType,
+        });
+      }
+
+      await client.from('quote_acta_assets').upsert({
+        'quote_id': quoteId,
+        'pdf_object_path': pdfObjectPath,
+        'pdf_file_name': fileName,
+        'pdf_file_size_bytes': bytes.length,
+        'photo_meta': photoMetaMaps,
+        'created_at': now.toUtc().toIso8601String(),
+        'updated_at': now.toUtc().toIso8601String(),
+      });
+
+      _localActaDocuments[quoteId] = ActaDocumentRecord(
+        quoteId: quoteId,
+        fileName: fileName,
+        bytes: bytes,
+        createdAt: now,
+        objectPath: pdfObjectPath,
+        photoAssets: [for (final item in photoMetaMaps) _actaPhotoMetaFromMap(item)],
+      );
+      return true;
+    } catch (error) {
+      AppLogger.error('acta_document_save_failed', data: {'quoteId': quoteId, 'error': error.toString()});
+      return false;
+    }
   }
 
   Future<ActaDocumentRecord?> fetchActaDocument(String quoteId) async {
-    return _localActaDocuments[quoteId];
+    final local = _localActaDocuments[quoteId];
+    if (local != null) {
+      return local;
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) {
+      return null;
+    }
+
+    try {
+      final row = await client
+          .from('quote_acta_assets')
+          .select('quote_id, pdf_object_path, pdf_file_name, created_at, photo_meta')
+          .eq('quote_id', quoteId)
+          .maybeSingle();
+      if (row == null) {
+        return null;
+      }
+
+      final objectPath = (row['pdf_object_path'] as String? ?? '').trim();
+      if (objectPath.isEmpty) {
+        return null;
+      }
+
+      final bytes = await client.storage.from(_actaBucket).download(objectPath);
+      if (bytes.isEmpty) {
+        return null;
+      }
+
+      final record = ActaDocumentRecord(
+        quoteId: row['quote_id'] as String? ?? quoteId,
+        fileName: row['pdf_file_name'] as String? ?? 'acta_entrega_$quoteId.pdf',
+        bytes: bytes,
+        createdAt: _toDateTime(row['created_at']) ?? DateTime.now(),
+        objectPath: objectPath,
+        photoAssets: _parseActaPhotoMeta(row['photo_meta']),
+      );
+      _localActaDocuments[quoteId] = record;
+      return record;
+    } catch (error) {
+      AppLogger.error('acta_document_fetch_failed', data: {'quoteId': quoteId, 'error': error.toString()});
+      return null;
+    }
   }
 
   Future<void> _ensureApprovalPdfCanBeAttached(QuoteRecord quote) async {
@@ -691,7 +807,10 @@ class QuotesRepository {
         return QuoteContextInfo(
           projectName: project.name,
           clientName: localClient.name,
-          address: (project.siteAddress ?? '').trim(),
+          address: _firstNonEmpty([
+            project.siteAddress,
+            localClient.address,
+          ]),
           location: localClient.address,
           description: project.description ?? '',
         );
@@ -701,17 +820,21 @@ class QuotesRepository {
         try {
           final clientRow = await client
               .from('clients')
-              .select('business_name, city, state')
+              .select('business_name, address_line, city, state')
               .eq('id', localClientId)
               .single();
           final clientName = clientRow['business_name'] as String? ?? '';
+          final addressLine = clientRow['address_line'] as String? ?? '';
           final city = clientRow['city'] as String? ?? '';
           final state = clientRow['state'] as String? ?? '';
           final location = [city, state].where((value) => value.trim().isNotEmpty).join(', ');
           return QuoteContextInfo(
             projectName: project.name,
             clientName: clientName.isEmpty ? 'Cliente no disponible' : clientName,
-            address: (project.siteAddress ?? '').trim(),
+            address: _firstNonEmpty([
+              project.siteAddress,
+              addressLine,
+            ]),
             location: location,
             description: project.description ?? '',
           );
@@ -751,11 +874,12 @@ class QuotesRepository {
 
       final clientRow = await client
           .from('clients')
-          .select('business_name, city, state')
+          .select('business_name, address_line, city, state')
           .eq('id', clientId)
           .single();
 
       final clientName = clientRow['business_name'] as String? ?? '';
+      final addressLine = clientRow['address_line'] as String? ?? '';
       final city = clientRow['city'] as String? ?? '';
       final state = clientRow['state'] as String? ?? '';
       final location = [city, state].where((value) => value.trim().isNotEmpty).join(', ');
@@ -763,7 +887,7 @@ class QuotesRepository {
       return QuoteContextInfo(
         projectName: projectName,
         clientName: clientName,
-        address: address,
+        address: _firstNonEmpty([address, addressLine]),
         location: location,
         description: description,
       );
@@ -777,6 +901,16 @@ class QuotesRepository {
         description: '',
       );
     }
+  }
+
+  String _firstNonEmpty(List<String?> values) {
+    for (final value in values) {
+      final normalized = (value ?? '').trim();
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
+    }
+    return '';
   }
 
   Future<SurveyEntryRecord?> appendSurveyEntry({
@@ -1183,6 +1317,38 @@ class QuotesRepository {
       }
     }
     return 'jpg';
+  }
+
+  String _sanitizeStorageName(String value) {
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), '_');
+    return normalized.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '');
+  }
+
+  List<ActaPhotoAssetMeta> _parseActaPhotoMeta(Object? raw) {
+    if (raw is! List) {
+      return const <ActaPhotoAssetMeta>[];
+    }
+    final items = <ActaPhotoAssetMeta>[];
+    for (final item in raw) {
+      if (item is Map<String, dynamic>) {
+        items.add(_actaPhotoMetaFromMap(item));
+      } else if (item is Map) {
+        items.add(
+          _actaPhotoMetaFromMap(item.map((key, value) => MapEntry('$key', value))),
+        );
+      }
+    }
+    return items;
+  }
+
+  ActaPhotoAssetMeta _actaPhotoMetaFromMap(Map<String, Object?> item) {
+    return ActaPhotoAssetMeta(
+      slot: item['slot'] as String? ?? 'durante',
+      objectPath: item['object_path'] as String? ?? '',
+      fileName: item['file_name'] as String? ?? 'imagen.jpg',
+      fileSizeBytes: item['file_size_bytes'] as int? ?? 0,
+      mimeType: item['mime_type'] as String?,
+    );
   }
 
   String _normalizeProjectCode(String? code, String projectId) {

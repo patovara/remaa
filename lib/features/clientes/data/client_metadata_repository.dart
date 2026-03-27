@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
 
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/utils/client_input_rules.dart';
 
 class ClientMetadataRepository {
@@ -181,15 +182,17 @@ class ClientMetadataRepository {
 
     try {
       await client.from('clients').update(payload).eq('id', clientId);
-    } catch (_) {
-      final legacyPayload = <String, Object?>{
-        ...payload,
-        'notes': (contactName == null || contactName.trim().isEmpty)
-            ? null
-            : 'Contacto principal: ${normalizeContactName(contactName)}',
-      };
-      legacyPayload.remove('contact_name');
-      await client.from('clients').update(legacyPayload).eq('id', clientId);
+      AppLogger.info('client_update_succeeded', data: {
+        'client_id': clientId,
+        'payload_keys': payload.keys.join(','),
+      });
+    } catch (error) {
+      AppLogger.error('client_update_failed', data: {
+        'client_id': clientId,
+        'payload_keys': payload.keys.join(','),
+        'error': error.toString(),
+      });
+      rethrow;
     }
   }
 }

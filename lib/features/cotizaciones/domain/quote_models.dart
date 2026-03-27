@@ -247,10 +247,46 @@ class ActaDocumentRecord {
     required this.fileName,
     required this.bytes,
     required this.createdAt,
+    this.objectPath,
+    this.photoAssets = const <ActaPhotoAssetMeta>[],
   });
 
   final String quoteId;
   final String fileName;
   final Uint8List bytes;
   final DateTime createdAt;
+  final String? objectPath;
+  final List<ActaPhotoAssetMeta> photoAssets;
+}
+
+class ActaPhotoAssetInput {
+  const ActaPhotoAssetInput({
+    required this.slot,
+    required this.fileName,
+    required this.bytes,
+    required this.fileSizeBytes,
+    this.mimeType,
+  });
+
+  final String slot;
+  final String fileName;
+  final Uint8List bytes;
+  final int fileSizeBytes;
+  final String? mimeType;
+}
+
+class ActaPhotoAssetMeta {
+  const ActaPhotoAssetMeta({
+    required this.slot,
+    required this.objectPath,
+    required this.fileName,
+    required this.fileSizeBytes,
+    this.mimeType,
+  });
+
+  final String slot;
+  final String objectPath;
+  final String fileName;
+  final int fileSizeBytes;
+  final String? mimeType;
 }

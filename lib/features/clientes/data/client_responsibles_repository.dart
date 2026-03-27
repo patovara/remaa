@@ -42,7 +42,7 @@ class ClientResponsiblesRepository {
         'client_responsibles_fetch_failed',
         data: {'client_id': clientId, 'error': error.toString()},
       );
-      return _fetchLocal(clientId);
+      rethrow;
     }
   }
 
@@ -80,7 +80,7 @@ class ClientResponsiblesRepository {
         'client_responsibles_save_failed',
         data: {'client_id': clientId, 'responsible_id': normalizedRecord.id, 'error': error.toString()},
       );
-      return _saveLocal(clientId: clientId, record: normalizedRecord);
+      rethrow;
     }
   }
 
@@ -100,7 +100,7 @@ class ClientResponsiblesRepository {
         'client_responsibles_delete_failed',
         data: {'client_id': clientId, 'responsible_id': record.id, 'error': error.toString()},
       );
-      return _deleteLocal(clientId: clientId, recordId: record.id);
+      rethrow;
     }
   }
 

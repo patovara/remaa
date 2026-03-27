@@ -117,6 +117,28 @@ class ConceptCatalogSnapshot {
         .toList();
   }
 
+  bool hasTemplatesForUniverseAndProjectType(String universeId, String projectTypeId) {
+    for (final item in templates) {
+      if (item.universeId == universeId && item.projectTypeId == projectTypeId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<ProjectTypeCatalogItem> projectTypesForUniverse(String universeId) {
+    final ids = <String>{
+      for (final item in templates)
+        if (item.universeId == universeId) item.projectTypeId,
+    };
+    final result = [
+      for (final projectType in projectTypes)
+        if (ids.contains(projectType.id)) projectType,
+    ];
+    result.sort((a, b) => a.name.compareTo(b.name));
+    return result;
+  }
+
   List<ConceptAttributeCatalogItem> attributesForTemplate(String templateId) {
     return attributes.where((item) => item.templateId == templateId).toList();
   }

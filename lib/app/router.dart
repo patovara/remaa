@@ -29,8 +29,11 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/cotizaciones',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: CotizacionesPage(),
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: CotizacionesPage(
+              initialClientId: state.uri.queryParameters['clientId'],
+              openComposerOnLoad: state.uri.queryParameters['new'] == '1',
+            ),
           ),
         ),
         GoRoute(

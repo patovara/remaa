@@ -19,7 +19,14 @@ import 'concepts_catalog_controller.dart';
 import 'quotes_controller.dart';
 
 class CotizacionesPage extends ConsumerStatefulWidget {
-  const CotizacionesPage({super.key});
+  const CotizacionesPage({
+    super.key,
+    this.initialClientId,
+    this.openComposerOnLoad = false,
+  });
+
+  final String? initialClientId;
+  final bool openComposerOnLoad;
 
   @override
   ConsumerState<CotizacionesPage> createState() => _CotizacionesPageState();
@@ -28,6 +35,22 @@ class CotizacionesPage extends ConsumerStatefulWidget {
 class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   String _search = '';
   String? _statusFilter; // null = todos, 'draft', 'concluded', 'approved', 'declined'
+  bool _didOpenComposerFromRoute = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _didOpenComposerFromRoute) {
+        return;
+      }
+      final initialClientId = widget.initialClientId?.trim();
+      if (widget.openComposerOnLoad && initialClientId != null && initialClientId.isNotEmpty) {
+        _didOpenComposerFromRoute = true;
+        _openNewQuoteDialog(fixedClientId: initialClientId);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +65,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       title: 'Gestion de Cotizaciones',
       subtitle: 'Resumen operativo y detalle de cotizaciones activas.',
       trailing: FilledButton.icon(
-        onPressed: _openNewQuoteDialog,
+        onPressed: () => _openNewQuoteDialog(),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Cotizacion'),
       ),
@@ -387,7 +410,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     }
   }
 
-  Future<void> _openNewQuoteDialog() async {
+  Future<void> _openNewQuoteDialog({String? fixedClientId}) async {
     final catalogState = ref.read(conceptsCatalogProvider);
     final catalog = catalogState.valueOrNull;
     if (catalog == null) {
@@ -396,14 +419,28 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       return;
     }
 
-    List<ProjectLookup> projects;
-    try {
-      projects = await ref.read(quoteProjectsProvider.future);
-    } catch (_) {
-      if (!mounted) {
+    final clientOptions = await _fetchClientOptions();
+    if (!mounted) {
+      return;
+    }
+
+    final normalizedFixedClientId = fixedClientId?.trim();
+    ClientOption? fixedClient;
+    if (normalizedFixedClientId != null && normalizedFixedClientId.isNotEmpty) {
+      for (final item in clientOptions) {
+        if (item.id == normalizedFixedClientId) {
+          fixedClient = item;
+          break;
+        }
+      }
+      if (fixedClient == null) {
+        showRemaMessage(context, 'No se pudo resolver el cliente para la nueva cotizacion.');
         return;
       }
-      showRemaMessage(context, 'No se pudo cargar lista de proyectos.');
+    }
+
+    if (fixedClient == null && clientOptions.isEmpty) {
+      showRemaMessage(context, 'No hay clientes disponibles para crear cotizacion.');
       return;
     }
 
@@ -411,34 +448,77 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       return;
     }
 
-    if (projects.isEmpty) {
-      showRemaMessage(context, 'No hay proyectos disponibles para crear cotizacion.');
-      return;
-    }
-
     final result = await showDialog<_NewQuoteResult>(
       context: context,
-      builder: (context) => _NewQuoteDialog(catalog: catalog, projects: projects),
+      builder: (context) => _NewQuoteDialog(
+        catalog: catalog,
+        clients: clientOptions,
+        fixedClient: fixedClient,
+      ),
     );
 
     if (!mounted || result == null) {
       return;
     }
 
-        final projectKey = await ref.read(quotesProvider.notifier).reserveProjectKey();
+    ProjectLookup project;
+    try {
+      final projectKey = await ref.read(quotesProvider.notifier).reserveProjectKey();
+      project = await ref.read(quotesProvider.notifier).createProject(
+            input: NewProjectInput(
+              code: projectKey,
+              name: result.projectName,
+              clientId: result.clientId,
+            ),
+          );
+      final quote = await ref.read(quotesProvider.notifier).createDraft(
+            projectId: project.id,
+            universeId: result.universeId,
+            projectTypeId: result.projectTypeId,
+            projectKey: projectKey,
+          );
 
-        final quote = await ref.read(quotesProvider.notifier).createDraft(
-          projectId: result.projectId,
-          universeId: result.universeId,
-          projectTypeId: result.projectTypeId,
-          projectKey: projectKey,
-        );
-
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, 'Cotizacion ${quote.quoteNumber} creada para ${project.name}.');
+      context.go('/presupuesto/${quote.id}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, '$error');
     }
-    showRemaMessage(context, 'Cotizacion ${quote.quoteNumber} creada.');
-    context.go('/presupuesto/${quote.id}');
+  }
+
+  Future<List<ClientOption>> _fetchClientOptions() async {
+    final mergedByName = <String, ClientOption>{
+      for (final client in mockClients)
+        client.name.trim().toLowerCase(): ClientOption(id: client.id, name: client.name),
+    };
+
+    final client = SupabaseBootstrap.client;
+    if (client == null) {
+      return mergedByName.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    }
+
+    try {
+      final rows = await client
+          .from('clients')
+          .select('id, business_name')
+          .order('business_name');
+      for (final row in rows) {
+        final id = (row['id'] as String? ?? '').trim();
+        final name = (row['business_name'] as String? ?? '').trim();
+        if (id.isEmpty || name.isEmpty) {
+          continue;
+        }
+        mergedByName[name.toLowerCase()] = ClientOption(id: id, name: name);
+      }
+    } catch (_) {}
+
+    final result = mergedByName.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    return result;
   }
 
   Future<void> _showProjectDescription(
@@ -865,47 +945,107 @@ class _QuoteRow extends StatelessWidget {
 
 class _NewQuoteResult {
   const _NewQuoteResult({
-    required this.projectId,
+    required this.clientId,
+    required this.projectName,
     required this.universeId,
     required this.projectTypeId,
   });
 
-  final String projectId;
+  final String clientId;
+  final String projectName;
   final String universeId;
   final String projectTypeId;
 }
 
+class ClientOption {
+  const ClientOption({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
 class _NewQuoteDialog extends StatefulWidget {
-  const _NewQuoteDialog({required this.catalog, required this.projects});
+  const _NewQuoteDialog({
+    required this.catalog,
+    required this.clients,
+    this.fixedClient,
+  });
 
   final ConceptCatalogSnapshot catalog;
-  final List<ProjectLookup> projects;
+  final List<ClientOption> clients;
+  final ClientOption? fixedClient;
 
   @override
   State<_NewQuoteDialog> createState() => _NewQuoteDialogState();
 }
 
 class _NewQuoteDialogState extends State<_NewQuoteDialog> {
-  String? _projectId;
+  static const int _minimumProjectNameLength = 4;
+
+  String? _clientId;
   String? _universeId;
   String? _projectTypeId;
+  late final TextEditingController _projectNameController;
+  late final TextEditingController _clientSearchController;
+  String? _projectNameError;
+  String? _clientError;
+  String? _projectTypeError;
 
   @override
   void initState() {
     super.initState();
-    if (widget.projects.isNotEmpty) {
-      _projectId = widget.projects.first.id;
-    }
+    _projectNameController = TextEditingController();
+    _clientSearchController = TextEditingController(text: widget.fixedClient?.name ?? '');
+    _clientId = widget.fixedClient?.id;
     if (widget.catalog.universes.isNotEmpty) {
       _universeId = widget.catalog.universes.first.id;
     }
-    if (widget.catalog.projectTypes.isNotEmpty) {
-      _projectTypeId = widget.catalog.projectTypes.first.id;
+    _projectTypeId = _normalizedProjectTypeId(
+      universeId: _universeId,
+      currentProjectTypeId: widget.catalog.projectTypes.isNotEmpty
+          ? widget.catalog.projectTypes.first.id
+          : null,
+    );
+  }
+
+  @override
+  void dispose() {
+    _projectNameController.dispose();
+    _clientSearchController.dispose();
+    super.dispose();
+  }
+
+  String _normalizedProjectName(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  List<ProjectTypeCatalogItem> _compatibleProjectTypes(String? universeId) {
+    if (universeId == null || universeId.trim().isEmpty) {
+      return widget.catalog.projectTypes;
     }
+    final compatible = widget.catalog.projectTypesForUniverse(universeId);
+    return compatible.isNotEmpty ? compatible : widget.catalog.projectTypes;
+  }
+
+  String? _normalizedProjectTypeId({
+    required String? universeId,
+    required String? currentProjectTypeId,
+  }) {
+    final compatible = _compatibleProjectTypes(universeId);
+    if (compatible.isEmpty) {
+      return currentProjectTypeId;
+    }
+    if (currentProjectTypeId != null &&
+        compatible.any((item) => item.id == currentProjectTypeId)) {
+      return currentProjectTypeId;
+    }
+    return compatible.first.id;
   }
 
   @override
   Widget build(BuildContext context) {
+    final compatibleProjectTypes = _compatibleProjectTypes(_universeId);
+
     return AlertDialog(
       title: const Text('Nueva cotizacion'),
       content: SizedBox(
@@ -913,16 +1053,78 @@ class _NewQuoteDialogState extends State<_NewQuoteDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-              DropdownButtonFormField<String>(
-                initialValue: _projectId,
-                decoration: const InputDecoration(labelText: 'Proyecto'),
-                items: [
-                  for (final project in widget.projects)
-                    DropdownMenuItem(value: project.id, child: Text(project.label)),
-                ],
-                onChanged: (value) => setState(() => _projectId = value),
+            if (widget.fixedClient != null)
+              InputDecorator(
+                decoration: const InputDecoration(labelText: 'Cliente'),
+                child: Text(widget.fixedClient!.name),
+              )
+            else
+              Autocomplete<ClientOption>(
+                displayStringForOption: (option) => option.name,
+                optionsBuilder: (textEditingValue) {
+                  final query = textEditingValue.text.trim().toLowerCase();
+                  if (query.isEmpty) {
+                    return widget.clients;
+                  }
+                  return widget.clients.where(
+                    (client) => client.name.toLowerCase().contains(query),
+                  );
+                },
+                onSelected: (option) {
+                  setState(() {
+                    _clientId = option.id;
+                    _clientError = null;
+                  });
+                  _clientSearchController.value = TextEditingValue(
+                    text: option.name,
+                    selection: TextSelection.collapsed(offset: option.name.length),
+                  );
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  if (controller.text != _clientSearchController.text) {
+                    controller.value = _clientSearchController.value;
+                  }
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: 'Cliente',
+                      hintText: 'Busca y selecciona un cliente',
+                      errorText: _clientError,
+                    ),
+                    onChanged: (value) {
+                      _clientSearchController.value = controller.value;
+                      if (_clientError != null) {
+                        setState(() => _clientError = null);
+                      }
+                      final normalized = value.trim().toLowerCase();
+                      final selected = widget.clients.where(
+                        (client) => client.name.toLowerCase() == normalized,
+                      );
+                      setState(() {
+                        _clientId = selected.isNotEmpty ? selected.first.id : null;
+                      });
+                    },
+                    onSubmitted: (_) => onFieldSubmitted(),
+                  );
+                },
               ),
-              const SizedBox(height: 16),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _projectNameController,
+              decoration: InputDecoration(
+                labelText: 'Proyecto',
+                hintText: 'Escribe el proyecto a realizar',
+                errorText: _projectNameError,
+              ),
+              textCapitalization: TextCapitalization.words,
+              onChanged: (_) {
+                if (_projectNameError != null) {
+                  setState(() => _projectNameError = null);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _universeId,
               decoration: const InputDecoration(labelText: 'Universo'),
@@ -930,17 +1132,32 @@ class _NewQuoteDialogState extends State<_NewQuoteDialog> {
                 for (final universe in widget.catalog.universes)
                   DropdownMenuItem(value: universe.id, child: Text(universe.name)),
               ],
-              onChanged: (value) => setState(() => _universeId = value),
+              onChanged: (value) {
+                setState(() {
+                  _universeId = value;
+                  _projectTypeId = _normalizedProjectTypeId(
+                    universeId: value,
+                    currentProjectTypeId: _projectTypeId,
+                  );
+                  _projectTypeError = null;
+                });
+              },
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _projectTypeId,
-              decoration: const InputDecoration(labelText: 'Tipo de proyecto'),
+              decoration: InputDecoration(
+                labelText: 'Tipo de proyecto',
+                errorText: _projectTypeError,
+              ),
               items: [
-                for (final projectType in widget.catalog.projectTypes)
+                for (final projectType in compatibleProjectTypes)
                   DropdownMenuItem(value: projectType.id, child: Text(projectType.name)),
               ],
-              onChanged: (value) => setState(() => _projectTypeId = value),
+              onChanged: (value) => setState(() {
+                _projectTypeId = value;
+                _projectTypeError = null;
+              }),
             ),
           ],
         ),
@@ -952,12 +1169,39 @@ class _NewQuoteDialogState extends State<_NewQuoteDialog> {
         ),
         FilledButton(
           onPressed: () {
-            if (_projectId == null || _universeId == null || _projectTypeId == null) {
+            final projectName = _normalizedProjectName(_projectNameController.text);
+            if (projectName.isEmpty) {
+              setState(() => _projectNameError = 'Escribe el nombre del proyecto a realizar.');
+              return;
+            }
+            if (projectName.length < _minimumProjectNameLength) {
+              setState(
+                () => _projectNameError =
+                    'El nombre del proyecto debe tener al menos $_minimumProjectNameLength caracteres.',
+              );
+              return;
+            }
+            if (_clientId == null) {
+              setState(() => _clientError = 'Selecciona un cliente valido de la lista.');
+              return;
+            }
+            if (_universeId == null || _projectTypeId == null) {
+              return;
+            }
+            if (!widget.catalog.hasTemplatesForUniverseAndProjectType(
+              _universeId!,
+              _projectTypeId!,
+            )) {
+              setState(
+                () => _projectTypeError =
+                    'No hay conceptos cargados para la combinacion seleccionada.',
+              );
               return;
             }
             Navigator.of(context).pop(
               _NewQuoteResult(
-                projectId: _projectId!,
+                clientId: _clientId!,
+                projectName: projectName,
                 universeId: _universeId!,
                 projectTypeId: _projectTypeId!,
               ),

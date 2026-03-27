@@ -158,6 +158,17 @@ const _seedCatalog = ConceptCatalogSnapshot(
       defaultUnit: 'm2',
       basePrice: 1650,
     ),
+    ConceptTemplateCatalogItem(
+      id: 'seed-t-paneles',
+      universeId: 'seed-u-paneles',
+      projectTypeId: 'seed-pt-remodelacion',
+      closureId: 'seed-cierre-1',
+      name: 'Panel de yeso',
+      baseDescription:
+          'sistema de panel de yeso tipo {tipo_panel}, espesor {espesor}, con estructura {estructura} y acabado {acabado}',
+      defaultUnit: 'm2',
+      basePrice: 290,
+    ),
   ],
   attributes: [
     ConceptAttributeCatalogItem(
@@ -189,6 +200,26 @@ const _seedCatalog = ConceptCatalogSnapshot(
       id: 'seed-a-canceleria-vidrio',
       templateId: 'seed-t-canceleria',
       name: 'vidrio',
+    ),
+    ConceptAttributeCatalogItem(
+      id: 'seed-a-panel-tipo',
+      templateId: 'seed-t-paneles',
+      name: 'tipo_panel',
+    ),
+    ConceptAttributeCatalogItem(
+      id: 'seed-a-panel-espesor',
+      templateId: 'seed-t-paneles',
+      name: 'espesor',
+    ),
+    ConceptAttributeCatalogItem(
+      id: 'seed-a-panel-estructura',
+      templateId: 'seed-t-paneles',
+      name: 'estructura',
+    ),
+    ConceptAttributeCatalogItem(
+      id: 'seed-a-panel-acabado',
+      templateId: 'seed-t-paneles',
+      name: 'acabado',
     ),
   ],
   options: [
@@ -231,6 +262,51 @@ const _seedCatalog = ConceptCatalogSnapshot(
       id: 'seed-o-canceleria-vidrio-templado',
       attributeId: 'seed-a-canceleria-vidrio',
       value: 'Templado 9mm',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-tipo-std',
+      attributeId: 'seed-a-panel-tipo',
+      value: 'STD',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-tipo-rh',
+      attributeId: 'seed-a-panel-tipo',
+      value: 'RH',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-tipo-rf',
+      attributeId: 'seed-a-panel-tipo',
+      value: 'RF',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-espesor-12',
+      attributeId: 'seed-a-panel-espesor',
+      value: '1/2"',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-espesor-58',
+      attributeId: 'seed-a-panel-espesor',
+      value: '5/8"',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-estructura-362',
+      attributeId: 'seed-a-panel-estructura',
+      value: 'Canal y poste 3 5/8"',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-estructura-6',
+      attributeId: 'seed-a-panel-estructura',
+      value: 'Canal y poste 6"',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-acabado-cinta',
+      attributeId: 'seed-a-panel-acabado',
+      value: 'Juntas con cinta y compuesto',
+    ),
+    AttributeOptionCatalogItem(
+      id: 'seed-o-panel-acabado-pintura',
+      attributeId: 'seed-a-panel-acabado',
+      value: 'Listo para pintura',
     ),
   ],
 );

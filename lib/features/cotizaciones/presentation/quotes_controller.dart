@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../levantamiento/presentation/levantamiento_state.dart';
 import 'concepts_catalog_controller.dart';
 import '../data/quotes_repository.dart';
 import '../domain/quote_models.dart';
@@ -157,6 +158,27 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
       for (final item in current)
         if (item.id == quoteId) updated else item,
     ]);
+
+    _clearLinkedLevantamientoIfNeeded(quoteId: quoteId, status: status);
+  }
+
+  void _clearLinkedLevantamientoIfNeeded({
+    required String quoteId,
+    required String status,
+  }) {
+    final shouldClear =
+        status == QuoteStatus.concluded || status == QuoteStatus.actaFinalizada;
+    if (!shouldClear) {
+      return;
+    }
+
+    final active = ref.read(activeLevantamientoProvider);
+    if (active == null || active.quoteId != quoteId) {
+      return;
+    }
+
+    ref.read(activeLevantamientoProvider.notifier).clear();
+    ref.read(levantamientoDraftProvider.notifier).clear();
   }
 
   Future<void> attachApprovalPdf({

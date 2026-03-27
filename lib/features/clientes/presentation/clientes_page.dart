@@ -71,24 +71,15 @@ class _ClientesPageState extends State<ClientesPage> {
     }
 
     try {
-      List<dynamic> rows;
-      try {
-        rows = await client
-            .from('clients')
+      final rows = await client
+        .from('clients')
         .select('id, business_name, contact_name, notes, email, phone, address_line, city, created_at, sector_label, logo_path, is_hidden')
-            .order('created_at', ascending: false);
-      } catch (_) {
-        rows = await client
-            .from('clients')
-        .select('id, business_name, contact_name, notes, email, phone, address_line, city, created_at')
-            .order('created_at', ascending: false);
-      }
+        .order('created_at', ascending: false);
 
-      final knownNames = base.map((item) => item.name.trim().toLowerCase()).toSet();
       final remoteClients = await Future.wait(
         rows.map((row) async {
           final name = (row['business_name'] as String? ?? '').trim();
-          if (name.isEmpty || knownNames.contains(name.toLowerCase())) {
+          if (name.isEmpty) {
             return null;
           }
 
@@ -126,13 +117,21 @@ class _ClientesPageState extends State<ClientesPage> {
         }),
       );
 
-      base.addAll(remoteClients.whereType<ClientRecord>());
+      final mergedByName = <String, ClientRecord>{
+        for (final item in base) _normalizedClientKey(item.name): item,
+      };
+      for (final remote in remoteClients.whereType<ClientRecord>()) {
+        mergedByName[_normalizedClientKey(remote.name)] = remote;
+      }
+      return mergedByName.values.toList();
     } catch (_) {
       return base;
     }
 
     return base;
   }
+
+  String _normalizedClientKey(String value) => value.trim().toLowerCase();
 
   Future<void> _toggleHidden(ClientRecord client) async {
     final nextHidden = !client.isHidden;
