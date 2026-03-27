@@ -133,18 +133,14 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
         .where((quote) => projectIds.contains(quote.projectId))
         .toList();
 
-    final activeProjectIds = <String>{
-      for (final quote in clientQuotes)
-        if (quote.isApproved || quote.isActaFinalizada || quote.isPaid) quote.projectId,
-    };
-
-    final pendingQuotes = clientQuotes.where((quote) => quote.isDraft || quote.isConcluded).length;
-    final declinedQuotes = clientQuotes.where((quote) => quote.isDeclined).length;
+    final payableQuotes = clientQuotes.where((quote) => quote.isActaFinalizada).length;
+    final concludedQuotes = clientQuotes.where((quote) => quote.isConcluded).length;
+    final approvedQuotes = clientQuotes.where((quote) => quote.isApproved).length;
 
     return _ClientQuoteCounters(
-      activeProjects: activeProjectIds.length,
-      pendingQuotes: pendingQuotes,
-      declinedQuotes: declinedQuotes,
+      payableQuotes: payableQuotes,
+      concludedQuotes: concludedQuotes,
+      approvedQuotes: approvedQuotes,
     );
   }
 
@@ -1067,22 +1063,22 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 children: [
                   Expanded(
                     child: _SummaryMetric(
-                      label: 'Proyectos activos',
-                      value: widget.quoteCounters.displayActiveProjects,
+                      label: 'Cotizaciones por pagar',
+                      value: widget.quoteCounters.displayPayableQuotes,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: _SummaryMetric(
-                      label: 'Cotizaciones pendientes',
-                      value: widget.quoteCounters.displayPendingQuotes,
+                      label: 'Cotizaciones concluidas',
+                      value: widget.quoteCounters.displayConcludedQuotes,
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: _SummaryMetric(
-                      label: 'Cotizaciones declinadas',
-                      value: widget.quoteCounters.displayDeclinedQuotes,
+                      label: 'Cotizaciones aprobadas',
+                      value: widget.quoteCounters.displayApprovedQuotes,
                     ),
                   ),
                 ],
@@ -1366,27 +1362,27 @@ class _SummaryMetric extends StatelessWidget {
 
 class _ClientQuoteCounters {
   const _ClientQuoteCounters({
-    required this.activeProjects,
-    required this.pendingQuotes,
-    required this.declinedQuotes,
+    required this.payableQuotes,
+    required this.concludedQuotes,
+    required this.approvedQuotes,
   }) : isLoading = false;
 
   const _ClientQuoteCounters.loading()
-      : activeProjects = 0,
-        pendingQuotes = 0,
-        declinedQuotes = 0,
+      : payableQuotes = 0,
+        concludedQuotes = 0,
+        approvedQuotes = 0,
         isLoading = true;
 
-  final int activeProjects;
-  final int pendingQuotes;
-  final int declinedQuotes;
+  final int payableQuotes;
+  final int concludedQuotes;
+  final int approvedQuotes;
   final bool isLoading;
 
-  String get displayActiveProjects => isLoading ? '--' : activeProjects.toString().padLeft(2, '0');
+  String get displayPayableQuotes => isLoading ? '--' : payableQuotes.toString().padLeft(2, '0');
 
-  String get displayPendingQuotes => isLoading ? '--' : pendingQuotes.toString().padLeft(2, '0');
+  String get displayConcludedQuotes => isLoading ? '--' : concludedQuotes.toString().padLeft(2, '0');
 
-  String get displayDeclinedQuotes => isLoading ? '--' : declinedQuotes.toString().padLeft(2, '0');
+  String get displayApprovedQuotes => isLoading ? '--' : approvedQuotes.toString().padLeft(2, '0');
 }
 
 class _EditableLogoCard extends StatelessWidget {

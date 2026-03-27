@@ -45,6 +45,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   String? _selectedUniverseId;
   String? _selectedProjectTypeId;
   bool _isCreatingQuote = false;
+  bool _isProcessingPhotos = false;
   final List<_PickedMedia> _photos = [];
   ProviderSubscription<ActiveLevantamientoSession?>? _activeSessionSubscription;
 
@@ -187,71 +188,78 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       return;
     }
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-      withData: true,
-    );
-
-    if (!mounted || result == null || result.files.isEmpty) {
-      return;
-    }
-
-    final selectedFiles = result.files.toList();
-    final acceptedFiles = selectedFiles.take(remaining).toList();
-    final normalizedMedia = <_PickedMedia>[];
-    final rejectedMessages = <String>[];
-    for (final file in acceptedFiles) {
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        continue;
-      }
-      try {
-        final optimized = await optimizeImageForDocument(
-          inputBytes: bytes,
-          fileName: file.name,
-          profile: ImageOptimizationProfile.gridDocument,
-        );
-        normalizedMedia.add(
-          _PickedMedia(
-            name: optimized.fileName,
-            bytes: optimized.bytes,
-            size: optimized.bytes.length,
-            mimeType: optimized.mimeType,
-          ),
-        );
-      } on ImageOptimizationException catch (error) {
-        rejectedMessages.add('${file.name}: ${error.message}');
-      }
-    }
-
-    if (normalizedMedia.isNotEmpty) {
-      setState(() {
-        _photos.addAll(normalizedMedia);
-      });
-      _persistDraftSnapshot();
-    }
-
-    if (acceptedFiles.length < selectedFiles.length) {
-      showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
-      return;
-    }
-    if (normalizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
-      showRemaMessage(
-        context,
-        'Se agregaron ${normalizedMedia.length} imagenes optimizadas al levantamiento.',
+    setState(() => _isProcessingPhotos = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true,
       );
-      return;
-    }
-    if (normalizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
-      showRemaMessage(
-        context,
-        'Se agregaron ${normalizedMedia.length} imagenes optimizadas. ${rejectedMessages.first}',
-      );
-      return;
-    }
-    if (rejectedMessages.isNotEmpty) {
-      showRemaMessage(context, rejectedMessages.first);
+
+      if (!mounted || result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final selectedFiles = result.files.toList();
+      final acceptedFiles = selectedFiles.take(remaining).toList();
+      final normalizedMedia = <_PickedMedia>[];
+      final rejectedMessages = <String>[];
+      for (final file in acceptedFiles) {
+        final bytes = file.bytes;
+        if (bytes == null || bytes.isEmpty) {
+          continue;
+        }
+        try {
+          final optimized = await optimizeImageForDocument(
+            inputBytes: bytes,
+            fileName: file.name,
+            profile: ImageOptimizationProfile.gridDocument,
+          );
+          normalizedMedia.add(
+            _PickedMedia(
+              name: optimized.fileName,
+              bytes: optimized.bytes,
+              size: optimized.bytes.length,
+              mimeType: optimized.mimeType,
+            ),
+          );
+        } on ImageOptimizationException catch (error) {
+          rejectedMessages.add('${file.name}: ${error.message}');
+        }
+      }
+
+      if (normalizedMedia.isNotEmpty) {
+        setState(() {
+          _photos.addAll(normalizedMedia);
+        });
+        _persistDraftSnapshot();
+      }
+
+      if (acceptedFiles.length < selectedFiles.length) {
+        showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
+        return;
+      }
+      if (normalizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
+        showRemaMessage(
+          context,
+          'Se agregaron ${normalizedMedia.length} imagenes optimizadas al levantamiento.',
+        );
+        return;
+      }
+      if (normalizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
+        showRemaMessage(
+          context,
+          'Se agregaron ${normalizedMedia.length} imagenes optimizadas. ${rejectedMessages.first}',
+        );
+        return;
+      }
+      if (rejectedMessages.isNotEmpty) {
+        showRemaMessage(context, rejectedMessages.first);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingPhotos = false);
+      }
     }
   }
 
@@ -1048,6 +1056,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           );
           final media = _EvidencePanel(
             photos: _photos,
+            isProcessing: _isProcessingPhotos,
             onAddPhotos: _pickPhotos,
             onRemove: _removePhoto,
           );
@@ -1284,11 +1293,13 @@ String _formatDate(DateTime value) {
 class _EvidencePanel extends StatelessWidget {
   const _EvidencePanel({
     required this.photos,
+    required this.isProcessing,
     required this.onAddPhotos,
     required this.onRemove,
   });
 
   final List<_PickedMedia> photos;
+  final bool isProcessing;
   final VoidCallback onAddPhotos;
   final ValueChanged<_PickedMedia> onRemove;
 
@@ -1315,7 +1326,10 @@ class _EvidencePanel extends StatelessWidget {
                   photo: photo,
                   onRemove: () => onRemove(photo),
                 ),
-              _AddPhotoTile(onTap: onAddPhotos),
+              _AddPhotoTile(
+                isProcessing: isProcessing,
+                onTap: isProcessing ? null : onAddPhotos,
+              ),
             ],
           ),
         ],
@@ -1484,9 +1498,10 @@ class _PhotoTile extends StatelessWidget {
 }
 
 class _AddPhotoTile extends StatelessWidget {
-  const _AddPhotoTile({required this.onTap});
+  const _AddPhotoTile({required this.onTap, required this.isProcessing});
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isProcessing;
 
   @override
   Widget build(BuildContext context) {
@@ -1500,12 +1515,19 @@ class _AddPhotoTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: RemaColors.outlineVariant),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_a_photo_outlined, size: 32, color: RemaColors.onSurfaceVariant),
-            SizedBox(height: 8),
-            Text('Anadir'),
+            if (isProcessing)
+              const SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              )
+            else
+              const Icon(Icons.add_a_photo_outlined, size: 32, color: RemaColors.onSurfaceVariant),
+            const SizedBox(height: 8),
+            Text(isProcessing ? 'Cargando...' : 'Anadir'),
           ],
         ),
       ),

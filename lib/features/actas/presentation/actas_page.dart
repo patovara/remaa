@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -354,9 +356,14 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   ClientRecord? _loadedClient;
   bool _isLoadingClient = false;
   bool _isGeneratingPdf = false;
+  double _pdfProgressValue = 0;
+  Timer? _pdfProgressTimer;
   String? _pdfGenerationMessage;
   String? _missingResponsiblesError;
   bool _actaFinalizada = false;
+  bool _isProcessingSinglePhoto = false;
+  String? _processingSingleStage;
+  bool _isProcessingDurantePhotos = false;
 
   bool get _isAdmin => _role == _ActaRole.admin;
 
@@ -604,6 +611,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       final bytes = await _runPdfGeneration(
         message: 'Tu documento se esta generando, te notificaremos cuando este listo.',
         task: _buildPdfBytes,
+        estimatedDuration: const Duration(seconds: 8),
       );
       final order = _numeroPedidoController.text.trim().isEmpty
           ? widget.quoteId!
@@ -822,6 +830,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
   @override
   void dispose() {
+    _pdfProgressTimer?.cancel();
     _clienteController.dispose();
     _razonSocialController.dispose();
     _direccionController.dispose();
@@ -840,70 +849,47 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     super.dispose();
   }
 
-  Future<void> _pickSinglePhoto(void Function(_PickedMedia?) setTarget) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-      withData: true,
-    );
-
-    if (!mounted || result == null || result.files.isEmpty) {
-      return;
-    }
-
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) {
-      showRemaMessage(context, 'No se pudo leer la imagen seleccionada.');
-      return;
-    }
-    OptimizedImageResult optimized;
-    try {
-      optimized = await optimizeImageForDocument(
-        inputBytes: bytes,
-        fileName: file.name,
-        profile: ImageOptimizationProfile.mainDocument,
-      );
-    } on ImageOptimizationException catch (error) {
-      if (mounted) {
-        showRemaMessage(context, error.message);
-      }
-      return;
-    }
-
+  Future<void> _pickSinglePhoto({
+    required String stage,
+    required void Function(_PickedMedia?) setTarget,
+  }) async {
     setState(() {
-      setTarget(
-        _PickedMedia(
-          name: optimized.fileName,
-          bytes: optimized.bytes,
-          size: optimized.bytes.length,
-          mimeType: optimized.mimeType,
-        ),
-      );
+      _isProcessingSinglePhoto = true;
+      _processingSingleStage = stage;
     });
-  }
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
 
-  Future<void> _pickMultipleDurante() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-      withData: true,
-    );
+      if (!mounted || result == null || result.files.isEmpty) {
+        return;
+      }
 
-    if (!mounted || result == null || result.files.isEmpty) {
-      return;
-    }
-
-    final optimizedMedia = <_PickedMedia>[];
-    final rejectedMessages = <String>[];
-    for (final file in result.files.where((item) => item.bytes != null)) {
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        showRemaMessage(context, 'No se pudo leer la imagen seleccionada.');
+        return;
+      }
+      OptimizedImageResult optimized;
       try {
-        final optimized = await optimizeImageForDocument(
-          inputBytes: file.bytes!,
+        optimized = await optimizeImageForDocument(
+          inputBytes: bytes,
           fileName: file.name,
-          profile: ImageOptimizationProfile.gridDocument,
+          profile: ImageOptimizationProfile.mainDocument,
         );
-        optimizedMedia.add(
+      } on ImageOptimizationException catch (error) {
+        if (mounted) {
+          showRemaMessage(context, error.message);
+        }
+        return;
+      }
+
+      setState(() {
+        setTarget(
           _PickedMedia(
             name: optimized.fileName,
             bytes: optimized.bytes,
@@ -911,31 +897,94 @@ class _ActasPageState extends ConsumerState<ActasPage> {
             mimeType: optimized.mimeType,
           ),
         );
-      } on ImageOptimizationException catch (error) {
-        rejectedMessages.add('${file.name}: ${error.message}');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingSinglePhoto = false;
+          _processingSingleStage = null;
+        });
       }
     }
+  }
 
-    if (optimizedMedia.isNotEmpty) {
-      setState(() {
-        _fotosDurante.addAll(optimizedMedia);
-      });
-    }
-
-    if (optimizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
-      showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos optimizadas de avance.');
-      return;
-    }
-    if (optimizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
-      showRemaMessage(
-        context,
-        'Se agregaron ${optimizedMedia.length} fotos optimizadas. ${rejectedMessages.first}',
+  Future<void> _pickMultipleDurante() async {
+    setState(() => _isProcessingDurantePhotos = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true,
       );
-      return;
+
+      if (!mounted || result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final optimizedMedia = <_PickedMedia>[];
+      final rejectedMessages = <String>[];
+      for (final file in result.files.where((item) => item.bytes != null)) {
+        try {
+          final optimized = await optimizeImageForDocument(
+            inputBytes: file.bytes!,
+            fileName: file.name,
+            profile: ImageOptimizationProfile.gridDocument,
+          );
+          optimizedMedia.add(
+            _PickedMedia(
+              name: optimized.fileName,
+              bytes: optimized.bytes,
+              size: optimized.bytes.length,
+              mimeType: optimized.mimeType,
+            ),
+          );
+        } on ImageOptimizationException catch (error) {
+          rejectedMessages.add('${file.name}: ${error.message}');
+        }
+      }
+
+      if (optimizedMedia.isNotEmpty) {
+        setState(() {
+          _fotosDurante.addAll(optimizedMedia);
+        });
+      }
+
+      if (optimizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
+        showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos optimizadas de avance.');
+        return;
+      }
+      if (optimizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
+        showRemaMessage(
+          context,
+          'Se agregaron ${optimizedMedia.length} fotos optimizadas. ${rejectedMessages.first}',
+        );
+        return;
+      }
+      if (rejectedMessages.isNotEmpty) {
+        showRemaMessage(context, rejectedMessages.first);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingDurantePhotos = false);
+      }
     }
-    if (rejectedMessages.isNotEmpty) {
-      showRemaMessage(context, rejectedMessages.first);
-    }
+  }
+
+  void _startPdfProgressSimulation(Duration estimatedDuration) {
+    _pdfProgressTimer?.cancel();
+    _pdfProgressValue = 0;
+    const tick = Duration(milliseconds: 120);
+    final totalTicks =
+        (estimatedDuration.inMilliseconds / tick.inMilliseconds).clamp(1, 100000).round();
+    var currentTick = 0;
+    _pdfProgressTimer = Timer.periodic(tick, (_) {
+      if (!mounted) {
+        return;
+      }
+      currentTick += 1;
+      final progress = (currentTick / totalTicks) * 0.90;
+      setState(() => _pdfProgressValue = progress.clamp(0.0, 0.90));
+    });
   }
 
   Future<void> _selectDate(TextEditingController controller) async {
@@ -1288,6 +1337,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     final bytes = await _runPdfGeneration(
       message: 'Generando previsualizacion del acta...',
       task: _buildPdfBytes,
+      estimatedDuration: const Duration(seconds: 7),
     );
     if (!mounted) {
       return;
@@ -1308,6 +1358,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     final bytes = await _runPdfGeneration(
       message: 'Generando PDF final del acta...',
       task: _buildPdfBytes,
+      estimatedDuration: const Duration(seconds: 8),
     );
     final rawOrder = _numeroPedidoController.text.trim();
     final order = rawOrder.isEmpty ? 'sin_pedido' : rawOrder.replaceAll(' ', '_');
@@ -1326,20 +1377,30 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   Future<T> _runPdfGeneration<T>({
     required String message,
     required Future<T> Function() task,
+    required Duration estimatedDuration,
   }) async {
     if (mounted) {
       setState(() {
         _isGeneratingPdf = true;
         _pdfGenerationMessage = message;
+        _pdfProgressValue = 0;
       });
+      _startPdfProgressSimulation(estimatedDuration);
     }
     try {
-      return await task();
+      final result = await task();
+      if (mounted) {
+        setState(() => _pdfProgressValue = 1);
+      }
+      return result;
     } finally {
+      _pdfProgressTimer?.cancel();
+      _pdfProgressTimer = null;
       if (mounted) {
         setState(() {
           _isGeneratingPdf = false;
           _pdfGenerationMessage = null;
+          _pdfProgressValue = 0;
         });
       }
     }
@@ -1487,9 +1548,12 @@ class _ActasPageState extends ConsumerState<ActasPage> {
               fotoAntes: _fotoAntes,
               fotoDespues: _fotoDespues,
               fotosDurante: _fotosDurante,
-              onPickIngreso: () => _pickSinglePhoto((value) => _fotoIngreso = value),
-              onPickAntes: () => _pickSinglePhoto((value) => _fotoAntes = value),
-              onPickDespues: () => _pickSinglePhoto((value) => _fotoDespues = value),
+              isProcessingSinglePhoto: _isProcessingSinglePhoto,
+              processingSingleStage: _processingSingleStage,
+              isProcessingDurantePhotos: _isProcessingDurantePhotos,
+              onPickIngreso: () => _pickSinglePhoto(stage: 'ingreso', setTarget: (value) => _fotoIngreso = value),
+              onPickAntes: () => _pickSinglePhoto(stage: 'antes', setTarget: (value) => _fotoAntes = value),
+              onPickDespues: () => _pickSinglePhoto(stage: 'despues', setTarget: (value) => _fotoDespues = value),
               onPickDurante: _pickMultipleDurante,
               onRemoveDurante: (item) => setState(() => _fotosDurante.remove(item)),
               onClearSingle: (stage) {
@@ -1646,7 +1710,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
           ),
-          pw.SizedBox(height: 3),
           pw.Text(
             subtitle,
             textAlign: pw.TextAlign.center,
@@ -1954,6 +2017,9 @@ class _PhotoReportStep extends StatelessWidget {
     required this.fotoAntes,
     required this.fotoDespues,
     required this.fotosDurante,
+    required this.isProcessingSinglePhoto,
+    required this.processingSingleStage,
+    required this.isProcessingDurantePhotos,
     required this.onPickIngreso,
     required this.onPickAntes,
     required this.onPickDespues,
@@ -1967,6 +2033,9 @@ class _PhotoReportStep extends StatelessWidget {
   final _PickedMedia? fotoAntes;
   final _PickedMedia? fotoDespues;
   final List<_PickedMedia> fotosDurante;
+  final bool isProcessingSinglePhoto;
+  final String? processingSingleStage;
+  final bool isProcessingDurantePhotos;
   final VoidCallback onPickIngreso;
   final VoidCallback onPickAntes;
   final VoidCallback onPickDespues;
@@ -1988,6 +2057,7 @@ class _PhotoReportStep extends StatelessWidget {
                 title: 'Ingreso a las instalaciones',
                 subtitle: 'Pagina 2',
                 media: fotoIngreso,
+                isProcessing: isProcessingSinglePhoto && processingSingleStage == 'ingreso',
                 onPick: onPickIngreso,
                 onClear: () => onClearSingle('ingreso'),
               ),
@@ -1996,6 +2066,7 @@ class _PhotoReportStep extends StatelessWidget {
                 title: 'Antes (levantamiento)',
                 subtitle: 'Pagina 3',
                 media: fotoAntes,
+                isProcessing: isProcessingSinglePhoto && processingSingleStage == 'antes',
                 onPick: onPickAntes,
                 onClear: () => onClearSingle('antes'),
               ),
@@ -2004,6 +2075,7 @@ class _PhotoReportStep extends StatelessWidget {
                 title: 'Despues (entrega final)',
                 subtitle: 'Pagina 5',
                 media: fotoDespues,
+                isProcessing: isProcessingSinglePhoto && processingSingleStage == 'despues',
                 onPick: onPickDespues,
                 onClear: () => onClearSingle('despues'),
               ),
@@ -2016,9 +2088,15 @@ class _PhotoReportStep extends StatelessWidget {
                     ),
                   ),
                   FilledButton.tonalIcon(
-                    onPressed: onPickDurante,
-                    icon: const Icon(Icons.add_a_photo_outlined),
-                    label: const Text('Agregar fotos'),
+                    onPressed: isProcessingDurantePhotos ? null : onPickDurante,
+                    icon: isProcessingDurantePhotos
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_a_photo_outlined),
+                    label: Text(isProcessingDurantePhotos ? 'Cargando...' : 'Agregar fotos'),
                   ),
                 ],
               ),
@@ -2181,6 +2259,7 @@ class _SinglePhotoCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.media,
+    required this.isProcessing,
     required this.onPick,
     required this.onClear,
   });
@@ -2188,6 +2267,7 @@ class _SinglePhotoCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final _PickedMedia? media;
+  final bool isProcessing;
   final VoidCallback onPick;
   final VoidCallback onClear;
 
@@ -2212,9 +2292,15 @@ class _SinglePhotoCard extends StatelessWidget {
                 ),
               ),
               TextButton.icon(
-                onPressed: onPick,
-                icon: const Icon(Icons.upload_file_outlined),
-                label: const Text('Cargar'),
+                onPressed: isProcessing ? null : onPick,
+                icon: isProcessing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file_outlined),
+                label: Text(isProcessing ? 'Cargando...' : 'Cargar'),
               ),
             ],
           ),
