@@ -90,76 +90,132 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
               const SizedBox(height: 16),
               _QuotesMetrics(quotes: filtered),
               const SizedBox(height: 24),
-              RemaPanel(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24),
-                      child: _QuoteTableHeader(),
-                    ),
-                    if (filtered.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text('No hay cotizaciones para mostrar.'),
-                      )
-                    else
-                      for (final quote in filtered)
-                        _QuoteRow(
-                          quote: quote,
-                          onViewProjectDescription: () =>
-                              _showProjectDescription(context, quote, projectById[quote.projectId]),
-                          onEdit: () => context.go('/presupuesto/${quote.id}'),
-                          onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
-                            onAttachPdf: quote.isConcluded
-                              ? () => _attachApprovalPdf(quote, projectById[quote.projectId])
-                              : null,
-                          onPreviewPdf: quote.hasApprovalPdf
-                              ? () => _previewApprovalPdf(context, quote)
-                              : null,
-                            onPreviewActa: quote.isActaFinalizada || quote.isPaid
-                              ? () => _previewFinalActa(context, quote)
-                              : null,
-                            onDownloadActa: quote.isActaFinalizada || quote.isPaid
-                              ? () => _downloadFinalActa(context, quote)
-                              : null,
-                            onShareActa: quote.isActaFinalizada || quote.isPaid
-                              ? () => _shareFinalActa(context, quote)
-                              : null,
-                            onMarkPaid: quote.isActaFinalizada
-                              ? () => _changeStatus(quote.id, QuoteStatus.paid)
-                              : null,
-                            onGoToActas: quote.isApproved
-                              ? () => _goToActas(context, quote, projectById[quote.projectId])
-                              : null,
-                            onConclude: quote.isDraft
-                              ? () => _changeStatus(quote.id, QuoteStatus.concluded)
-                              : null,
-                            onApprove: quote.isConcluded
-                              ? () => _changeStatus(quote.id, QuoteStatus.approved)
-                              : null,
-                            onDecline: !quote.isDeclined &&
-                              !quote.isActaFinalizada &&
-                              !quote.hasApprovalPdf
-                              ? () => _changeStatus(quote.id, QuoteStatus.declined)
-                              : null,
-                            onReactivate: (quote.isDeclined || quote.isConcluded)
-                              ? () => _changeStatus(quote.id, QuoteStatus.draft)
-                              : null,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final mobile = constraints.maxWidth < 600;
+
+                  if (mobile) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 12),
+                        if (filtered.isEmpty)
+                          const Text('No hay cotizaciones para mostrar.')
+                        else
+                          for (final quote in filtered)
+                            _QuoteMobileCard(
+                              quote: quote,
+                              onViewProjectDescription: () =>
+                                  _showProjectDescription(context, quote, projectById[quote.projectId]),
+                              onEdit: () => context.go('/presupuesto/${quote.id}'),
+                              onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
+                              onAttachPdf: quote.isConcluded
+                                  ? () => _attachApprovalPdf(quote, projectById[quote.projectId])
+                                  : null,
+                              onPreviewPdf: quote.hasApprovalPdf
+                                  ? () => _previewApprovalPdf(context, quote)
+                                  : null,
+                              onPreviewActa: quote.isActaFinalizada || quote.isPaid
+                                  ? () => _previewFinalActa(context, quote)
+                                  : null,
+                              onDownloadActa: quote.isActaFinalizada || quote.isPaid
+                                  ? () => _downloadFinalActa(context, quote)
+                                  : null,
+                              onShareActa: quote.isActaFinalizada || quote.isPaid
+                                  ? () => _shareFinalActa(context, quote)
+                                  : null,
+                              onMarkPaid: quote.isActaFinalizada
+                                  ? () => _changeStatus(quote.id, QuoteStatus.paid)
+                                  : null,
+                              onGoToActas: quote.isApproved
+                                  ? () => _goToActas(context, quote, projectById[quote.projectId])
+                                  : null,
+                              onConclude: quote.isDraft
+                                  ? () => _changeStatus(quote.id, QuoteStatus.concluded)
+                                  : null,
+                              onApprove: quote.isConcluded
+                                  ? () => _changeStatus(quote.id, QuoteStatus.approved)
+                                  : null,
+                              onDecline: !quote.isDeclined &&
+                                  !quote.isActaFinalizada &&
+                                  !quote.hasApprovalPdf
+                                  ? () => _changeStatus(quote.id, QuoteStatus.declined)
+                                  : null,
+                              onReactivate: (quote.isDeclined || quote.isConcluded)
+                                  ? () => _changeStatus(quote.id, QuoteStatus.draft)
+                                  : null,
+                            ),
+                      ],
+                    );
+                  }
+
+                  return RemaPanel(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                          child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
                         ),
-                  ],
-                ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 24),
+                          child: _QuoteTableHeader(),
+                        ),
+                        if (filtered.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No hay cotizaciones para mostrar.'),
+                          )
+                        else
+                          for (final quote in filtered)
+                            _QuoteRow(
+                              quote: quote,
+                              onViewProjectDescription: () =>
+                                  _showProjectDescription(context, quote, projectById[quote.projectId]),
+                              onEdit: () => context.go('/presupuesto/${quote.id}'),
+                              onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
+                              onAttachPdf: quote.isConcluded
+                                  ? () => _attachApprovalPdf(quote, projectById[quote.projectId])
+                                  : null,
+                              onPreviewPdf: quote.hasApprovalPdf
+                                  ? () => _previewApprovalPdf(context, quote)
+                                  : null,
+                              onPreviewActa: quote.isActaFinalizada || quote.isPaid
+                                  ? () => _previewFinalActa(context, quote)
+                                  : null,
+                              onDownloadActa: quote.isActaFinalizada || quote.isPaid
+                                  ? () => _downloadFinalActa(context, quote)
+                                  : null,
+                              onShareActa: quote.isActaFinalizada || quote.isPaid
+                                  ? () => _shareFinalActa(context, quote)
+                                  : null,
+                              onMarkPaid: quote.isActaFinalizada
+                                  ? () => _changeStatus(quote.id, QuoteStatus.paid)
+                                  : null,
+                              onGoToActas: quote.isApproved
+                                  ? () => _goToActas(context, quote, projectById[quote.projectId])
+                                  : null,
+                              onConclude: quote.isDraft
+                                  ? () => _changeStatus(quote.id, QuoteStatus.concluded)
+                                  : null,
+                              onApprove: quote.isConcluded
+                                  ? () => _changeStatus(quote.id, QuoteStatus.approved)
+                                  : null,
+                              onDecline: !quote.isDeclined &&
+                                  !quote.isActaFinalizada &&
+                                  !quote.hasApprovalPdf
+                                  ? () => _changeStatus(quote.id, QuoteStatus.declined)
+                                  : null,
+                              onReactivate: (quote.isDeclined || quote.isConcluded)
+                                  ? () => _changeStatus(quote.id, QuoteStatus.draft)
+                                  : null,
+                            ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ],
           );
@@ -584,6 +640,9 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 }
 
+bool _isMobile(BuildContext context) => MediaQuery.of(context).size.width < 600;
+bool _isDesktop(BuildContext context) => MediaQuery.of(context).size.width >= 1024;
+
 class _QuotesMetrics extends StatelessWidget {
   const _QuotesMetrics({required this.quotes});
 
@@ -626,6 +685,7 @@ class _QuotesMetrics extends StatelessWidget {
 
         if (constraints.maxWidth < 960) {
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final tile in tiles) ...[
                 tile,
@@ -810,30 +870,38 @@ class _QuoteRow extends StatelessWidget {
             child: Text(
               quote.quoteNumber,
               style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
-          Expanded(flex: 2, child: Text(_money(quote.total))),
           Expanded(
             flex: 2,
-            child: Row(
+            child: Text(
+              _money(quote.total),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Align(alignment: Alignment.centerLeft, child: _StatusBadge(status: quote.status)),
-                const SizedBox(width: 8),
+                _StatusBadge(status: quote.status),
                 Icon(
                   quote.hasApprovalPdf ? Icons.picture_as_pdf : Icons.picture_as_pdf_outlined,
                   color: quote.hasApprovalPdf ? Colors.green : Colors.grey,
                   size: 18,
                 ),
-                if (quote.hasApprovalPdf) ...[
-                  const SizedBox(width: 6),
-                  Icon(
+                if (quote.hasApprovalPdf)
+                  const Icon(
                     Icons.visibility_outlined,
                     color: Colors.blue,
                     size: 18,
                   ),
-                ],
-                if (quote.status == 'acta_finalizada') ...[
-                  const SizedBox(width: 6),
+                if (quote.status == 'acta_finalizada')
                   const Tooltip(
                     message: 'Pago pendiente',
                     child: Icon(
@@ -842,14 +910,14 @@ class _QuoteRow extends StatelessWidget {
                       size: 20,
                     ),
                   ),
-                ],
               ],
             ),
           ),
           Expanded(
             flex: 2,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
               children: [
                 if (quote.isActaFinalizada || quote.isPaid) ...[
                   IconButton(
@@ -938,6 +1006,166 @@ class _QuoteRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuoteMobileCard extends StatelessWidget {
+  const _QuoteMobileCard({
+    required this.quote,
+    required this.onViewProjectDescription,
+    required this.onEdit,
+    required this.onShare,
+    this.onAttachPdf,
+    this.onPreviewPdf,
+    this.onPreviewActa,
+    this.onDownloadActa,
+    this.onShareActa,
+    this.onMarkPaid,
+    this.onConclude,
+    this.onApprove,
+    this.onDecline,
+    this.onReactivate,
+    this.onGoToActas,
+  });
+
+  final QuoteRecord quote;
+  final VoidCallback onViewProjectDescription;
+  final VoidCallback onEdit;
+  final VoidCallback onShare;
+  final VoidCallback? onAttachPdf;
+  final VoidCallback? onPreviewPdf;
+  final VoidCallback? onPreviewActa;
+  final VoidCallback? onDownloadActa;
+  final VoidCallback? onShareActa;
+  final VoidCallback? onMarkPaid;
+  final VoidCallback? onConclude;
+  final VoidCallback? onApprove;
+  final VoidCallback? onDecline;
+  final VoidCallback? onReactivate;
+  final VoidCallback? onGoToActas;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      quote.quoteNumber,
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _StatusBadge(status: quote.status),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(_money(quote.total)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  if (quote.isActaFinalizada || quote.isPaid) ...[
+                    IconButton(
+                      onPressed: onShareActa,
+                      icon: const Icon(Icons.share_outlined),
+                      tooltip: 'Compartir acta final',
+                    ),
+                    IconButton(
+                      onPressed: onPreviewActa,
+                      icon: const Icon(Icons.visibility),
+                      tooltip: 'Previsualizar acta final',
+                      color: Colors.blue,
+                    ),
+                    IconButton(
+                      onPressed: onDownloadActa,
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      tooltip: 'Descargar acta final',
+                      color: Colors.deepPurple,
+                    ),
+                    if (quote.isActaFinalizada)
+                      IconButton(
+                        onPressed: onMarkPaid,
+                        icon: const Icon(Icons.payments_outlined),
+                        tooltip: 'Marcar como pagada',
+                        color: Colors.green,
+                      ),
+                  ] else ...[
+                    IconButton(
+                      onPressed: onViewProjectDescription,
+                      icon: const Icon(Icons.description_outlined),
+                      tooltip: 'Ver descripcion del levantamiento',
+                      color: RemaColors.primaryDark,
+                    ),
+                    IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar'),
+                    IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
+                    if (onAttachPdf != null)
+                      IconButton(
+                        onPressed: onAttachPdf,
+                        icon: const Icon(Icons.attach_file),
+                        tooltip: quote.hasApprovalPdf ? 'Reemplazar PDF pedido' : 'Adjuntar PDF pedido',
+                      ),
+                    if (onConclude != null)
+                      IconButton(
+                        onPressed: onConclude,
+                        icon: const Icon(Icons.task_alt_outlined),
+                        tooltip: 'Concluir cotización',
+                        color: Colors.orange,
+                      ),
+                    if (onPreviewPdf != null)
+                      IconButton(
+                        onPressed: onPreviewPdf,
+                        icon: const Icon(Icons.visibility),
+                        tooltip: 'Previsualizar PDF',
+                        color: Colors.blue,
+                      ),
+                    if (onApprove != null)
+                      IconButton(
+                        onPressed: onApprove,
+                        icon: const Icon(Icons.check_circle_outline),
+                        tooltip: 'Aprobar',
+                        color: Colors.green,
+                      ),
+                    if (onDecline != null)
+                      IconButton(
+                        onPressed: onDecline,
+                        icon: const Icon(Icons.cancel_outlined),
+                        tooltip: 'Declinar',
+                        color: Colors.red,
+                      ),
+                    if (onReactivate != null)
+                      IconButton(
+                        onPressed: onReactivate,
+                        icon: const Icon(Icons.undo),
+                        tooltip: quote.isConcluded ? 'Reabrir cotización' : 'Reactivar cotización',
+                        color: Colors.orange,
+                      ),
+                    if (onGoToActas != null)
+                      IconButton(
+                        onPressed: onGoToActas,
+                        icon: const Icon(Icons.assignment_outlined),
+                        tooltip: 'Ir a ACTAS',
+                        color: Colors.purple,
+                      ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

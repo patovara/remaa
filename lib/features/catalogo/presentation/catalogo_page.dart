@@ -713,6 +713,7 @@ class _SummaryStrip extends StatelessWidget {
         ];
         if (constraints.maxWidth < 960) {
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final tile in tiles) ...[
                 tile,
@@ -937,7 +938,10 @@ class _TemplatesPanel extends StatelessWidget {
             onChanged: onSearchChanged,
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SizedBox(
                 width: 220,
@@ -952,7 +956,6 @@ class _TemplatesPanel extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
               FilledButton.tonalIcon(
                 onPressed: () => onBulkAdjust(templates),
                 icon: const Icon(Icons.auto_fix_high_outlined),

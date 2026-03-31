@@ -43,8 +43,10 @@ class PresupuestoPage extends ConsumerWidget {
     return PageFrame(
       title: 'Presupuesto',
       subtitle: 'Vista formal de cotizacion ajustada para revision y envio.',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+      trailing: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (currentQuote != null && currentQuote.isDraft)
             FilledButton.icon(
@@ -57,7 +59,7 @@ class PresupuestoPage extends ConsumerWidget {
               icon: const Icon(Icons.task_alt_outlined),
               label: const Text('Concluir'),
             ),
-          if (currentQuote != null && currentQuote.isConcluded) ...[
+          if (currentQuote != null && currentQuote.isConcluded)
             OutlinedButton.icon(
               onPressed: () => _changeQuoteStatus(
                 context,
@@ -68,8 +70,6 @@ class PresupuestoPage extends ConsumerWidget {
               icon: const Icon(Icons.undo),
               label: const Text('Reabrir'),
             ),
-            const SizedBox(width: 8),
-          ],
           IconButton(
             onPressed: currentQuote != null
                 ? () async {
@@ -328,8 +328,8 @@ class PresupuestoPage extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Descripcion de levantamiento'),
-        content: SizedBox(
-          width: 560,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
           child: SingleChildScrollView(
             child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -679,24 +679,24 @@ class _BudgetView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Image.asset('assets/images/logo_remaa.png', height: 56),
-                        const SizedBox(height: 16),
-                        Text(CompanyProfile.brandName, style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 4),
-                        Text(CompanyProfile.legalName),
-                        Text('TEL: ${CompanyProfile.phone}'),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+              LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final isMobile = constraints.maxWidth < 600;
+                  final leftCol = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Image.asset('assets/images/logo_remaa.png', height: 56),
+                      const SizedBox(height: 16),
+                      Text(CompanyProfile.brandName, style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 4),
+                      Text(CompanyProfile.legalName),
+                      Text('TEL: ${CompanyProfile.phone}'),
+                    ],
+                  );
+                  final rightCol = Column(
+                    crossAxisAlignment: isMobile
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.end,
                     children: [
                       Text(
                         'COTIZACION',
@@ -707,8 +707,21 @@ class _BudgetView extends StatelessWidget {
                       Text('FECHA: ${_date(quote.validUntil ?? DateTime.now())}'),
                       Text('ESTADO: ${quote.status.toUpperCase()}'),
                     ],
-                  ),
-                ],
+                  );
+                  if (isMobile) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [leftCol, const SizedBox(height: 16), rightCol],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: leftCol),
+                      rightCol,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
               contextState.when(
@@ -811,39 +824,52 @@ class _BudgetView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: RemaColors.outlineVariant.withValues(alpha: 0.4)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('IMPORTE CON LETRA'),
-                          const SizedBox(height: 8),
-                          Text(_amountInText(quote.total)),
-                        ],
-                      ),
+              LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final isMobile = constraints.maxWidth < 600;
+                  final importeBox = Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: RemaColors.outlineVariant.withValues(alpha: 0.4)),
                     ),
-                  ),
-                  const SizedBox(width: 24),
-                  SizedBox(
-                    width: 260,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _TotalRow(label: 'Subtotal', value: _money(quote.subtotal)),
+                        const Text('IMPORTE CON LETRA'),
                         const SizedBox(height: 8),
-                        _TotalRow(label: 'IVA (16%)', value: _money(quote.tax)),
-                        const Divider(height: 24),
-                        _TotalRow(label: 'Total M.N.', value: _money(quote.total), isStrong: true),
+                        Text(_amountInText(quote.total)),
                       ],
                     ),
-                  ),
-                ],
+                  );
+                  final totalsCol = Column(
+                    children: [
+                      _TotalRow(label: 'Subtotal', value: _money(quote.subtotal)),
+                      const SizedBox(height: 8),
+                      _TotalRow(label: 'IVA (16%)', value: _money(quote.tax)),
+                      const Divider(height: 24),
+                      _TotalRow(label: 'Total M.N.', value: _money(quote.total), isStrong: true),
+                    ],
+                  );
+                  if (isMobile) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        importeBox,
+                        const SizedBox(height: 16),
+                        totalsCol,
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: importeBox),
+                      const SizedBox(width: 24),
+                      SizedBox(width: 260, child: totalsCol),
+                    ],
+                  );
+                },
               ),
             ],
           ),

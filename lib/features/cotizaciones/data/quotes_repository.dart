@@ -725,6 +725,61 @@ class QuotesRepository {
     }
   }
 
+  Future<List<QuoteItemRecord>> fetchRecentItemsByTemplate({
+    required String templateId,
+    int limit = 5,
+  }) async {
+    final cleanTemplateId = templateId.trim();
+    if (cleanTemplateId.isEmpty) {
+      return const [];
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null) {
+      final local = <QuoteItemRecord>[];
+      for (final items in _localItems.values) {
+        for (final item in items) {
+          if ((item.templateId ?? '').trim() == cleanTemplateId) {
+            local.add(item);
+          }
+        }
+      }
+      return local.reversed.take(limit).toList();
+    }
+
+    try {
+      final rows = await client
+          .from('quote_items')
+          .select(
+            'id, quote_id, template_id, concept, generated_data, unit, quantity, unit_price, line_total',
+          )
+          .eq('template_id', cleanTemplateId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      return [
+        for (final row in rows)
+          QuoteItemRecord(
+            id: row['id'] as String,
+            quoteId: row['quote_id'] as String? ?? '',
+            templateId: row['template_id'] as String?,
+            concept: row['concept'] as String? ?? '',
+            generatedData: _toMap(row['generated_data']),
+            unit: row['unit'] as String? ?? '',
+            quantity: _toDouble(row['quantity']),
+            unitPrice: _toDouble(row['unit_price']),
+            lineTotal: _toDouble(row['line_total']),
+          ),
+      ];
+    } catch (error) {
+      AppLogger.error('quote_items_recent_by_template_failed', data: {
+        'template_id': cleanTemplateId,
+        'error': error.toString(),
+      });
+      return const [];
+    }
+  }
+
   Future<List<QuoteItemRecord>> saveItem(QuoteItemRecord item) async {
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(item.quoteId)) {

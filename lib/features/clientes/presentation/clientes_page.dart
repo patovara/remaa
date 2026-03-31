@@ -246,12 +246,17 @@ class _ClientesPageState extends State<ClientesPage> {
                 width: 260,
                 child: DropdownButtonFormField<String>(
                   value: _selectedSector,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Filtrar por sector'),
                   items: [
                     for (final sector in _sectorLabels)
                       DropdownMenuItem<String>(
                         value: sector,
-                        child: Text(sector),
+                        child: Text(
+                          sector,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
                   ],
                   onChanged: (value) {
@@ -269,88 +274,91 @@ class _ClientesPageState extends State<ClientesPage> {
               final isWide = constraints.maxWidth >= 920;
               final totalLabel = _showHidden ? 'Clientes ocultos' : 'Clientes visibles';
               final metrics = <Widget>[
-                Expanded(
-                  child: RemaMetricTile(
-                    label: 'Total Carteras',
-                    value: filtered.length.toString().padLeft(2, '0'),
-                    caption: totalLabel,
-                  ),
+                RemaMetricTile(
+                  label: 'Total Carteras',
+                  value: filtered.length.toString().padLeft(2, '0'),
+                  caption: totalLabel,
                 ),
-                const SizedBox(width: 16, height: 16),
-                Expanded(
-                  child: RemaMetricTile(
-                    label: 'Proyectos en Curso',
-                    value: totalActiveProjects.toString().padLeft(2, '0'),
-                    caption: 'Suma de activos',
-                    backgroundColor: RemaColors.primaryDark,
-                    foregroundColor: Colors.white,
-                  ),
+                RemaMetricTile(
+                  label: 'Proyectos en Curso',
+                  value: totalActiveProjects.toString().padLeft(2, '0'),
+                  caption: 'Suma de activos',
+                  backgroundColor: RemaColors.primaryDark,
+                  foregroundColor: Colors.white,
                 ),
-                const SizedBox(width: 16, height: 16),
-                Expanded(
-                  child: RemaMetricTile(
-                    label: 'Fuente de Datos',
-                    value: SupabaseBootstrap.client == null ? 'LOCAL' : 'LOCAL+DB',
-                    caption: 'Clientes + Supabase',
-                    backgroundColor: RemaColors.surfaceHighest,
-                  ),
+                RemaMetricTile(
+                  label: 'Fuente de Datos',
+                  value: SupabaseBootstrap.client == null ? 'LOCAL' : 'LOCAL+DB',
+                  caption: 'Clientes + Supabase',
+                  backgroundColor: RemaColors.surfaceHighest,
                 ),
               ];
               if (isWide) {
-                return Row(children: metrics);
+                return Row(
+                  children: [
+                    Expanded(child: metrics[0]),
+                    const SizedBox(width: 16),
+                    Expanded(child: metrics[1]),
+                    const SizedBox(width: 16),
+                    Expanded(child: metrics[2]),
+                  ],
+                );
               }
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   metrics[0],
                   const SizedBox(height: 16),
-                  metrics[2],
+                  metrics[1],
                   const SizedBox(height: 16),
-                  metrics[4],
+                  metrics[2],
                 ],
               );
             },
           ),
           const SizedBox(height: 24),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (filtered.isEmpty)
-            RemaPanel(
-              child: Text(
-                _showHidden
-                    ? 'No hay clientes ocultos para mostrar con el filtro actual.'
-                    : 'No hay clientes para mostrar con el filtro actual.',
-              ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 1100
-                    ? 3
-                    : constraints.maxWidth >= 760
-                        ? 2
-                        : 1;
-                final itemWidth = columns == 1
-                    ? constraints.maxWidth
-                    : (constraints.maxWidth - (16 * (columns - 1))) / columns;
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    for (final client in filtered)
-                      SizedBox(
-                        width: itemWidth,
-                        child: _ClientCard(
-                          client: client,
-                          onToggleHidden: () => _toggleHidden(client),
+          ...[
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (filtered.isEmpty)
+              RemaPanel(
+                child: Text(
+                  _showHidden
+                      ? 'No hay clientes ocultos para mostrar con el filtro actual.'
+                      : 'No hay clientes para mostrar con el filtro actual.',
+                ),
+              )
+            else
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 1100
+                      ? 3
+                      : constraints.maxWidth >= 760
+                          ? 2
+                          : 1;
+                  final itemWidth = columns == 1
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - (16 * (columns - 1))) / columns;
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      for (final client in filtered)
+                        SizedBox(
+                          width: itemWidth,
+                          child: _ClientCard(
+                            client: client,
+                            onToggleHidden: () => _toggleHidden(client),
+                          ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
+                    ],
+                  );
+                },
+              ),
+          ],
         ],
       ),
     );
@@ -409,23 +417,32 @@ class _ClientCard extends StatelessWidget {
           Text(
             client.name,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           if (client.displayContactName.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               client.displayContactName,
               style: Theme.of(context).textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
           const SizedBox(height: 6),
-          Text(client.sector.toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            client.sector.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 22),
           Row(
             children: [
-              _ClientMetric(value: client.activeProjects, label: 'Proyectos activos'),
+              Expanded(child: _ClientMetric(value: client.activeProjects, label: 'Proyectos activos')),
               Container(width: 1, height: 32, color: RemaColors.outlineVariant.withValues(alpha: 0.3)),
               const SizedBox(width: 18),
-              _ClientMetric(value: client.months, label: 'Meses relacion'),
+              Expanded(child: _ClientMetric(value: client.months, label: 'Meses relacion')),
             ],
           ),
           const SizedBox(height: 22),
@@ -449,18 +466,21 @@ class _ClientMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          Text(label.toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 }

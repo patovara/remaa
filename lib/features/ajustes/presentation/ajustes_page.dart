@@ -28,6 +28,7 @@ class _AjustesPageState extends State<AjustesPage> {
         builder: (context, constraints) {
           final isWide = constraints.maxWidth >= 1100;
           final mainColumn = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _ProfileHero(onEdit: () => showRemaMessage(context, 'Editor de perfil listo para conectarse con backend.')),
               const SizedBox(height: 24),
@@ -50,6 +51,7 @@ class _AjustesPageState extends State<AjustesPage> {
 
           if (!isWide) {
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [mainColumn, const SizedBox(height: 24), sidebar],
             );
           }
@@ -78,23 +80,35 @@ class _ProfileHero extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(28),
       color: RemaColors.surfaceLow,
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 56,
-            backgroundColor: RemaColors.surfaceHighest,
-            child: Image.asset('assets/images/logo_remaa.png', fit: BoxFit.cover),
-          ),
-          const SizedBox(width: 24),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 700;
+          if (isMobile) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Ing. Miguel Vazquez', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
-                SizedBox(height: 6),
-                Text('Socio Director | ${CompanyProfile.legalName}'),
-                SizedBox(height: 12),
-                Wrap(
+                Center(
+                  child: CircleAvatar(
+                    radius: 48,
+                    backgroundColor: RemaColors.surfaceHighest,
+                    child: Image.asset('assets/images/logo_remaa.png', fit: BoxFit.cover),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Ing. Miguel Vazquez',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Socio Director | ${CompanyProfile.legalName}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                const Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   children: [
@@ -102,15 +116,54 @@ class _ProfileHero extends StatelessWidget {
                     _Tag(label: 'Ultimo acceso: Hace 12 min', backgroundColor: RemaColors.surfaceHighest),
                   ],
                 ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Editar Perfil'),
+                  ),
+                ),
               ],
-            ),
-          ),
-          OutlinedButton.icon(
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined),
-            label: const Text('Editar Perfil'),
-          ),
-        ],
+            );
+          }
+
+          return Row(
+            children: [
+              CircleAvatar(
+                radius: 56,
+                backgroundColor: RemaColors.surfaceHighest,
+                child: Image.asset('assets/images/logo_remaa.png', fit: BoxFit.cover),
+              ),
+              const SizedBox(width: 24),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Ing. Miguel Vazquez', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
+                    SizedBox(height: 6),
+                    Text('Socio Director | ${CompanyProfile.legalName}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _Tag(label: 'Activo', backgroundColor: Color(0xFFFFDEA0)),
+                        _Tag(label: 'Ultimo acceso: Hace 12 min', backgroundColor: RemaColors.surfaceHighest),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar Perfil'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -173,29 +226,56 @@ class _PreferencesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return RemaPanel(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const RemaSectionHeader(title: 'Preferencias del Sistema', icon: Icons.tune),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _DropdownPreference(
-                  label: 'Idioma de interfaz',
-                  value: language,
-                  options: const ['Espanol (Mexico)', 'English (US)', 'Francais'],
-                  onChanged: onLanguageChanged,
-                ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: _DropdownPreference(
-                  label: 'Unidades de medida',
-                  value: units,
-                  options: const ['Sistema Metrico (m, cm)', 'Sistema Imperial (ft, in)'],
-                  onChanged: onUnitsChanged,
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 760;
+              if (isMobile) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _DropdownPreference(
+                      label: 'Idioma de interfaz',
+                      value: language,
+                      options: const ['Espanol (Mexico)', 'English (US)', 'Francais'],
+                      onChanged: onLanguageChanged,
+                    ),
+                    const SizedBox(height: 16),
+                    _DropdownPreference(
+                      label: 'Unidades de medida',
+                      value: units,
+                      options: const ['Sistema Metrico (m, cm)', 'Sistema Imperial (ft, in)'],
+                      onChanged: onUnitsChanged,
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(
+                    child: _DropdownPreference(
+                      label: 'Idioma de interfaz',
+                      value: language,
+                      options: const ['Espanol (Mexico)', 'English (US)', 'Francais'],
+                      onChanged: onLanguageChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: _DropdownPreference(
+                      label: 'Unidades de medida',
+                      value: units,
+                      options: const ['Sistema Metrico (m, cm)', 'Sistema Imperial (ft, in)'],
+                      onChanged: onUnitsChanged,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -254,22 +334,50 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 760;
+        if (isMobile) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18)),
               const SizedBox(height: 6),
-              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant)),
+              Text(
+                subtitle,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 10),
+              Align(alignment: Alignment.centerLeft, child: trailing),
             ],
-          ),
-        ),
-        const SizedBox(width: 20),
-        trailing,
-      ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18)),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 20),
+            trailing,
+          ],
+        );
+      },
     );
   }
 }
@@ -296,10 +404,14 @@ class _DropdownPreference extends StatelessWidget {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: value,
+          isExpanded: true,
           decoration: const InputDecoration(),
           items: [
             for (final option in options)
-              DropdownMenuItem<String>(value: option, child: Text(option)),
+              DropdownMenuItem<String>(
+                value: option,
+                child: Text(option, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
           ],
           onChanged: (newValue) {
             if (newValue != null) {
