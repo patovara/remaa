@@ -1,9 +1,9 @@
 import '../../../core/config/supabase_bootstrap.dart';
-import '../../../core/logging/app_logger.dart';
 import '../../cotizaciones/data/concepts_catalog_repository.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../domain/catalog_admin_models.dart';
 import '../domain/catalog_csv_parser.dart';
+import 'catalog_row_processor.dart';
 
 class CatalogAdminRepository {
   final ConceptsCatalogRepository _reader = ConceptsCatalogRepository();
@@ -546,7 +546,10 @@ class CatalogAdminRepository {
       );
     }
 
-    var snapshot = await fetchCatalog();
+    // Fetch the catalog once; the processor maintains its own cache from here on.
+    final snapshot = await fetchCatalog();
+    final processor = await CatalogRowProcessor.fromSnapshot(snapshot);
+
     var createdUniverses = 0;
     var existingUniverses = 0;
     var createdTemplates = 0;
@@ -557,89 +560,17 @@ class CatalogAdminRepository {
     var existingOptions = 0;
 
     for (final row in parsed.rows) {
-      try {
-        var universe = _findUniverse(snapshot, row.universe);
-        if (universe == null) {
-          await createUniverse(row.universe);
-          createdUniverses++;
-          snapshot = await fetchCatalog();
-          universe = _findUniverse(snapshot, row.universe);
-        } else {
-          existingUniverses++;
-        }
+      final result = await processor.processRow(
+        row,
+        defaultProjectTypeId: defaultProjectTypeId,
+      );
 
-        if (universe == null) {
-          issues.add(CatalogImportIssue(lineNumber: row.lineNumber, message: 'No se pudo resolver el universo.'));
-          continue;
-        }
+      result.universeCreated ? createdUniverses++ : existingUniverses++;
+      result.templateCreated ? createdTemplates++ : existingTemplates++;
+      result.attributeCreated ? createdAttributes++ : existingAttributes++;
+      result.optionCreated ? createdOptions++ : existingOptions++;
 
-        var projectTypeId = defaultProjectTypeId;
-        if (row.projectType != null && row.projectType!.trim().isNotEmpty) {
-          final matchedProjectType = _findProjectType(snapshot, row.projectType!);
-          if (matchedProjectType == null) {
-            issues.add(
-              CatalogImportIssue(
-                lineNumber: row.lineNumber,
-                message: 'project_type no existe: ${row.projectType}',
-              ),
-            );
-            continue;
-          }
-          projectTypeId = matchedProjectType.id;
-        }
-
-        var template = _findTemplateByScope(snapshot, universe.id, row.concept, projectTypeId: projectTypeId);
-        if (template == null) {
-          await createTemplate(
-            universeId: universe.id,
-            projectTypeId: projectTypeId,
-            name: row.concept,
-            baseDescription: row.baseDescription ?? '',
-            defaultUnit: row.unit,
-            basePrice: row.basePrice,
-          );
-          createdTemplates++;
-          snapshot = await fetchCatalog();
-          template = _findTemplateByScope(snapshot, universe.id, row.concept, projectTypeId: projectTypeId);
-        } else {
-          existingTemplates++;
-        }
-
-        if (template == null) {
-          issues.add(CatalogImportIssue(lineNumber: row.lineNumber, message: 'No se pudo resolver el concepto.'));
-          continue;
-        }
-
-        var attribute = _findAttribute(snapshot, template.id, row.attribute);
-        if (attribute == null) {
-          await createAttribute(templateId: template.id, name: row.attribute);
-          createdAttributes++;
-          snapshot = await fetchCatalog();
-          attribute = _findAttribute(snapshot, template.id, row.attribute);
-        } else {
-          existingAttributes++;
-        }
-
-        if (attribute == null) {
-          issues.add(CatalogImportIssue(lineNumber: row.lineNumber, message: 'No se pudo resolver el atributo.'));
-          continue;
-        }
-
-        final option = _findOption(snapshot, attribute.id, row.option);
-        if (option == null) {
-          await createOption(attributeId: attribute.id, value: row.option);
-          createdOptions++;
-          snapshot = await fetchCatalog();
-        } else {
-          existingOptions++;
-        }
-      } catch (error) {
-        AppLogger.error('catalog_csv_import_row_failed', data: {
-          'line': row.lineNumber,
-          'error': error.toString(),
-        });
-        issues.add(CatalogImportIssue(lineNumber: row.lineNumber, message: error.toString()));
-      }
+      if (result.hasIssue) issues.add(result.issue!);
     }
 
     return CatalogImportSummary(
@@ -657,30 +588,6 @@ class CatalogAdminRepository {
 
   UniverseCatalogItem? _findUniverse(ConceptCatalogSnapshot snapshot, String name) {
     for (final item in snapshot.universes) {
-      if (_normalize(item.name) == _normalize(name)) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  ConceptTemplateCatalogItem? _findTemplateByScope(
-    ConceptCatalogSnapshot snapshot,
-    String universeId,
-    String name, {
-    required String? projectTypeId,
-  }) {
-    for (final item in snapshot.templates) {
-      final typeMatches = projectTypeId == null || item.projectTypeId == projectTypeId;
-      if (item.universeId == universeId && typeMatches && _normalize(item.name) == _normalize(name)) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  ProjectTypeCatalogItem? _findProjectType(ConceptCatalogSnapshot snapshot, String name) {
-    for (final item in snapshot.projectTypes) {
       if (_normalize(item.name) == _normalize(name)) {
         return item;
       }
@@ -731,24 +638,6 @@ class CatalogAdminRepository {
       final updatedPrice = double.parse((template.basePrice * factor).toStringAsFixed(2));
       await client.from('concept_templates').update({'base_price': updatedPrice}).eq('id', template.id);
     }
-  }
-
-  ConceptAttributeCatalogItem? _findAttribute(ConceptCatalogSnapshot snapshot, String templateId, String name) {
-    for (final item in snapshot.attributes) {
-      if (item.templateId == templateId && _normalize(item.name) == _normalize(name)) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  AttributeOptionCatalogItem? _findOption(ConceptCatalogSnapshot snapshot, String attributeId, String value) {
-    for (final item in snapshot.options) {
-      if (item.attributeId == attributeId && _normalize(item.value) == _normalize(value)) {
-        return item;
-      }
-    }
-    return null;
   }
 
   bool _containsUniverse(ConceptCatalogSnapshot snapshot, String name) {

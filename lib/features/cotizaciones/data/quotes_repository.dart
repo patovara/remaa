@@ -1184,8 +1184,7 @@ class QuotesRepository {
     );
 
     final base = 'RM-$clientCode-$projectTypeKey-$projectCode';
-    final seq = await _nextSeq(base: base, client: client);
-    return '$base-${seq.toString().padLeft(3, '0')}';
+    return base;
   }
 
   Future<String> _resolveProjectCode({
@@ -1244,28 +1243,6 @@ class QuotesRepository {
       return 'CL$suffix';
     } catch (_) {
       return 'CL001';
-    }
-  }
-
-  /// Returns the next available sequence number for a given folio base string.
-  /// Counts existing quotes with that prefix and adds 1. Practically atomic for
-  /// single-user apps; a unique constraint on quote_number in the DB provides
-  /// the final safety net.
-  Future<int> _nextSeq({required String base, required dynamic client}) async {
-    // Local fallback
-    final localCount = _localQuotes.where((q) => q.quoteNumber.startsWith(base)).length;
-    if (client == null) {
-      return localCount + 1;
-    }
-    try {
-      final rows = await client
-          .from('quotes')
-          .select('id')
-          .like('quote_number', '$base%');
-      final remoteCount = (rows as List).length;
-      return remoteCount + localCount + 1;
-    } catch (_) {
-      return localCount + 1;
     }
   }
 

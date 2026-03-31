@@ -14,6 +14,11 @@ final conceptsCatalogProvider =
   ConceptsCatalogController.new,
 );
 
+final conceptUsageSuggestionsProvider = AsyncNotifierProvider.family<
+    ConceptUsageSuggestionsController,
+    ConceptUsageResponse,
+    String>(ConceptUsageSuggestionsController.new);
+
 class ConceptsCatalogController extends AsyncNotifier<ConceptCatalogSnapshot> {
   late final ConceptsCatalogRepository _repository =
       ref.read(conceptsCatalogRepositoryProvider);
@@ -25,5 +30,24 @@ class ConceptsCatalogController extends AsyncNotifier<ConceptCatalogSnapshot> {
 
   Future<void> reload() async {
     state = await AsyncValue.guard(_repository.fetchCatalog);
+  }
+}
+
+class ConceptUsageSuggestionsController
+    extends FamilyAsyncNotifier<ConceptUsageResponse, String> {
+  late final ConceptsCatalogRepository _repository =
+      ref.read(conceptsCatalogRepositoryProvider);
+  late String _universeId;
+
+  @override
+  FutureOr<ConceptUsageResponse> build(String arg) {
+    _universeId = arg;
+    return _repository.fetchConceptUsageSuggestions(universeId: arg);
+  }
+
+  Future<void> reload() async {
+    state = await AsyncValue.guard(
+      () => _repository.fetchConceptUsageSuggestions(universeId: _universeId),
+    );
   }
 }

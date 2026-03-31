@@ -6,17 +6,21 @@ import '../../cotizaciones/presentation/concepts_catalog_controller.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../data/catalog_admin_repository.dart';
 import '../domain/catalog_admin_models.dart';
+import '../domain/catalog_concept_form.dart';
 
 final catalogAdminRepositoryProvider = Provider<CatalogAdminRepository>(
   (ref) => CatalogAdminRepository(),
 );
 
-final catalogAdminProvider = AsyncNotifierProvider<CatalogAdminController, ConceptCatalogSnapshot>(
-  CatalogAdminController.new,
-);
+final catalogAdminProvider =
+    AsyncNotifierProvider<CatalogAdminController, ConceptCatalogSnapshot>(
+      CatalogAdminController.new,
+    );
 
 class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
-  late final CatalogAdminRepository _repository = ref.read(catalogAdminRepositoryProvider);
+  late final CatalogAdminRepository _repository = ref.read(
+    catalogAdminRepositoryProvider,
+  );
 
   @override
   FutureOr<ConceptCatalogSnapshot> build() {
@@ -28,20 +32,36 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
     ref.invalidate(conceptsCatalogProvider);
   }
 
-  Future<void> createUniverse(String name) => _mutate(() => _repository.createUniverse(name));
+  Future<void> createUniverse(String name) =>
+      _mutate(() => _repository.createUniverse(name));
 
   Future<void> updateUniverse({required String id, required String name}) =>
       _mutate(() => _repository.updateUniverse(id: id, name: name));
 
-  Future<void> deleteUniverse(String id) => _mutate(() => _repository.deleteUniverse(id));
+  Future<void> deleteUniverse(String id) =>
+      _mutate(() => _repository.deleteUniverse(id));
 
-  Future<void> createProjectType({required String name, required String actionBase}) =>
-      _mutate(() => _repository.createProjectType(name: name, actionBase: actionBase));
+  Future<void> createProjectType({
+    required String name,
+    required String actionBase,
+  }) => _mutate(
+    () => _repository.createProjectType(name: name, actionBase: actionBase),
+  );
 
-  Future<void> updateProjectType({required String id, required String name, required String actionBase}) =>
-      _mutate(() => _repository.updateProjectType(id: id, name: name, actionBase: actionBase));
+  Future<void> updateProjectType({
+    required String id,
+    required String name,
+    required String actionBase,
+  }) => _mutate(
+    () => _repository.updateProjectType(
+      id: id,
+      name: name,
+      actionBase: actionBase,
+    ),
+  );
 
-  Future<void> deleteProjectType(String id) => _mutate(() => _repository.deleteProjectType(id));
+  Future<void> deleteProjectType(String id) =>
+      _mutate(() => _repository.deleteProjectType(id));
 
   Future<void> createTemplate({
     required String universeId,
@@ -50,17 +70,75 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
     required String baseDescription,
     required String defaultUnit,
     required double basePrice,
-  }) =>
-      _mutate(
-        () => _repository.createTemplate(
-          universeId: universeId,
-          projectTypeId: projectTypeId,
-          name: name,
-          baseDescription: baseDescription,
-          defaultUnit: defaultUnit,
-          basePrice: basePrice,
-        ),
+  }) => _mutate(
+    () => _repository.createTemplate(
+      universeId: universeId,
+      projectTypeId: projectTypeId,
+      name: name,
+      baseDescription: baseDescription,
+      defaultUnit: defaultUnit,
+      basePrice: basePrice,
+    ),
+  );
+
+  Future<void> createTemplateWithAttributes(CatalogConceptDraft draft) async {
+    await _repository.createTemplate(
+      universeId: draft.universeId,
+      projectTypeId: draft.projectTypeId,
+      name: draft.name,
+      baseDescription: draft.baseDescription,
+      defaultUnit: draft.defaultUnit,
+      basePrice: draft.basePrice,
+    );
+
+    var snapshot = await _repository.fetchCatalog();
+    final template = snapshot.templates
+        .where((item) {
+          return item.universeId == draft.universeId &&
+              item.projectTypeId == draft.projectTypeId &&
+              item.name.trim().toLowerCase() == draft.name.trim().toLowerCase();
+        })
+        .fold<ConceptTemplateCatalogItem?>(null, (prev, item) => item);
+
+    if (template == null) {
+      throw StateError(
+        'No se pudo resolver el concepto recién creado para agregar atributos.',
       );
+    }
+
+    for (final selection in draft.attributes) {
+      await _repository.createAttribute(
+        templateId: template.id,
+        name: selection.attributeName,
+      );
+    }
+
+    snapshot = await _repository.fetchCatalog();
+    for (final selection in draft.attributes) {
+      if (selection.optionValue.trim().isEmpty) {
+        continue;
+      }
+
+      final attribute = snapshot.attributes
+          .where((item) {
+            return item.templateId == template.id &&
+                item.name.trim().toLowerCase() ==
+                    selection.attributeName.trim().toLowerCase();
+          })
+          .fold<ConceptAttributeCatalogItem?>(null, (prev, item) => item);
+
+      if (attribute == null) {
+        continue;
+      }
+
+      await _repository.createOption(
+        attributeId: attribute.id,
+        value: selection.optionValue,
+      );
+    }
+
+    await reload();
+  }
 
   Future<void> updateTemplate({
     required String id,
@@ -70,45 +148,82 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
     required String baseDescription,
     required String defaultUnit,
     required double basePrice,
-  }) =>
-      _mutate(
-        () => _repository.updateTemplate(
-          id: id,
-          universeId: universeId,
-          projectTypeId: projectTypeId,
-          name: name,
-          baseDescription: baseDescription,
-          defaultUnit: defaultUnit,
-          basePrice: basePrice,
-        ),
-      );
+  }) => _mutate(
+    () => _repository.updateTemplate(
+      id: id,
+      universeId: universeId,
+      projectTypeId: projectTypeId,
+      name: name,
+      baseDescription: baseDescription,
+      defaultUnit: defaultUnit,
+      basePrice: basePrice,
+    ),
+  );
 
-  Future<void> deleteTemplate(String id) => _mutate(() => _repository.deleteTemplate(id));
+  Future<void> deleteTemplate(String id) =>
+      _mutate(() => _repository.deleteTemplate(id));
 
-  Future<void> createAttribute({required String templateId, required String name}) =>
-      _mutate(() => _repository.createAttribute(templateId: templateId, name: name));
+  Future<void> createAttribute({
+    required String templateId,
+    required String name,
+  }) => _mutate(
+    () => _repository.createAttribute(templateId: templateId, name: name),
+  );
 
-  Future<void> updateAttribute({required String id, required String templateId, required String name}) =>
-      _mutate(() => _repository.updateAttribute(id: id, templateId: templateId, name: name));
+  Future<void> updateAttribute({
+    required String id,
+    required String templateId,
+    required String name,
+  }) => _mutate(
+    () =>
+        _repository.updateAttribute(id: id, templateId: templateId, name: name),
+  );
 
-  Future<void> deleteAttribute(String id) => _mutate(() => _repository.deleteAttribute(id));
+  Future<void> deleteAttribute(String id) =>
+      _mutate(() => _repository.deleteAttribute(id));
 
-  Future<void> createOption({required String attributeId, required String value}) =>
-      _mutate(() => _repository.createOption(attributeId: attributeId, value: value));
+  Future<void> createOption({
+    required String attributeId,
+    required String value,
+  }) => _mutate(
+    () => _repository.createOption(attributeId: attributeId, value: value),
+  );
 
-  Future<void> updateOption({required String id, required String attributeId, required String value}) =>
-      _mutate(() => _repository.updateOption(id: id, attributeId: attributeId, value: value));
+  Future<void> updateOption({
+    required String id,
+    required String attributeId,
+    required String value,
+  }) => _mutate(
+    () => _repository.updateOption(
+      id: id,
+      attributeId: attributeId,
+      value: value,
+    ),
+  );
 
-  Future<void> deleteOption(String id) => _mutate(() => _repository.deleteOption(id));
+  Future<void> deleteOption(String id) =>
+      _mutate(() => _repository.deleteOption(id));
 
-  Future<CatalogImportSummary> importCsv({required String csvContent, required String defaultProjectTypeId}) async {
-    final summary = await _repository.importCsv(csvContent: csvContent, defaultProjectTypeId: defaultProjectTypeId);
+  Future<CatalogImportSummary> importCsv({
+    required String csvContent,
+    required String defaultProjectTypeId,
+  }) async {
+    final summary = await _repository.importCsv(
+      csvContent: csvContent,
+      defaultProjectTypeId: defaultProjectTypeId,
+    );
     await reload();
     return summary;
   }
 
-  Future<void> bulkAdjustTemplatePrices({required List<String> templateIds, required double percent}) async {
-    await _repository.bulkAdjustTemplatePrices(templateIds: templateIds, percent: percent);
+  Future<void> bulkAdjustTemplatePrices({
+    required List<String> templateIds,
+    required double percent,
+  }) async {
+    await _repository.bulkAdjustTemplatePrices(
+      templateIds: templateIds,
+      percent: percent,
+    );
     await reload();
   }
 

@@ -12,7 +12,9 @@ import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../domain/catalog_admin_models.dart';
+import '../domain/catalog_concept_form.dart';
 import 'catalog_admin_controller.dart';
+import 'catalog_ui_controller.dart';
 
 class CatalogoPage extends ConsumerStatefulWidget {
   const CatalogoPage({super.key});
@@ -22,15 +24,9 @@ class CatalogoPage extends ConsumerStatefulWidget {
 }
 
 class _CatalogoPageState extends ConsumerState<CatalogoPage> {
-  String? _selectedUniverseId;
-  String? _selectedProjectTypeId;
-  String? _selectedTemplateId;
-  String? _selectedImportProjectTypeId;
-  String _templateSearch = '';
-  final TextEditingController _bulkPercentController = TextEditingController(text: '0');
-  CatalogImportSummary? _lastImportSummary;
-  String? _lastImportFileName;
-  bool _isImporting = false;
+  final TextEditingController _bulkPercentController = TextEditingController(
+    text: '0',
+  );
 
   @override
   void dispose() {
@@ -42,6 +38,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
     final catalogAsync = ref.watch(catalogAdminProvider);
+    final uiState = ref.watch(catalogUiControllerProvider);
 
     if (!isAdmin) {
       return const PageFrame(
@@ -53,7 +50,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
             children: [
               Text('Acceso restringido'),
               SizedBox(height: 12),
-              Text('Solo usuarios admin pueden consultar o modificar el catálogo de conceptos.'),
+              Text(
+                'Solo usuarios admin pueden consultar o modificar el catálogo de conceptos.',
+              ),
             ],
           ),
         ),
@@ -62,7 +61,8 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
 
     return PageFrame(
       title: 'Catálogo',
-      subtitle: 'Administración de universos, tipos, conceptos, atributos y carga masiva CSV.',
+      subtitle:
+          'Administración de universos, tipos, conceptos, atributos y carga masiva CSV.',
       trailing: FilledButton.icon(
         onPressed: () => ref.read(catalogAdminProvider.notifier).reload(),
         icon: const Icon(Icons.refresh),
@@ -70,33 +70,18 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       ),
       child: catalogAsync.when(
         data: (snapshot) {
-          _syncSelections(snapshot);
-          final effectiveSelectedUniverseId = snapshot.universes.any(
-            (item) => item.id == _selectedUniverseId,
-          )
-              ? _selectedUniverseId
-              : (snapshot.universes.isEmpty ? null : snapshot.universes.first.id);
-          final effectiveSelectedProjectTypeId = snapshot.projectTypes.any(
-            (item) => item.id == _selectedProjectTypeId,
-          )
-              ? _selectedProjectTypeId
-              : (snapshot.projectTypes.isEmpty ? null : snapshot.projectTypes.first.id);
-          final effectiveImportProjectTypeId = snapshot.projectTypes.any(
-            (item) => item.id == _selectedImportProjectTypeId,
-          )
-              ? _selectedImportProjectTypeId
-              : (snapshot.projectTypes.isEmpty ? null : snapshot.projectTypes.first.id);
-          final visibleTemplates = effectiveSelectedUniverseId == null
-              ? snapshot.templates
-              : snapshot.templatesForUniverse(effectiveSelectedUniverseId);
-          final effectiveSelectedTemplateId = visibleTemplates.any(
-            (item) => item.id == _selectedTemplateId,
-          )
-              ? _selectedTemplateId
-              : (visibleTemplates.isEmpty ? null : visibleTemplates.first.id);
-          final visibleAttributes = effectiveSelectedTemplateId == null
-              ? const <ConceptAttributeCatalogItem>[]
-              : snapshot.attributesForTemplate(effectiveSelectedTemplateId);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) {
+              return;
+            }
+            ref
+                .read(catalogUiControllerProvider.notifier)
+                .syncWithSnapshot(snapshot);
+          });
+
+          final viewData = ref
+              .read(catalogUiControllerProvider.notifier)
+              .viewDataFor(snapshot);
 
           return SingleChildScrollView(
             child: Column(
@@ -120,17 +105,19 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
                 const SizedBox(height: 24),
                 _TemplatesPanel(
                   snapshot: snapshot,
-                  selectedUniverseId: effectiveSelectedUniverseId,
-                  selectedProjectTypeId: effectiveSelectedProjectTypeId,
-                  search: _templateSearch,
+                  selectedUniverseId: viewData.selectedUniverseId,
+                  selectedProjectTypeId: viewData.selectedProjectTypeId,
                   bulkPercentController: _bulkPercentController,
-                  visibleTemplates: visibleTemplates,
-                  onUniverseChanged: (value) => setState(() {
-                    _selectedUniverseId = value;
-                    _selectedTemplateId = null;
-                  }),
-                  onProjectTypeChanged: (value) => setState(() => _selectedProjectTypeId = value),
-                  onSearchChanged: (value) => setState(() => _templateSearch = value.trim().toLowerCase()),
+                  templates: viewData.filteredTemplates,
+                  onUniverseChanged: ref
+                      .read(catalogUiControllerProvider.notifier)
+                      .selectUniverse,
+                  onProjectTypeChanged: ref
+                      .read(catalogUiControllerProvider.notifier)
+                      .selectProjectType,
+                  onSearchChanged: ref
+                      .read(catalogUiControllerProvider.notifier)
+                      .changeTemplateSearch,
                   onBulkAdjust: _bulkAdjustPrices,
                   onCreate: _createTemplate,
                   onEdit: _editTemplate,
@@ -139,10 +126,12 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
                 const SizedBox(height: 24),
                 _AttributesPanel(
                   snapshot: snapshot,
-                  selectedTemplateId: effectiveSelectedTemplateId,
-                  visibleTemplates: visibleTemplates,
-                  visibleAttributes: visibleAttributes,
-                  onTemplateChanged: (value) => setState(() => _selectedTemplateId = value),
+                  selectedTemplateId: viewData.selectedTemplateId,
+                  visibleTemplates: viewData.visibleTemplates,
+                  visibleAttributes: viewData.visibleAttributes,
+                  onTemplateChanged: ref
+                      .read(catalogUiControllerProvider.notifier)
+                      .selectTemplate,
                   onCreateAttribute: _createAttribute,
                   onEditAttribute: _editAttribute,
                   onDeleteAttribute: _deleteAttribute,
@@ -153,13 +142,15 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
                 const SizedBox(height: 24),
                 _ImportPanel(
                   projectTypes: snapshot.projectTypes,
-                  selectedProjectTypeId: effectiveImportProjectTypeId,
-                  onProjectTypeChanged: (value) => setState(() => _selectedImportProjectTypeId = value),
+                  selectedProjectTypeId: viewData.selectedImportProjectTypeId,
+                  onProjectTypeChanged: ref
+                      .read(catalogUiControllerProvider.notifier)
+                      .selectImportProjectType,
                   onImport: _importCsv,
                   onDownloadTemplate: _downloadCsvTemplate,
-                  isImporting: _isImporting,
-                  lastSummary: _lastImportSummary,
-                  lastFileName: _lastImportFileName,
+                  isImporting: uiState.isImporting,
+                  lastSummary: uiState.lastImportSummary,
+                  lastFileName: uiState.lastImportFileName,
                 ),
               ],
             ),
@@ -180,53 +171,6 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     );
   }
 
-  void _syncSelections(ConceptCatalogSnapshot snapshot) {
-    var changed = false;
-    var nextUniverseId = _selectedUniverseId;
-    var nextProjectTypeId = _selectedProjectTypeId;
-    var nextTemplateId = _selectedTemplateId;
-    var nextImportProjectTypeId = _selectedImportProjectTypeId;
-
-    if (nextUniverseId == null || !snapshot.universes.any((item) => item.id == nextUniverseId)) {
-      nextUniverseId = snapshot.universes.isEmpty ? null : snapshot.universes.first.id;
-      changed = true;
-    }
-
-    if (nextProjectTypeId == null || !snapshot.projectTypes.any((item) => item.id == nextProjectTypeId)) {
-      nextProjectTypeId = snapshot.projectTypes.isEmpty ? null : snapshot.projectTypes.first.id;
-      changed = true;
-    }
-
-    final templatesForUniverse = nextUniverseId == null
-        ? snapshot.templates
-        : snapshot.templatesForUniverse(nextUniverseId);
-    if (nextTemplateId == null || !templatesForUniverse.any((item) => item.id == nextTemplateId)) {
-      nextTemplateId = templatesForUniverse.isEmpty ? null : templatesForUniverse.first.id;
-      changed = true;
-    }
-
-    if (nextImportProjectTypeId == null || !snapshot.projectTypes.any((item) => item.id == nextImportProjectTypeId)) {
-      nextImportProjectTypeId = snapshot.projectTypes.isEmpty ? null : snapshot.projectTypes.first.id;
-      changed = true;
-    }
-
-    if (!changed) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _selectedUniverseId = nextUniverseId;
-        _selectedProjectTypeId = nextProjectTypeId;
-        _selectedTemplateId = nextTemplateId;
-        _selectedImportProjectTypeId = nextImportProjectTypeId;
-      });
-    });
-  }
-
   Future<void> _createUniverse() async {
     final name = await _showNameDialog(
       title: 'Nuevo universo',
@@ -236,7 +180,8 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).createUniverse(name),
+      action: () =>
+          ref.read(catalogAdminProvider.notifier).createUniverse(name),
       successMessage: 'Universo creado.',
     );
   }
@@ -251,18 +196,24 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).updateUniverse(id: universe.id, name: name),
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .updateUniverse(id: universe.id, name: name),
       successMessage: 'Universo actualizado.',
     );
   }
 
   Future<void> _deleteUniverse(UniverseCatalogItem universe) async {
-    final confirmed = await _confirmDelete('Eliminar universo', 'Se eliminara ${universe.name} si no tiene dependencias.');
+    final confirmed = await _confirmDelete(
+      'Eliminar universo',
+      'Se eliminara ${universe.name} si no tiene dependencias.',
+    );
     if (confirmed != true) {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).deleteUniverse(universe.id),
+      action: () =>
+          ref.read(catalogAdminProvider.notifier).deleteUniverse(universe.id),
       successMessage: 'Universo eliminado.',
     );
   }
@@ -276,10 +227,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).createProjectType(
-            name: result.name,
-            actionBase: result.actionBase,
-          ),
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .createProjectType(name: result.name, actionBase: result.actionBase),
       successMessage: 'Tipo de proyecto creado.',
     );
   }
@@ -293,7 +243,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).updateProjectType(
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .updateProjectType(
             id: projectType.id,
             name: result.name,
             actionBase: result.actionBase,
@@ -311,38 +263,42 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).deleteProjectType(projectType.id),
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .deleteProjectType(projectType.id),
       successMessage: 'Tipo de proyecto eliminado.',
     );
   }
 
   Future<void> _createTemplate() async {
     final snapshot = ref.read(catalogAdminProvider).valueOrNull;
-    if (snapshot == null || snapshot.universes.isEmpty || snapshot.projectTypes.isEmpty) {
-      showRemaMessage(context, 'Primero captura al menos un universo y un tipo de proyecto.');
+    if (snapshot == null ||
+        snapshot.universes.isEmpty ||
+        snapshot.projectTypes.isEmpty) {
+      showRemaMessage(
+        context,
+        'Primero captura al menos un universo y un tipo de proyecto.',
+      );
       return;
     }
-    final result = await showDialog<_ConceptFormResult>(
+    final uiState = ref.read(catalogUiControllerProvider);
+    final result = await showDialog<CatalogConceptDraft>(
       context: context,
       builder: (_) => _ConceptDialog(
         universes: snapshot.universes,
         projectTypes: snapshot.projectTypes,
-        initialUniverseId: _selectedUniverseId,
-        initialProjectTypeId: _selectedProjectTypeId,
+        initialUniverseId: uiState.selectedUniverseId,
+        initialProjectTypeId: uiState.selectedProjectTypeId,
+        attributeLibrary: CatalogAttributeLibrary.fromSnapshot(snapshot),
       ),
     );
     if (result == null) {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).createTemplate(
-            universeId: result.universeId,
-            projectTypeId: result.projectTypeId,
-            name: result.name,
-            baseDescription: result.baseDescription,
-            defaultUnit: result.defaultUnit,
-            basePrice: result.basePrice,
-          ),
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .createTemplateWithAttributes(result),
       successMessage: 'Concepto creado.',
     );
   }
@@ -352,7 +308,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     if (snapshot == null) {
       return;
     }
-    final result = await showDialog<_ConceptFormResult>(
+    final result = await showDialog<CatalogConceptDraft>(
       context: context,
       builder: (_) => _ConceptDialog(
         universes: snapshot.universes,
@@ -360,13 +316,16 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
         initial: template,
         initialUniverseId: template.universeId,
         initialProjectTypeId: template.projectTypeId,
+        attributeLibrary: CatalogAttributeLibrary.fromSnapshot(snapshot),
       ),
     );
     if (result == null) {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).updateTemplate(
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .updateTemplate(
             id: template.id,
             universeId: result.universeId,
             projectTypeId: result.projectTypeId,
@@ -387,27 +346,34 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     if (confirmed != true) {
       return;
     }
-    if (_selectedTemplateId == template.id) {
-      setState(() => _selectedTemplateId = null);
+    if (ref.read(catalogUiControllerProvider).selectedTemplateId ==
+        template.id) {
+      ref.read(catalogUiControllerProvider.notifier).selectTemplate(null);
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
+      action: () =>
+          ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
       successMessage: 'Concepto eliminado.',
     );
   }
 
   Future<void> _createAttribute() async {
-    final templateId = _selectedTemplateId;
+    final templateId = ref.read(catalogUiControllerProvider).selectedTemplateId;
     if (templateId == null) {
       showRemaMessage(context, 'Selecciona primero un concepto.');
       return;
     }
-    final name = await _showNameDialog(title: 'Nuevo atributo', label: 'Nombre del atributo');
+    final name = await _showNameDialog(
+      title: 'Nuevo atributo',
+      label: 'Nombre del atributo',
+    );
     if (name == null) {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).createAttribute(templateId: templateId, name: name),
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .createAttribute(templateId: templateId, name: name),
       successMessage: 'Atributo creado.',
     );
   }
@@ -422,7 +388,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).updateAttribute(
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .updateAttribute(
             id: attribute.id,
             templateId: attribute.templateId,
             name: name,
@@ -440,18 +408,25 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).deleteAttribute(attribute.id),
+      action: () =>
+          ref.read(catalogAdminProvider.notifier).deleteAttribute(attribute.id),
       successMessage: 'Atributo eliminado.',
     );
   }
 
   Future<void> _createOption(ConceptAttributeCatalogItem attribute) async {
-    final value = await _showNameDialog(title: 'Nueva opción', label: 'Valor', initialValue: '');
+    final value = await _showNameDialog(
+      title: 'Nueva opción',
+      label: 'Valor',
+      initialValue: '',
+    );
     if (value == null) {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).createOption(attributeId: attribute.id, value: value),
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .createOption(attributeId: attribute.id, value: value),
       successMessage: 'Opción creada.',
     );
   }
@@ -466,7 +441,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).updateOption(
+      action: () => ref
+          .read(catalogAdminProvider.notifier)
+          .updateOption(
             id: option.id,
             attributeId: option.attributeId,
             value: value,
@@ -476,20 +453,29 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteOption(AttributeOptionCatalogItem option) async {
-    final confirmed = await _confirmDelete('Eliminar opción', 'Se eliminara la opción ${option.value}.');
+    final confirmed = await _confirmDelete(
+      'Eliminar opción',
+      'Se eliminara la opción ${option.value}.',
+    );
     if (confirmed != true) {
       return;
     }
     await _runMutation(
-      action: () => ref.read(catalogAdminProvider.notifier).deleteOption(option.id),
+      action: () =>
+          ref.read(catalogAdminProvider.notifier).deleteOption(option.id),
       successMessage: 'Opción eliminada.',
     );
   }
 
   Future<void> _importCsv() async {
-    final projectTypeId = _selectedImportProjectTypeId;
+    final projectTypeId = ref
+        .read(catalogUiControllerProvider)
+        .selectedImportProjectTypeId;
     if (projectTypeId == null) {
-      showRemaMessage(context, 'Selecciona el tipo de proyecto destino para la importación.');
+      showRemaMessage(
+        context,
+        'Selecciona el tipo de proyecto destino para la importación.',
+      );
       return;
     }
 
@@ -509,20 +495,18 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       return;
     }
 
-    setState(() => _isImporting = true);
+    ref.read(catalogUiControllerProvider.notifier).setImporting(true);
     try {
       final content = utf8.decode(bytes);
-      final summary = await ref.read(catalogAdminProvider.notifier).importCsv(
-            csvContent: content,
-        defaultProjectTypeId: projectTypeId,
-          );
+      final summary = await ref
+          .read(catalogAdminProvider.notifier)
+          .importCsv(csvContent: content, defaultProjectTypeId: projectTypeId);
       if (!mounted) {
         return;
       }
-      setState(() {
-        _lastImportSummary = summary;
-        _lastImportFileName = file.name;
-      });
+      ref
+          .read(catalogUiControllerProvider.notifier)
+          .setImportSummary(summary: summary, fileName: file.name);
       showRemaMessage(
         context,
         summary.hasErrors
@@ -534,9 +518,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
         showRemaMessage(context, 'No se pudo importar el CSV: $error');
       }
     } finally {
-      if (mounted) {
-        setState(() => _isImporting = false);
-      }
+      ref.read(catalogUiControllerProvider.notifier).setImporting(false);
     }
   }
 
@@ -552,7 +534,9 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     }
     showRemaMessage(
       context,
-      saved ? 'Plantilla CSV lista para descarga.' : 'No se pudo descargar la plantilla CSV.',
+      saved
+          ? 'Plantilla CSV lista para descarga.'
+          : 'No se pudo descargar la plantilla CSV.',
     );
   }
 
@@ -604,21 +588,32 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   String _csvRow(List<String> values) {
-    return values.map((value) {
-      final escaped = value.replaceAll('"', '""');
-      if (escaped.contains(',') || escaped.contains('"') || escaped.contains('\n')) {
-        return '"$escaped"';
-      }
-      return escaped;
-    }).join(',');
+    return values
+        .map((value) {
+          final escaped = value.replaceAll('"', '""');
+          if (escaped.contains(',') ||
+              escaped.contains('"') ||
+              escaped.contains('\n')) {
+            return '"$escaped"';
+          }
+          return escaped;
+        })
+        .join(',');
   }
 
-  Future<void> _bulkAdjustPrices(List<ConceptTemplateCatalogItem> templates) async {
+  Future<void> _bulkAdjustPrices(
+    List<ConceptTemplateCatalogItem> templates,
+  ) async {
     if (templates.isEmpty) {
-      showRemaMessage(context, 'No hay conceptos para ajuste masivo con el filtro actual.');
+      showRemaMessage(
+        context,
+        'No hay conceptos para ajuste masivo con el filtro actual.',
+      );
       return;
     }
-    final percent = double.tryParse(_bulkPercentController.text.trim().replaceAll(',', '.'));
+    final percent = double.tryParse(
+      _bulkPercentController.text.trim().replaceAll(',', '.'),
+    );
     if (percent == null) {
       showRemaMessage(context, 'Ingresa un porcentaje válido (ej. 10 o -5).');
       return;
@@ -627,12 +622,18 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     await _runMutation(
       action: () => ref
           .read(catalogAdminProvider.notifier)
-          .bulkAdjustTemplatePrices(templateIds: [for (final t in templates) t.id], percent: percent),
+          .bulkAdjustTemplatePrices(
+            templateIds: [for (final t in templates) t.id],
+            percent: percent,
+          ),
       successMessage: 'Ajuste masivo aplicado a ${templates.length} conceptos.',
     );
   }
 
-  Future<void> _runMutation({required Future<void> Function() action, required String successMessage}) async {
+  Future<void> _runMutation({
+    required Future<void> Function() action,
+    required String successMessage,
+  }) async {
     try {
       await action();
       if (mounted) {
@@ -645,10 +646,18 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     }
   }
 
-  Future<String?> _showNameDialog({required String title, required String label, String initialValue = ''}) async {
+  Future<String?> _showNameDialog({
+    required String title,
+    required String label,
+    String initialValue = '',
+  }) async {
     return showDialog<String>(
       context: context,
-      builder: (_) => _TextValueDialog(title: title, label: label, initialValue: initialValue),
+      builder: (_) => _TextValueDialog(
+        title: title,
+        label: label,
+        initialValue: initialValue,
+      ),
     );
   }
 
@@ -659,8 +668,14 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Eliminar')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
         ],
       ),
     );
@@ -677,10 +692,24 @@ class _SummaryStrip extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final tiles = [
-          RemaMetricTile(label: 'Universos', value: '${snapshot.universes.length}'),
-          RemaMetricTile(label: 'Tipos de proyecto', value: '${snapshot.projectTypes.length}'),
-          RemaMetricTile(label: 'Conceptos', value: '${snapshot.templates.length}', backgroundColor: const Color(0xFFFFDEA0)),
-          RemaMetricTile(label: 'Atributos', value: '${snapshot.attributes.length}', backgroundColor: RemaColors.surfaceHighest),
+          RemaMetricTile(
+            label: 'Universos',
+            value: '${snapshot.universes.length}',
+          ),
+          RemaMetricTile(
+            label: 'Tipos de proyecto',
+            value: '${snapshot.projectTypes.length}',
+          ),
+          RemaMetricTile(
+            label: 'Conceptos',
+            value: '${snapshot.templates.length}',
+            backgroundColor: const Color(0xFFFFDEA0),
+          ),
+          RemaMetricTile(
+            label: 'Atributos',
+            value: '${snapshot.attributes.length}',
+            backgroundColor: RemaColors.surfaceHighest,
+          ),
         ];
         if (constraints.maxWidth < 960) {
           return Column(
@@ -727,7 +756,11 @@ class _UniversesPanel extends StatelessWidget {
           RemaSectionHeader(
             title: 'Universos',
             icon: Icons.public,
-            trailing: FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('Nuevo')),
+            trailing: FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo'),
+            ),
           ),
           const SizedBox(height: 20),
           if (snapshot.universes.isEmpty)
@@ -737,12 +770,20 @@ class _UniversesPanel extends StatelessWidget {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(universe.name),
-                subtitle: Text('${snapshot.templatesForUniverse(universe.id).length} conceptos asociados'),
+                subtitle: Text(
+                  '${snapshot.templatesForUniverse(universe.id).length} conceptos asociados',
+                ),
                 trailing: Wrap(
                   spacing: 8,
                   children: [
-                    IconButton(onPressed: () => onEdit(universe), icon: const Icon(Icons.edit_outlined)),
-                    IconButton(onPressed: () => onDelete(universe), icon: const Icon(Icons.delete_outline)),
+                    IconButton(
+                      onPressed: () => onEdit(universe),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      onPressed: () => onDelete(universe),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
                   ],
                 ),
               ),
@@ -776,7 +817,11 @@ class _ProjectTypesPanel extends StatelessWidget {
           RemaSectionHeader(
             title: 'Tipos de proyecto',
             icon: Icons.account_tree_outlined,
-            trailing: FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('Nuevo')),
+            trailing: FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo'),
+            ),
           ),
           const SizedBox(height: 20),
           if (snapshot.projectTypes.isEmpty)
@@ -790,8 +835,14 @@ class _ProjectTypesPanel extends StatelessWidget {
                 trailing: Wrap(
                   spacing: 8,
                   children: [
-                    IconButton(onPressed: () => onEdit(item), icon: const Icon(Icons.edit_outlined)),
-                    IconButton(onPressed: () => onDelete(item), icon: const Icon(Icons.delete_outline)),
+                    IconButton(
+                      onPressed: () => onEdit(item),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      onPressed: () => onDelete(item),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
                   ],
                 ),
               ),
@@ -808,9 +859,8 @@ class _TemplatesPanel extends StatelessWidget {
     required this.snapshot,
     required this.selectedUniverseId,
     required this.selectedProjectTypeId,
-    required this.search,
     required this.bulkPercentController,
-    required this.visibleTemplates,
+    required this.templates,
     required this.onUniverseChanged,
     required this.onProjectTypeChanged,
     required this.onSearchChanged,
@@ -823,9 +873,8 @@ class _TemplatesPanel extends StatelessWidget {
   final ConceptCatalogSnapshot snapshot;
   final String? selectedUniverseId;
   final String? selectedProjectTypeId;
-  final String search;
   final TextEditingController bulkPercentController;
-  final List<ConceptTemplateCatalogItem> visibleTemplates;
+  final List<ConceptTemplateCatalogItem> templates;
   final ValueChanged<String?> onUniverseChanged;
   final ValueChanged<String?> onProjectTypeChanged;
   final ValueChanged<String> onSearchChanged;
@@ -836,15 +885,6 @@ class _TemplatesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var templates = selectedProjectTypeId == null
-        ? visibleTemplates
-        : visibleTemplates.where((item) => item.projectTypeId == selectedProjectTypeId).toList();
-    if (search.isNotEmpty) {
-      templates = templates.where((item) {
-        final haystack = '${item.name} ${item.baseDescription} ${item.defaultUnit}'.toLowerCase();
-        return haystack.contains(search);
-      }).toList();
-    }
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -852,7 +892,11 @@ class _TemplatesPanel extends StatelessWidget {
           RemaSectionHeader(
             title: 'Conceptos base',
             icon: Icons.inventory_2_outlined,
-            trailing: FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('Nuevo')),
+            trailing: FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo'),
+            ),
           ),
           const SizedBox(height: 20),
           Row(
@@ -872,7 +916,9 @@ class _TemplatesPanel extends StatelessWidget {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: selectedProjectTypeId,
-                  decoration: const InputDecoration(labelText: 'Tipo de proyecto'),
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de proyecto',
+                  ),
                   items: [
                     for (final item in snapshot.projectTypes)
                       DropdownMenuItem(value: item.id, child: Text(item.name)),
@@ -897,8 +943,13 @@ class _TemplatesPanel extends StatelessWidget {
                 width: 220,
                 child: TextField(
                   controller: bulkPercentController,
-                  decoration: const InputDecoration(labelText: 'Ajuste masivo % (ej. 10 o -5)'),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Ajuste masivo % (ej. 10 o -5)',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -923,8 +974,14 @@ class _TemplatesPanel extends StatelessWidget {
                 trailing: Wrap(
                   spacing: 8,
                   children: [
-                    IconButton(onPressed: () => onEdit(template), icon: const Icon(Icons.edit_outlined)),
-                    IconButton(onPressed: () => onDelete(template), icon: const Icon(Icons.delete_outline)),
+                    IconButton(
+                      onPressed: () => onEdit(template),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      onPressed: () => onDelete(template),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
                   ],
                 ),
               ),
@@ -933,7 +990,10 @@ class _TemplatesPanel extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(template.baseDescription, style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(
+                      template.baseDescription,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                 ),
               if (template != templates.last) const Divider(height: 1),
@@ -991,7 +1051,8 @@ class _AttributesPanel extends StatelessWidget {
             initialValue: selectedTemplateId,
             decoration: const InputDecoration(labelText: 'Concepto'),
             items: [
-              for (final item in visibleTemplates) DropdownMenuItem(value: item.id, child: Text(item.name)),
+              for (final item in visibleTemplates)
+                DropdownMenuItem(value: item.id, child: Text(item.name)),
             ],
             onChanged: onTemplateChanged,
           ),
@@ -1011,7 +1072,8 @@ class _AttributesPanel extends StatelessWidget {
                 onEditOption: onEditOption,
                 onDeleteOption: onDeleteOption,
               ),
-              if (attribute != visibleAttributes.last) const SizedBox(height: 16),
+              if (attribute != visibleAttributes.last)
+                const SizedBox(height: 16),
             ],
         ],
       ),
@@ -1061,7 +1123,11 @@ class _ImportPanel extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: isImporting ? null : onImport,
                   icon: isImporting
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Icon(Icons.file_upload_outlined),
                   label: Text(isImporting ? 'Importando...' : 'Subir CSV'),
                 ),
@@ -1069,15 +1135,20 @@ class _ImportPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const Text('Columnas obligatorias: universe, concept, unit, base_price, attribute, option.'),
+          const Text(
+            'Columnas obligatorias: universe, concept, unit, base_price, attribute, option.',
+          ),
           const SizedBox(height: 6),
           const Text('Columnas opcionales: project_type, base_description.'),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: selectedProjectTypeId,
-            decoration: const InputDecoration(labelText: 'Tipo de proyecto destino'),
+            decoration: const InputDecoration(
+              labelText: 'Tipo de proyecto destino',
+            ),
             items: [
-              for (final item in projectTypes) DropdownMenuItem(value: item.id, child: Text(item.name)),
+              for (final item in projectTypes)
+                DropdownMenuItem(value: item.id, child: Text(item.name)),
             ],
             onChanged: onProjectTypeChanged,
           ),
@@ -1127,10 +1198,25 @@ class _AttributeCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(attribute.name, style: Theme.of(context).textTheme.titleMedium)),
-              IconButton(onPressed: onEditAttribute, icon: const Icon(Icons.edit_outlined)),
-              IconButton(onPressed: onDeleteAttribute, icon: const Icon(Icons.delete_outline)),
-              FilledButton.tonalIcon(onPressed: onAddOption, icon: const Icon(Icons.add), label: const Text('Opción')),
+              Expanded(
+                child: Text(
+                  attribute.name,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                onPressed: onEditAttribute,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              IconButton(
+                onPressed: onDeleteAttribute,
+                icon: const Icon(Icons.delete_outline),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: onAddOption,
+                icon: const Icon(Icons.add),
+                label: const Text('Opción'),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1143,7 +1229,10 @@ class _AttributeCard extends StatelessWidget {
               children: [
                 for (final option in options)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: RemaColors.surfaceWhite,
                       borderRadius: BorderRadius.circular(999),
@@ -1153,9 +1242,15 @@ class _AttributeCard extends StatelessWidget {
                       children: [
                         Text(option.value),
                         const SizedBox(width: 8),
-                        InkWell(onTap: () => onEditOption(option), child: const Icon(Icons.edit, size: 16)),
+                        InkWell(
+                          onTap: () => onEditOption(option),
+                          child: const Icon(Icons.edit, size: 16),
+                        ),
                         const SizedBox(width: 6),
-                        InkWell(onTap: () => onDeleteOption(option), child: const Icon(Icons.close, size: 16)),
+                        InkWell(
+                          onTap: () => onDeleteOption(option),
+                          child: const Icon(Icons.close, size: 16),
+                        ),
                       ],
                     ),
                   ),
@@ -1178,25 +1273,41 @@ class _ImportSummaryCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: summary.hasErrors ? const Color(0xFFFFF1E0) : RemaColors.surfaceLow,
+        color: summary.hasErrors
+            ? const Color(0xFFFFF1E0)
+            : RemaColors.surfaceLow,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Resumen de importación', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Resumen de importación',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 12),
-          Text('Universos: ${summary.createdUniverses} creados, ${summary.existingUniverses} existentes'),
-          Text('Conceptos: ${summary.createdTemplates} creados, ${summary.existingTemplates} existentes'),
-          Text('Atributos: ${summary.createdAttributes} creados, ${summary.existingAttributes} existentes'),
-          Text('Opciones: ${summary.createdOptions} creadas, ${summary.existingOptions} existentes'),
+          Text(
+            'Universos: ${summary.createdUniverses} creados, ${summary.existingUniverses} existentes',
+          ),
+          Text(
+            'Conceptos: ${summary.createdTemplates} creados, ${summary.existingTemplates} existentes',
+          ),
+          Text(
+            'Atributos: ${summary.createdAttributes} creados, ${summary.existingAttributes} existentes',
+          ),
+          Text(
+            'Opciones: ${summary.createdOptions} creadas, ${summary.existingOptions} existentes',
+          ),
           if (summary.issues.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Text('Observaciones:'),
             const SizedBox(height: 8),
             for (final issue in summary.issues.take(8))
               Text('Línea ${issue.lineNumber}: ${issue.message}'),
-            if (summary.issues.length > 8) Text('... ${summary.issues.length - 8} observaciones adicionales'),
+            if (summary.issues.length > 8)
+              Text(
+                '... ${summary.issues.length - 8} observaciones adicionales',
+              ),
           ],
         ],
       ),
@@ -1205,7 +1316,11 @@ class _ImportSummaryCard extends StatelessWidget {
 }
 
 class _TextValueDialog extends StatefulWidget {
-  const _TextValueDialog({required this.title, required this.label, required this.initialValue});
+  const _TextValueDialog({
+    required this.title,
+    required this.label,
+    required this.initialValue,
+  });
 
   final String title;
   final String label;
@@ -1216,7 +1331,9 @@ class _TextValueDialog extends StatefulWidget {
 }
 
 class _TextValueDialogState extends State<_TextValueDialog> {
-  late final TextEditingController _controller = TextEditingController(text: widget.initialValue);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
 
   @override
   void dispose() {
@@ -1234,7 +1351,10 @@ class _TextValueDialogState extends State<_TextValueDialog> {
         decoration: InputDecoration(labelText: widget.label),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
           child: const Text('Guardar'),
@@ -1254,8 +1374,11 @@ class _ProjectTypeDialog extends StatefulWidget {
 }
 
 class _ProjectTypeDialogState extends State<_ProjectTypeDialog> {
-  late final TextEditingController _nameController = TextEditingController(text: widget.initial?.name ?? '');
-  late final TextEditingController _actionBaseController = TextEditingController(text: widget.initial?.actionBase ?? '');
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.initial?.name ?? '',
+  );
+  late final TextEditingController _actionBaseController =
+      TextEditingController(text: widget.initial?.actionBase ?? '');
 
   @override
   void dispose() {
@@ -1267,20 +1390,33 @@ class _ProjectTypeDialogState extends State<_ProjectTypeDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.initial == null ? 'Nuevo tipo de proyecto' : 'Editar tipo de proyecto'),
+      title: Text(
+        widget.initial == null
+            ? 'Nuevo tipo de proyecto'
+            : 'Editar tipo de proyecto',
+      ),
       content: SizedBox(
         width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Nombre')),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Nombre'),
+            ),
             const SizedBox(height: 16),
-            TextField(controller: _actionBaseController, decoration: const InputDecoration(labelText: 'action_base')),
+            TextField(
+              controller: _actionBaseController,
+              decoration: const InputDecoration(labelText: 'action_base'),
+            ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(
             _ProjectTypeFormResult(
@@ -1301,6 +1437,7 @@ class _ConceptDialog extends StatefulWidget {
     required this.projectTypes,
     required this.initialUniverseId,
     required this.initialProjectTypeId,
+    required this.attributeLibrary,
     this.initial,
   });
 
@@ -1308,6 +1445,7 @@ class _ConceptDialog extends StatefulWidget {
   final List<ProjectTypeCatalogItem> projectTypes;
   final String? initialUniverseId;
   final String? initialProjectTypeId;
+  final CatalogAttributeLibrary attributeLibrary;
   final ConceptTemplateCatalogItem? initial;
 
   @override
@@ -1315,12 +1453,38 @@ class _ConceptDialog extends StatefulWidget {
 }
 
 class _ConceptDialogState extends State<_ConceptDialog> {
-  late String? _universeId = widget.initialUniverseId ?? (widget.universes.isEmpty ? null : widget.universes.first.id);
-  late String? _projectTypeId = widget.initialProjectTypeId ?? (widget.projectTypes.isEmpty ? null : widget.projectTypes.first.id);
-  late final TextEditingController _nameController = TextEditingController(text: widget.initial?.name ?? '');
-  late final TextEditingController _descriptionController = TextEditingController(text: widget.initial?.baseDescription ?? '');
-  late final TextEditingController _unitController = TextEditingController(text: widget.initial?.defaultUnit ?? 'm2');
-  late final TextEditingController _priceController = TextEditingController(text: widget.initial?.basePrice.toStringAsFixed(2) ?? '0');
+  late String? _universeId =
+      widget.initialUniverseId ??
+      (widget.universes.isEmpty ? null : widget.universes.first.id);
+  late String? _projectTypeId =
+      widget.initialProjectTypeId ??
+      (widget.projectTypes.isEmpty ? null : widget.projectTypes.first.id);
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.initial?.name ?? '',
+  );
+  late final TextEditingController _descriptionController =
+      TextEditingController(text: widget.initial?.baseDescription ?? '');
+  late final TextEditingController _unitController = TextEditingController(
+    text: widget.initial?.defaultUnit ?? 'm2',
+  );
+  late final TextEditingController _priceController = TextEditingController(
+    text: widget.initial?.basePrice.toStringAsFixed(2) ?? '0',
+  );
+  final List<_AttributeSelectionRow> _attributeRows =
+      <_AttributeSelectionRow>[];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initial == null &&
+        widget.attributeLibrary.attributeNames.isNotEmpty) {
+      _attributeRows.add(
+        _AttributeSelectionRow(
+          attributeName: widget.attributeLibrary.attributeNames.first,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -1334,7 +1498,9 @@ class _ConceptDialogState extends State<_ConceptDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.initial == null ? 'Nuevo concepto' : 'Editar concepto'),
+      title: Text(
+        widget.initial == null ? 'Nuevo concepto' : 'Editar concepto',
+      ),
       content: SizedBox(
         width: 620,
         child: SingleChildScrollView(
@@ -1345,63 +1511,198 @@ class _ConceptDialogState extends State<_ConceptDialog> {
                 initialValue: _universeId,
                 decoration: const InputDecoration(labelText: 'Universo'),
                 items: [
-                  for (final item in widget.universes) DropdownMenuItem(value: item.id, child: Text(item.name)),
+                  for (final item in widget.universes)
+                    DropdownMenuItem(value: item.id, child: Text(item.name)),
                 ],
                 onChanged: (value) => setState(() => _universeId = value),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _projectTypeId,
-                decoration: const InputDecoration(labelText: 'Tipo de proyecto'),
+                decoration: const InputDecoration(
+                  labelText: 'Tipo de proyecto',
+                ),
                 items: [
-                  for (final item in widget.projectTypes) DropdownMenuItem(value: item.id, child: Text(item.name)),
+                  for (final item in widget.projectTypes)
+                    DropdownMenuItem(value: item.id, child: Text(item.name)),
                 ],
                 onChanged: (value) => setState(() => _projectTypeId = value),
               ),
               const SizedBox(height: 16),
-              TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Nombre')),
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(labelText: 'Base description (opcional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Base description (opcional)',
+                ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: TextField(controller: _unitController, decoration: const InputDecoration(labelText: 'Unidad'))),
+                  Expanded(
+                    child: TextField(
+                      controller: _unitController,
+                      decoration: const InputDecoration(labelText: 'Unidad'),
+                    ),
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: TextField(
                       controller: _priceController,
-                      decoration: const InputDecoration(labelText: 'Precio base'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Precio base',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Atributos dinámicos',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (widget.attributeLibrary.attributeNames.isEmpty)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('No hay atributos disponibles para seleccionar.'),
+                )
+              else ...[
+                for (var i = 0; i < _attributeRows.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue:
+                                widget.attributeLibrary.attributeNames.contains(
+                                  _attributeRows[i].attributeName,
+                                )
+                                ? _attributeRows[i].attributeName
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Atributo',
+                            ),
+                            items: [
+                              for (final name
+                                  in widget.attributeLibrary.attributeNames)
+                                DropdownMenuItem<String>(
+                                  value: name,
+                                  child: Text(name),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setState(() {
+                                _attributeRows[i] = _attributeRows[i].copyWith(
+                                  attributeName: value,
+                                  clearOption: true,
+                                );
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _attributeRows[i].effectiveOption(
+                              widget.attributeLibrary,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Opción',
+                            ),
+                            items: [
+                              for (final option
+                                  in widget
+                                          .attributeLibrary
+                                          .optionsByAttribute[_attributeRows[i]
+                                          .attributeName] ??
+                                      const <String>[])
+                                DropdownMenuItem<String>(
+                                  value: option,
+                                  child: Text(option),
+                                ),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _attributeRows[i] = _attributeRows[i].copyWith(
+                                  optionValue: value ?? '',
+                                );
+                              });
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () =>
+                              setState(() => _attributeRows.removeAt(i)),
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _attributeRows.add(
+                          _AttributeSelectionRow(
+                            attributeName:
+                                widget.attributeLibrary.attributeNames.first,
+                          ),
+                        );
+                      });
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Agregar atributo'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
         FilledButton(
           onPressed: () {
-            final price = double.tryParse(_priceController.text.trim().replaceAll(',', '')) ?? 0;
-            if (_universeId == null || _projectTypeId == null) {
-              return;
+            try {
+              final draft = CatalogConceptDraft.fromRaw(
+                universeId: _universeId,
+                projectTypeId: _projectTypeId,
+                name: _nameController.text,
+                baseDescription: _descriptionController.text,
+                defaultUnit: _unitController.text,
+                basePrice: _priceController.text,
+                attributes: [
+                  for (final row in _attributeRows)
+                    CatalogConceptAttributeSelection(
+                      attributeName: row.attributeName,
+                      optionValue: row.optionValue,
+                    ),
+                ],
+              );
+              Navigator.of(context).pop(draft);
+            } catch (error) {
+              showRemaMessage(context, '$error');
             }
-            Navigator.of(context).pop(
-              _ConceptFormResult(
-                universeId: _universeId!,
-                projectTypeId: _projectTypeId!,
-                name: _nameController.text.trim(),
-                baseDescription: _descriptionController.text.trim(),
-                defaultUnit: _unitController.text.trim(),
-                basePrice: price,
-              ),
-            );
           },
           child: const Text('Guardar'),
         ),
@@ -1410,27 +1711,39 @@ class _ConceptDialogState extends State<_ConceptDialog> {
   }
 }
 
+class _AttributeSelectionRow {
+  const _AttributeSelectionRow({
+    required this.attributeName,
+    this.optionValue = '',
+  });
+
+  final String attributeName;
+  final String optionValue;
+
+  _AttributeSelectionRow copyWith({
+    String? attributeName,
+    String? optionValue,
+    bool clearOption = false,
+  }) {
+    return _AttributeSelectionRow(
+      attributeName: attributeName ?? this.attributeName,
+      optionValue: clearOption ? '' : (optionValue ?? this.optionValue),
+    );
+  }
+
+  String? effectiveOption(CatalogAttributeLibrary library) {
+    final options =
+        library.optionsByAttribute[attributeName] ?? const <String>[];
+    if (options.contains(optionValue)) {
+      return optionValue;
+    }
+    return null;
+  }
+}
+
 class _ProjectTypeFormResult {
   const _ProjectTypeFormResult({required this.name, required this.actionBase});
 
   final String name;
   final String actionBase;
-}
-
-class _ConceptFormResult {
-  const _ConceptFormResult({
-    required this.universeId,
-    required this.projectTypeId,
-    required this.name,
-    required this.baseDescription,
-    required this.defaultUnit,
-    required this.basePrice,
-  });
-
-  final String universeId;
-  final String projectTypeId;
-  final String name;
-  final String baseDescription;
-  final String defaultUnit;
-  final double basePrice;
 }

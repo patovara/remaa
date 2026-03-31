@@ -321,6 +321,22 @@ create table if not exists public.quote_items (
   )
 );
 
+create or replace view public.concept_usage_view as
+select
+  q.universe_id,
+  ct.id as concept_id,
+  ct.name,
+  count(*) as usage_count,
+  max(qi.created_at) as last_used
+from public.quote_items qi
+join public.quotes q on q.id = qi.quote_id
+join public.concept_templates ct on ct.id = qi.template_id
+where qi.template_id is not null
+  and q.universe_id is not null
+group by q.universe_id, ct.id, ct.name;
+
+grant select on public.concept_usage_view to anon, authenticated;
+
 alter table public.quote_items
   add column if not exists template_id uuid;
 
