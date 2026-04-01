@@ -32,20 +32,22 @@ class AuthFrame extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: isDesktop ? 980 : 540),
                   child: isDesktop
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Expanded(child: _DesktopBrandPanel()),
-                            const SizedBox(width: 24),
-                            Expanded(
-                              child: _AuthCard(
-                                title: title,
-                                subtitle: subtitle,
-                                bottomChild: bottomChild,
-                                child: cardChild,
+                      ? IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Expanded(child: _DesktopBrandPanel()),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: _AuthCard(
+                                  title: title,
+                                  subtitle: subtitle,
+                                  bottomChild: bottomChild,
+                                  child: cardChild,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         )
                       : _AuthCard(
                           title: title,
