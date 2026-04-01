@@ -222,11 +222,20 @@ class _AuthCard extends StatelessWidget {
             style: textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant),
           ),
           const SizedBox(height: 24),
-          child,
-          if (bottomChild != null) ...[
-            const SizedBox(height: 18),
-            bottomChild!,
-          ],
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  child,
+                  if (bottomChild != null) ...[
+                    const SizedBox(height: 18),
+                    bottomChild!,
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
