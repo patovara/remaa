@@ -20,6 +20,11 @@ import '../features/presupuesto/presentation/presupuesto_page.dart';
 
 final _authRefresh = _AuthRefreshListenable();
 
+const _staffAllowedRoutes = <String>{
+  '/levantamiento',
+  '/ajustes',
+};
+
 final appRouter = GoRouter(
   initialLocation: '/login',
   refreshListenable: _authRefresh,
@@ -27,11 +32,20 @@ final appRouter = GoRouter(
     final location = state.matchedLocation;
     final isAuthRoute = location == '/login' || location == '/register';
     final hasSession = SupabaseBootstrap.client?.auth.currentSession != null;
+    final isActive = _isCurrentUserActive();
+    final isAdmin = _isAdminSession();
 
     if (!hasSession && !isAuthRoute) {
       return '/login';
     }
+    if (hasSession && !isActive && !isAuthRoute) {
+      SupabaseBootstrap.client?.auth.signOut();
+      return '/login';
+    }
     if (hasSession && isAuthRoute) {
+      return '/levantamiento';
+    }
+    if (hasSession && !isAdmin && !_staffAllowedRoutes.contains(location)) {
       return '/levantamiento';
     }
     return null;
@@ -151,3 +165,72 @@ class _AuthRefreshListenable extends ChangeNotifier {
     super.dispose();
   }
 }
+
+bool _isAdminSession() {
+  final user = SupabaseBootstrap.client?.auth.currentUser;
+  if (user == null) {
+    return false;
+  }
+
+  if (!_isUserActive(user.appMetadata, user.userMetadata)) {
+    return false;
+  }
+
+  return _metadataHasAdminRole(user.appMetadata) || _metadataHasAdminRole(user.userMetadata);
+}
+
+bool _isCurrentUserActive() {
+  final user = SupabaseBootstrap.client?.auth.currentUser;
+  if (user == null) {
+    return false;
+  }
+  return _isUserActive(user.appMetadata, user.userMetadata);
+}
+
+bool _metadataHasAdminRole(Map<String, dynamic>? metadata) {
+  if (metadata == null) {
+    return false;
+  }
+
+  final roleValue = '${metadata['role']}'.trim().toLowerCase();
+  if (
+      roleValue == 'admin' ||
+      roleValue == 'administrator' ||
+      roleValue == 'super_admin' ||
+      roleValue == 'superadmin' ||
+      roleValue == 'owner') {
+    return true;
+  }
+
+  final roles = metadata['roles'];
+  if (roles is Iterable) {
+    for (final value in roles) {
+      final normalized = '$value'.trim().toLowerCase();
+      if (
+          normalized == 'admin' ||
+          normalized == 'administrator' ||
+          normalized == 'super_admin' ||
+          normalized == 'superadmin' ||
+          normalized == 'owner') {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+bool _isUserActive(Map<String, dynamic>? appMetadata, Map<String, dynamic>? userMetadata) {
+  final appActive = appMetadata?['is_active'];
+  if (appActive is bool) {
+    return appActive;
+  }
+
+  final userActive = userMetadata?['is_active'];
+  if (userActive is bool) {
+    return userActive;
+  }
+
+  return true;
+}
+

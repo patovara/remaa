@@ -13,6 +13,7 @@ import 'package:printing/printing.dart';
 
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/config/company_profile.dart';
+import '../../../core/auth/admin_access.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/image_optimizer.dart';
@@ -309,8 +310,6 @@ pw.Widget _buildSignatureBlock(String title, String subtitle) {
   );
 }
 
-enum _ActaRole { staff, admin }
-
 class ActasPage extends ConsumerStatefulWidget {
   const ActasPage({super.key, this.clientId, this.quoteId});
 
@@ -345,7 +344,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   final _fechaAprobacionPedidoController = TextEditingController();
   final _actaTemplateController = TextEditingController(text: _defaultActaTemplate);
 
-  _ActaRole _role = _ActaRole.staff;
   int _step = 0;
 
   _PickedMedia? _fotoIngreso;
@@ -365,7 +363,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   String? _processingSingleStage;
   bool _isProcessingDurantePhotos = false;
 
-  bool get _isAdmin => _role == _ActaRole.admin;
+  bool get _isAdmin => ref.read(isAdminProvider);
 
   @override
   void initState() {
@@ -1486,9 +1484,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
             const SizedBox(height: 20),
           ],
           _RoleAndSteps(
-            role: _role,
             step: _step,
-            onRoleChanged: (role) => setState(() => _role = role),
             onStepChanged: (step) => setState(() => _step = step),
           ),
           if (_isLoadingClient) ...[
@@ -1743,15 +1739,11 @@ const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs 
 
 class _RoleAndSteps extends StatelessWidget {
   const _RoleAndSteps({
-    required this.role,
     required this.step,
-    required this.onRoleChanged,
     required this.onStepChanged,
   });
 
-  final _ActaRole role;
   final int step;
-  final ValueChanged<_ActaRole> onRoleChanged;
   final ValueChanged<int> onStepChanged;
 
   @override
@@ -1760,40 +1752,18 @@ class _RoleAndSteps extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       child: Row(
         children: [
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Cuerpo Acta'),
-                  selected: step == 0,
-                  onSelected: (_) => onStepChanged(0),
-                ),
-                ChoiceChip(
-                  label: const Text('Reporte Fotografico'),
-                  selected: step == 1,
-                  onSelected: (_) => onStepChanged(1),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          DropdownButton<_ActaRole>(
-            value: role,
-            onChanged: (value) {
-              if (value == null) {
-                return;
-              }
-              onRoleChanged(value);
-            },
-            items: const [
-              DropdownMenuItem(
-                value: _ActaRole.staff,
-                child: Text('Rol: Staff'),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Cuerpo Acta'),
+                selected: step == 0,
+                onSelected: (_) => onStepChanged(0),
               ),
-              DropdownMenuItem(
-                value: _ActaRole.admin,
-                child: Text('Rol: Admin'),
+              ChoiceChip(
+                label: const Text('Reporte Fotografico'),
+                selected: step == 1,
+                onSelected: (_) => onStepChanged(1),
               ),
             ],
           ),

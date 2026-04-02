@@ -65,6 +65,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               label: 'Correo',
               icon: Icons.mail_outline,
               keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
               validator: (value) {
                 final input = value?.trim() ?? '';
                 if (input.isEmpty) {
@@ -83,6 +84,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               label: 'Contrasena',
               icon: Icons.lock_outline,
               obscureText: true,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) {
+                if (!isLoading) {
+                  _submit();
+                }
+              },
               validator: (value) {
                 if ((value ?? '').isEmpty) {
                   return 'Ingresa tu contrasena.';
@@ -129,6 +136,8 @@ class _AuthField extends StatelessWidget {
     required this.icon,
     this.keyboardType,
     this.obscureText = false,
+    this.textInputAction,
+    this.onFieldSubmitted,
     this.validator,
   });
 
@@ -137,6 +146,8 @@ class _AuthField extends StatelessWidget {
   final IconData icon;
   final TextInputType? keyboardType;
   final bool obscureText;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onFieldSubmitted;
   final FormFieldValidator<String>? validator;
 
   @override
@@ -145,6 +156,8 @@ class _AuthField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
+      textInputAction: textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       validator: validator,
       decoration: InputDecoration(
         labelText: label,

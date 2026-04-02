@@ -9,11 +9,16 @@ import 'core/logging/app_logger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  const envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
 
   try {
-    await dotenv.load(fileName: '.env');
+    await dotenv.load(fileName: envFile);
   } catch (_) {
-    await dotenv.load(fileName: '.env.example');
+    try {
+      await dotenv.load(fileName: '.env');
+    } catch (_) {
+      await dotenv.load(fileName: '.env.example');
+    }
   }
 
   Env.init();

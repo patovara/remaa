@@ -36,4 +36,32 @@ class AuthRepository {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  Future<void> updatePassword(String newPassword) {
+    return _client.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
+  }
+
+  Future<void> updateProfile({
+    String? fullName,
+    String? jobTitle,
+  }) {
+    final data = <String, dynamic>{};
+    if (fullName != null) data['full_name'] = fullName;
+    if (jobTitle != null) data['job_title'] = jobTitle;
+    return _client.auth.updateUser(
+      UserAttributes(data: data),
+    );
+  }
+
+  Future<void> updatePreferences(Map<String, dynamic> prefs) {
+    return _client.auth.updateUser(
+      UserAttributes(data: prefs),
+    );
+  }
+
+  Future<void> signOutAll() {
+    return _client.auth.signOut(scope: SignOutScope.global);
+  }
 }
