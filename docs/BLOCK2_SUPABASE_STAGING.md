@@ -4,6 +4,8 @@ Este bloque deja staging cloud listo para pruebas alfa con usuarios controlados.
 
 ## 1) Secrets que debes crear en GitHub (Settings > Secrets and variables > Actions)
 
+Guia detallada: `docs/GITHUB_SECRETS_SETUP.md`
+
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_REF_STAGING`
 - `SUPABASE_DB_PASSWORD_STAGING`
@@ -23,9 +25,17 @@ Archivo: `.github/workflows/supabase-staging-deploy.yml`
 Ejecución manual desde GitHub Actions:
 
 1. Abrir workflow `Supabase Staging Deploy`.
+2. En `Use workflow from`, seleccionar la rama `agent_test` mientras hacemos pruebas previas a merge.
 2. `apply_db = true` para aplicar migraciones.
 3. `deploy_functions = true` para secretos + deploy de functions.
 4. Ejecutar.
+
+Si GitHub no muestra todavía el workflow en la UI:
+
+1. Confirmar que el commit de la rama `agent_test` ya está en remoto.
+2. Abrir la pestaña `Actions` del repositorio.
+3. Si no aparece, refrescar y usar el selector de rama dentro del workflow cuando GitHub lo indexe.
+4. Si aun así no aparece, el siguiente paso es abrir un PR de `agent_test` a `main` para que el workflow quede visible desde la rama por defecto.
 
 ## 3) Qué despliega
 
@@ -41,6 +51,17 @@ Ejecución manual desde GitHub Actions:
 2. Probar invitación de usuario desde Ajustes.
 3. Probar reenvío de invitación.
 4. Verificar logs en `outbound_email_log`.
+5. Verificar que `user-admin` ya no devuelva 401/redirects a localhost en staging.
+
+## 4.1) Señales de éxito en GitHub Actions
+
+- `Link project` termina en verde.
+- `Apply database migrations` termina sin conflictos.
+- `Push function secrets` termina sin `Missing ...`.
+- `Deploy edge functions` publica:
+  - `user-admin`
+  - `mailer`
+  - `email-inbound`
 
 ## 5) Rollback mínimo recomendado
 
