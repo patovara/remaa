@@ -52,6 +52,58 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     super.dispose();
   }
 
+  Map<String, String> _urlParams(Uri uri) {
+    final params = <String, String>{
+      ...uri.queryParameters,
+    };
+
+    final fragment = uri.fragment.trim();
+    if (fragment.isEmpty) {
+      return params;
+    }
+
+    var fragmentQuery = fragment;
+    final queryIndex = fragmentQuery.indexOf('?');
+    if (queryIndex >= 0 && queryIndex + 1 < fragmentQuery.length) {
+      fragmentQuery = fragmentQuery.substring(queryIndex + 1);
+    }
+
+    if (!fragmentQuery.contains('=')) {
+      return params;
+    }
+
+    try {
+      final fragmentParams = Uri.splitQueryString(fragmentQuery);
+      for (final entry in fragmentParams.entries) {
+        params.putIfAbsent(entry.key, () => entry.value);
+      }
+    } catch (_) {
+      // Ignore malformed fragments and keep existing params.
+    }
+
+    return params;
+  }
+
+  OtpType? _otpTypeFromUrlValue(String rawType) {
+    switch (rawType.trim().toLowerCase()) {
+      case 'invite':
+        return OtpType.invite;
+      case 'recovery':
+        return OtpType.recovery;
+      case 'magiclink':
+        return OtpType.magiclink;
+      case 'signup':
+        return OtpType.signup;
+      case 'email_change':
+      case 'emailchange':
+        return OtpType.emailChange;
+      case 'email':
+        return OtpType.email;
+      default:
+        return null;
+    }
+  }
+
   Future<void> _ensureAuthSessionForPasswordSetup() async {
     final client = Supabase.instance.client;
     if (client.auth.currentSession != null) {
@@ -59,7 +111,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
 
     final uri = Uri.base;
-    final code = (uri.queryParameters['code'] ?? '').trim();
+    final params = _urlParams(uri);
+
+    final code = (params['code'] ?? '').trim();
     if (code.isNotEmpty) {
       await client.auth.exchangeCodeForSession(code);
     }
@@ -68,7 +122,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       return;
     }
 
-    final refreshFromQuery = (uri.queryParameters['refresh_token'] ?? '').trim();
+    final refreshFromQuery = (params['refresh_token'] ?? '').trim();
     if (refreshFromQuery.isNotEmpty) {
       await client.auth.setSession(refreshFromQuery);
     }
@@ -77,21 +131,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       return;
     }
 
-    final fragment = uri.fragment.trim();
-    if (fragment.isNotEmpty) {
-      var fragmentQuery = fragment;
-      final queryIndex = fragmentQuery.indexOf('?');
-      if (queryIndex >= 0 && queryIndex + 1 < fragmentQuery.length) {
-        fragmentQuery = fragmentQuery.substring(queryIndex + 1);
-      }
-
-      if (fragmentQuery.contains('=')) {
-        final params = Uri.splitQueryString(fragmentQuery);
-        final refreshToken = (params['refresh_token'] ?? '').trim();
-        if (refreshToken.isNotEmpty) {
-          await client.auth.setSession(refreshToken);
-        }
-      }
+    final rawType = (params['type'] ?? '').trim();
+    final otpType = _otpTypeFromUrlValue(rawType) ?? (_isInviteMode ? OtpType.invite : OtpType.recovery);
+    final tokenHash = (params['token_hash'] ?? params['token'] ?? '').trim();
+    if (tokenHash.isNotEmpty) {
+      await client.auth.verifyOTP(
+        type: otpType,
+        tokenHash: tokenHash,
+      );
     }
 
     if (client.auth.currentSession == null) {
