@@ -15,9 +15,13 @@ Future<void> main() async {
     await dotenv.load(fileName: envFile);
   } catch (_) {
     try {
-      await dotenv.load(fileName: '.env');
+      await dotenv.load(fileName: '.env.production');
     } catch (_) {
-      await dotenv.load(fileName: '.env.example');
+      try {
+        await dotenv.load(fileName: '.env');
+      } catch (_) {
+        await dotenv.load(fileName: '.env.example');
+      }
     }
   }
 

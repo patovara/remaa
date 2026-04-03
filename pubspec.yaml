@@ -56,6 +56,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - .env.production
     - .env.example
     - assets/images/logo_remaa.png
     - assets/images/marca_agua_remaa.png
