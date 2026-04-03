@@ -162,7 +162,7 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
     final configured = Env.appPublicUrl.trim();
     final base = configured.isNotEmpty ? configured : Uri.base.toString();
     final uri = Uri.parse(base);
-    return uri.replace(path: '/register', query: 'mode=$mode', fragment: '').toString();
+    return uri.replace(path: '/register', query: 'mode=$mode').toString();
   }
 
   Future<void> _openChangePasswordDialog() async {
