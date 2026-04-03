@@ -155,7 +155,7 @@ async function handleInviteUser(
 ) {
   const email = (body.email ?? "").trim().toLowerCase();
   const role = normalizeRole(body.role, ownerEmail);
-  const redirectTo = effectiveRedirectTo(body.redirect_to);
+  const redirectTo = effectiveRedirectTo(body.redirect_to, "invite");
 
   if (!email || !email.includes("@")) {
     return jsonError("Invalid email.", 400);
@@ -353,7 +353,7 @@ async function handleResetPassword(
   ownerEmail: string,
 ) {
   const userId = (body.user_id ?? "").trim();
-  const redirectTo = effectiveRedirectTo(body.redirect_to);
+  const redirectTo = effectiveRedirectTo(body.redirect_to, "reset");
   if (!userId) {
     return jsonError("Missing user_id.", 400);
   }
@@ -439,7 +439,7 @@ async function handleResendInvite(
   ownerEmail: string,
 ) {
   const userId = (body.user_id ?? "").trim();
-  const redirectTo = effectiveRedirectTo(body.redirect_to);
+  const redirectTo = effectiveRedirectTo(body.redirect_to, "invite");
 
   if (!userId) {
     return jsonError("Missing user_id.", 400);
@@ -632,10 +632,21 @@ async function insertOutboundLog(
 
 function normalizeRedirectTo(raw: string | undefined): string | null {
   const value = (raw ?? "").trim();
-  return value.length > 0 ? value : null;
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    // Never keep hash fragments in redirect_to; grants must be appended by Supabase.
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
-function effectiveRedirectTo(raw: string | undefined): string | null {
+function effectiveRedirectTo(raw: string | undefined, mode: "invite" | "reset"): string | null {
   const explicit = normalizeRedirectTo(raw);
   if (explicit != null) {
     return explicit;
@@ -647,7 +658,7 @@ function effectiveRedirectTo(raw: string | undefined): string | null {
   }
 
   try {
-    return new URL("/register?mode=invite", configured).toString();
+    return new URL(`/register?mode=${mode}`, configured).toString();
   } catch {
     return configured;
   }

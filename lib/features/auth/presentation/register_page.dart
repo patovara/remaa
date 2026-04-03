@@ -115,6 +115,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
   }
 
+  void _logGrantSnapshot(Uri uri, Map<String, String> params) {
+    debugPrint(
+      '[auth-link] path=${uri.path} mode=${widget.mode ?? 'none'} '
+      'hasCode=${(params['code'] ?? '').trim().isNotEmpty} '
+      'hasRefreshToken=${(params['refresh_token'] ?? '').trim().isNotEmpty} '
+      'hasAccessToken=${(params['access_token'] ?? '').trim().isNotEmpty} '
+      'hasTokenHash=${(params['token_hash'] ?? '').trim().isNotEmpty} '
+      'hasToken=${(params['token'] ?? '').trim().isNotEmpty} '
+      'type=${(params['type'] ?? '').trim()} '
+      'fragmentPresent=${uri.fragment.trim().isNotEmpty}',
+    );
+  }
+
   Future<void> _ensureAuthSessionForPasswordSetup() async {
     final client = Supabase.instance.client;
     if (client.auth.currentSession != null) {
@@ -123,9 +136,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     final uri = Uri.base;
     final params = _urlParams(uri);
+    _logGrantSnapshot(uri, params);
+
+    final linkError = (params['error_description'] ?? params['error'] ?? '').trim();
+    if (linkError.isNotEmpty) {
+      throw StateError('Enlace invalido o expirado. Solicita uno nuevo.');
+    }
 
     final code = (params['code'] ?? '').trim();
     if (code.isNotEmpty) {
+      debugPrint('[auth-link] trying exchangeCodeForSession');
       await client.auth.exchangeCodeForSession(code);
     }
 
@@ -135,6 +155,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     final refreshFromQuery = (params['refresh_token'] ?? '').trim();
     if (refreshFromQuery.isNotEmpty) {
+      debugPrint('[auth-link] trying setSession with refresh_token length=${refreshFromQuery.length}');
       await client.auth.setSession(refreshFromQuery);
     }
 
@@ -146,6 +167,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final otpType = _otpTypeFromUrlValue(rawType) ?? (_isInviteMode ? OtpType.invite : OtpType.recovery);
     final tokenHash = (params['token_hash'] ?? params['token'] ?? '').trim();
     if (tokenHash.isNotEmpty) {
+      debugPrint('[auth-link] trying verifyOTP type=${otpType.name} tokenHashLength=${tokenHash.length}');
       await client.auth.verifyOTP(
         type: otpType,
         tokenHash: tokenHash,
@@ -153,7 +175,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
 
     if (client.auth.currentSession == null) {
-      throw StateError('Auth session missing! Reabre el enlace desde el correo.');
+      throw StateError('Auth session missing! El enlace no contiene credenciales validas o ya expiro. Solicita un enlace nuevo.');
     }
   }
 
