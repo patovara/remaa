@@ -134,7 +134,7 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
           await _refreshUsers();
         },
         onResetPassword: (userId) async {
-          final redirectTo = _inviteRedirectUrl();
+          final redirectTo = _authRedirectUrl('reset');
           await _userRepository.resetPassword(userId: userId, redirectTo: redirectTo);
           if (!mounted) {
             return;
@@ -142,7 +142,7 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
           showRemaMessage(context, 'Correo de reset enviado.');
         },
         onResendInvite: (userId) async {
-          final redirectTo = _inviteRedirectUrl();
+          final redirectTo = _authRedirectUrl('invite');
           await _userRepository.resendInvite(userId: userId, redirectTo: redirectTo);
           if (!mounted) {
             return;
@@ -155,11 +155,15 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
   }
 
   String _inviteRedirectUrl() {
+    return _authRedirectUrl('invite');
+  }
+
+  String _authRedirectUrl(String mode) {
     final configured = Env.appPublicUrl.trim();
-    if (configured.isNotEmpty) {
-      return Uri.parse(configured).replace(path: '/register', query: 'mode=invite').toString();
-    }
-    return Uri.base.replace(path: '/register', query: 'mode=invite').toString();
+    final base = configured.isNotEmpty ? configured : Uri.base.toString();
+    final uri = Uri.parse(base);
+    // Flutter web usa hash routing por defecto: /#/register?mode=...
+    return uri.replace(path: '/', query: '', fragment: '/register?mode=$mode').toString();
   }
 
   Future<void> _openChangePasswordDialog() async {

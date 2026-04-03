@@ -35,7 +35,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       return;
     }
 
-    final isInviteMode = widget.mode == 'invite';
+    final isInviteMode = widget.mode == 'invite' || widget.mode == 'reset';
 
     if (isInviteMode) {
       await ref.read(authControllerProvider.notifier).updatePassword(
@@ -93,7 +93,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     final authState = ref.watch(authControllerProvider);
     final isLoading = authState.isLoading;
-    final isInviteMode = widget.mode == 'invite';
+    final isInviteMode = widget.mode == 'invite' || widget.mode == 'reset';
 
     return AuthFrame(
       title: isInviteMode ? 'Establece tu acceso' : 'Crear cuenta',
