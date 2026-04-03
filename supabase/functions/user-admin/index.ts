@@ -187,6 +187,7 @@ async function handleInviteUser(
   if (!inviteActionLink) {
     return jsonError("No invite action link returned by Supabase.", 500);
   }
+  const inviteAppLink = buildAppAuthLink(inviteActionLink, redirectTo, "invite") ?? inviteActionLink;
 
   const userId = (inviteLinkData as Record<string, unknown> & { user?: { id?: string } })?.user?.id;
   if (!userId) {
@@ -208,12 +209,12 @@ async function handleInviteUser(
     subject: "Invitacion a REMA Arquitectura",
     templateKey: "user_invite",
     html: buildInviteEmailHtml({
-      inviteLink: inviteActionLink,
+      inviteLink: inviteAppLink,
       role,
       invitedBy: actorEmail,
     }),
     text: buildInviteEmailText({
-      inviteLink: inviteActionLink,
+      inviteLink: inviteAppLink,
       role,
       invitedBy: actorEmail,
     }),
@@ -222,6 +223,7 @@ async function handleInviteUser(
       redirect_to: redirectTo,
       delivery: "resend",
       invite_action_link: inviteActionLink,
+      invite_app_link: inviteAppLink,
     },
   });
 
@@ -393,6 +395,7 @@ async function handleResetPassword(
   if (!recoveryLink) {
     return jsonError("No recovery action link returned by Supabase.", 500);
   }
+  const recoveryAppLink = buildAppAuthLink(recoveryLink, redirectTo, "reset") ?? recoveryLink;
 
   const emailDelivery = await sendResendEmail(adminClient, {
     actorUserId: actorId,
@@ -401,17 +404,18 @@ async function handleResetPassword(
     subject: "Restablece tu acceso a REMA Arquitectura",
     templateKey: "password_reset",
     html: buildPasswordResetEmailHtml({
-      recoveryLink,
+      recoveryLink: recoveryAppLink,
       requestedBy: actorEmail,
     }),
     text: buildPasswordResetEmailText({
-      recoveryLink,
+      recoveryLink: recoveryAppLink,
       requestedBy: actorEmail,
     }),
     payload: {
       redirect_to: redirectTo,
       delivery: "resend",
       recovery_action_link: recoveryLink,
+      recovery_app_link: recoveryAppLink,
     },
   });
 
@@ -499,6 +503,7 @@ async function handleResendInvite(
   if (!inviteActionLink) {
     return jsonError("No invite action link returned by Supabase.", 500);
   }
+  const inviteAppLink = buildAppAuthLink(inviteActionLink, redirectTo, "invite") ?? inviteActionLink;
 
   const emailDelivery = await sendResendEmail(adminClient, {
     actorUserId: actorId,
@@ -507,12 +512,12 @@ async function handleResendInvite(
     subject: "Invitacion a REMA Arquitectura",
     templateKey: "user_invite",
     html: buildInviteEmailHtml({
-      inviteLink: inviteActionLink,
+      inviteLink: inviteAppLink,
       role: targetRole,
       invitedBy: actorEmail,
     }),
     text: buildInviteEmailText({
-      inviteLink: inviteActionLink,
+      inviteLink: inviteAppLink,
       role: targetRole,
       invitedBy: actorEmail,
     }),
@@ -521,6 +526,7 @@ async function handleResendInvite(
       redirect_to: redirectTo,
       delivery: "resend",
       invite_action_link: inviteActionLink,
+      invite_app_link: inviteAppLink,
       resent: true,
     },
   });
@@ -684,6 +690,36 @@ function readActionLink(data: unknown): string | null {
   }
 
   return null;
+}
+
+function buildAppAuthLink(
+  actionLink: string,
+  redirectTo: string | null,
+  mode: "invite" | "reset",
+): string | null {
+  try {
+    const actionUrl = new URL(actionLink);
+    const token = (actionUrl.searchParams.get("token") ?? "").trim();
+    const type = (actionUrl.searchParams.get("type") ?? "").trim().toLowerCase();
+    if (!token || !type) {
+      return null;
+    }
+
+    const base = normalizeRedirectTo(redirectTo ?? undefined) ?? normalizeRedirectTo(appPublicUrl);
+    if (!base) {
+      return null;
+    }
+
+    const appUrl = new URL(base);
+    appUrl.pathname = "/register";
+    appUrl.searchParams.set("mode", mode);
+    appUrl.searchParams.set("type", type);
+    appUrl.searchParams.set("token", token);
+    appUrl.hash = "";
+    return appUrl.toString();
+  } catch {
+    return null;
+  }
 }
 
 function buildInviteEmailHtml(params: { inviteLink: string; role: Role; invitedBy: string }) {
