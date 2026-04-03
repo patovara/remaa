@@ -62,4 +62,8 @@ class AuthController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() => _repository.updatePassword(newPassword));
   }
+
+  void resetState() {
+    state = const AsyncData(null);
+  }
 }

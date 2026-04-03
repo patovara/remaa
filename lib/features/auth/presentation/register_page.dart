@@ -21,6 +21,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _isPreparingSession = false;
+  bool _isSubmitting = false;
 
   bool get _isInviteMode => widget.mode == 'invite';
   bool get _isResetMode => widget.mode == 'reset';
@@ -31,6 +33,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   void initState() {
     super.initState();
+    ref.read(authControllerProvider.notifier).resetState();
+
     if (_hasInvalidMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -40,6 +44,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             const SnackBar(content: Text('Enlace invalido o expirado. Inicia sesion nuevamente.')),
           );
         context.go('/login');
+      });
+      return;
+    }
+
+    if (_isPasswordSetupMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _preparePasswordSetupSession();
       });
     }
   }
@@ -146,12 +157,35 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
   }
 
+  Future<void> _preparePasswordSetupSession() async {
+    if (_isPreparingSession) return;
+    setState(() => _isPreparingSession = true);
+    try {
+      await _ensureAuthSessionForPasswordSetup();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(_authErrorMessage(error))));
+    } finally {
+      if (mounted) {
+        setState(() => _isPreparingSession = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
+    if (_isSubmitting) {
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final isInviteMode = _isPasswordSetupMode;
+
+    setState(() => _isSubmitting = true);
 
     if (isInviteMode) {
       try {
@@ -167,6 +201,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           ..showSnackBar(
             SnackBar(content: Text(_authErrorMessage(error))),
           );
+        setState(() => _isSubmitting = false);
         return;
       }
 
@@ -184,6 +219,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             ),
           );
         context.go('/login');
+        setState(() => _isSubmitting = false);
+        return;
       }
     } else {
       await ref.read(authControllerProvider.notifier).signUp(
@@ -203,7 +240,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             ),
           );
         context.go('/login');
+        setState(() => _isSubmitting = false);
+        return;
       }
+    }
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
     }
   }
 
@@ -220,7 +263,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     });
 
     final authState = ref.watch(authControllerProvider);
-    final isLoading = authState.isLoading;
+    final isLoading = authState.isLoading || _isSubmitting || _isPreparingSession;
     final isInviteMode = _isPasswordSetupMode;
 
     return AuthFrame(
