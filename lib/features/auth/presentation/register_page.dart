@@ -46,7 +46,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
       final authState = ref.read(authControllerProvider);
       if (!authState.hasError) {
-        context.go('/levantamiento');
+        await Supabase.instance.client.auth.signOut();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Contrasena guardada. Inicia sesion para continuar.'),
+            ),
+          );
+        context.go('/login');
       }
     } else {
       await ref.read(authControllerProvider.notifier).signUp(
@@ -89,7 +98,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     return AuthFrame(
       title: isInviteMode ? 'Establece tu acceso' : 'Crear cuenta',
       subtitle: isInviteMode
-          ? 'Crea una contraseña para activar tu acceso al portal REMA.'
+          ? 'Define tu contrasena para activar tu acceso. El correo ya fue registrado por el super admin.'
           : 'Registra tus credenciales para acceder al portal de REMA.',
       cardChild: Form(
         key: _formKey,
@@ -135,7 +144,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             const SizedBox(height: 16),
             _AuthField(
               controller: _confirmPasswordController,
-              label: 'Confirmar contrasena',
+              label: 'Repetir contrasena',
               icon: Icons.verified_user_outlined,
               obscureText: true,
               validator: (value) {
@@ -162,7 +171,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(isInviteMode ? 'ACTIVAR ACCESO' : 'CREAR CUENTA'),
+                  : Text(isInviteMode ? 'GUARDAR CONTRASENA' : 'CREAR CUENTA'),
             ),
             if (!isInviteMode) ...[
               const SizedBox(height: 16),
