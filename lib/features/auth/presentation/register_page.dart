@@ -22,6 +22,28 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  bool get _isInviteMode => widget.mode == 'invite';
+  bool get _isResetMode => widget.mode == 'reset';
+  bool get _isPasswordSetupMode => _isInviteMode || _isResetMode;
+  bool get _hasInvalidMode =>
+      widget.mode != null && widget.mode!.isNotEmpty && !_isPasswordSetupMode;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasInvalidMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(content: Text('Enlace invalido o expirado. Inicia sesion nuevamente.')),
+          );
+        context.go('/login');
+      });
+    }
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -35,7 +57,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       return;
     }
 
-    final isInviteMode = widget.mode == 'invite' || widget.mode == 'reset';
+    final isInviteMode = _isPasswordSetupMode;
 
     if (isInviteMode) {
       await ref.read(authControllerProvider.notifier).updatePassword(
@@ -93,7 +115,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     final authState = ref.watch(authControllerProvider);
     final isLoading = authState.isLoading;
-    final isInviteMode = widget.mode == 'invite' || widget.mode == 'reset';
+    final isInviteMode = _isPasswordSetupMode;
 
     return AuthFrame(
       title: isInviteMode ? 'Establece tu acceso' : 'Crear cuenta',
@@ -105,6 +127,20 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (isInviteMode) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF6DB),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _isInviteMode ? 'Modo invitacion' : 'Modo recuperacion de contrasena',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             if (!isInviteMode) ...[
               _AuthField(
                 controller: _emailController,
