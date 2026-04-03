@@ -103,13 +103,13 @@ Despliegue local (ejemplo):
 Puedes mantener BanaHosting para otros sitios, pero para esta app conviene dejar backend y storage en Supabase por escalabilidad y menor mantenimiento.
 Flutter web se puede publicar como estatico en cPanel, consumiendo Supabase por HTTPS.
 
-## Email opcion C (Resend + Supabase + Vercel)
+## Email opcion C (Resend + Supabase)
 
 Se agrego base tecnica para pipeline hibrido:
 
 - Auth emails (validacion/reset) pueden seguir por Supabase SMTP apuntando a Resend.
 - Correos transaccionales propios via `supabase/functions/mailer`.
-- Captura inbound via webhook en Vercel (`vercel/api/resend-inbound.ts`) y persistencia en `supabase/functions/email-inbound`.
+- Captura inbound via webhook directo a `supabase/functions/email-inbound`.
 
 ### Nuevas tablas
 
@@ -125,7 +125,7 @@ Se agrego base tecnica para pipeline hibrido:
 	- registra resultado en `outbound_email_log`
 
 - `email-inbound`:
-	- recibe payload desde webhook intermedio (Vercel)
+	- recibe payload directo desde webhook de Resend
 	- autentica por header `x-email-webhook-secret`
 	- persiste payload normalizado en `inbound_email_events`
 
@@ -138,15 +138,15 @@ En `supabase/.env.local`:
 - `RESEND_FROM_EMAIL`
 - `EMAIL_WEBHOOK_SECRET`
 
-En Vercel (servidor):
+En Resend (webhook endpoint):
 
-- `SUPABASE_EMAIL_INBOUND_URL` (URL de tu function `email-inbound`)
-- `EMAIL_WEBHOOK_SECRET` (mismo valor que en Supabase)
+- URL del endpoint: `https://<PROJECT_REF>.supabase.co/functions/v1/email-inbound`
+- Header: `x-email-webhook-secret` (mismo valor que `EMAIL_WEBHOOK_SECRET` en Supabase)
 
 ### Despliegue local sugerido
 
 1. `supabase functions serve --env-file supabase/.env.local --no-verify-jwt`
-3. Configurar webhook de Resend a endpoint Vercel: `/api/resend-inbound`
+3. Configurar webhook de Resend directo al endpoint Supabase: `/functions/v1/email-inbound`
 
 Nota:
 
@@ -156,4 +156,4 @@ Nota:
 
 - No guardar API keys reales en git.
 - Rotar inmediatamente cualquier key que se haya compartido fuera de un vault seguro.
-- Agregar validacion de firma de Resend en Vercel cuando habilites `svix`.
+- Agregar validacion de firma de Resend en `email-inbound` cuando habilites `svix`.

@@ -34,8 +34,8 @@ Estos van en Vercel Project Settings > Environment Variables:
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `APP_PUBLIC_URL`
-- `SUPABASE_EMAIL_INBOUND_URL`
-- `EMAIL_WEBHOOK_SECRET`
+
+Nota: para el webhook inbound de Resend ya no se usa relay en Vercel. El webhook debe apuntar directo a Supabase `email-inbound`.
 
 ## Recomendacion operativa
 
