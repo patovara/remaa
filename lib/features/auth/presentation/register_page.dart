@@ -68,12 +68,29 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       return;
     }
 
+    final refreshFromQuery = (uri.queryParameters['refresh_token'] ?? '').trim();
+    if (refreshFromQuery.isNotEmpty) {
+      await client.auth.setSession(refreshFromQuery);
+    }
+
+    if (client.auth.currentSession != null) {
+      return;
+    }
+
     final fragment = uri.fragment.trim();
     if (fragment.isNotEmpty) {
-      final params = Uri.splitQueryString(fragment);
-      final refreshToken = (params['refresh_token'] ?? '').trim();
-      if (refreshToken.isNotEmpty) {
-        await client.auth.setSession(refreshToken);
+      var fragmentQuery = fragment;
+      final queryIndex = fragmentQuery.indexOf('?');
+      if (queryIndex >= 0 && queryIndex + 1 < fragmentQuery.length) {
+        fragmentQuery = fragmentQuery.substring(queryIndex + 1);
+      }
+
+      if (fragmentQuery.contains('=')) {
+        final params = Uri.splitQueryString(fragmentQuery);
+        final refreshToken = (params['refresh_token'] ?? '').trim();
+        if (refreshToken.isNotEmpty) {
+          await client.auth.setSession(refreshToken);
+        }
       }
     }
 
@@ -90,11 +107,21 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final isInviteMode = _isPasswordSetupMode;
 
     if (isInviteMode) {
-      await _ensureAuthSessionForPasswordSetup();
+      try {
+        await _ensureAuthSessionForPasswordSetup();
 
-      await ref.read(authControllerProvider.notifier).updatePassword(
-            _passwordController.text,
+        await ref.read(authControllerProvider.notifier).updatePassword(
+              _passwordController.text,
+            );
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(content: Text(_authErrorMessage(error))),
           );
+        return;
+      }
 
       if (!mounted) return;
 
