@@ -477,7 +477,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
   Future<void> _loadClientOptions() async {
     setState(() => _isLoadingClients = true);
-    final base = List<ClientRecord>.from(mockClients);
+    final base = <ClientRecord>[];
     final supabase = SupabaseBootstrap.client;
     if (supabase != null) {
       try {
@@ -493,7 +493,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
               .select('id, business_name, notes, email, phone, address_line, city')
               .order('business_name');
         }
-        final knownIds = base.map((c) => c.id).toSet();
+        final knownIds = <String>{};
         for (final row in rows) {
           final id = (row['id'] as String? ?? '').trim();
           final name = (row['business_name'] as String? ?? '').trim();
@@ -1862,7 +1862,7 @@ class _ClientSelectorDialogState extends State<_ClientSelectorDialog> {
   }
 
   Future<void> _loadClients() async {
-    final base = List<ClientRecord>.from(mockClients);
+    final base = <ClientRecord>[];
     final supabase = SupabaseBootstrap.client;
     if (supabase != null) {
       try {
@@ -1870,9 +1870,7 @@ class _ClientSelectorDialogState extends State<_ClientSelectorDialog> {
             .from('clients')
             .select('id, business_name, email, phone, address_line, city')
             .order('business_name');
-        final mergedByName = <String, ClientRecord>{
-          for (final client in base) _normalizedClientKey(client.name): client,
-        };
+        final mergedByName = <String, ClientRecord>{};
         for (final row in rows) {
           final id = (row['id'] as String? ?? '').trim();
           final name = (row['business_name'] as String? ?? '').trim();

@@ -548,14 +548,11 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   Future<List<ClientOption>> _fetchClientOptions() async {
-    final mergedByName = <String, ClientOption>{
-      for (final client in mockClients)
-        client.name.trim().toLowerCase(): ClientOption(id: client.id, name: client.name),
-    };
+    final mergedByName = <String, ClientOption>{};
 
     final client = SupabaseBootstrap.client;
     if (client == null) {
-      return mergedByName.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+      return const <ClientOption>[];
     }
 
     try {

@@ -64,10 +64,9 @@ class _ClientesPageState extends State<ClientesPage> {
   }
 
   Future<List<ClientRecord>> _fetchClients() async {
-    final base = List<ClientRecord>.from(mockClients);
     final client = SupabaseBootstrap.client;
     if (client == null) {
-      return base;
+      return const <ClientRecord>[];
     }
 
     try {
@@ -117,18 +116,10 @@ class _ClientesPageState extends State<ClientesPage> {
         }),
       );
 
-      final mergedByName = <String, ClientRecord>{
-        for (final item in base) _normalizedClientKey(item.name): item,
-      };
-      for (final remote in remoteClients.whereType<ClientRecord>()) {
-        mergedByName[_normalizedClientKey(remote.name)] = remote;
-      }
-      return mergedByName.values.toList();
+      return remoteClients.whereType<ClientRecord>().toList();
     } catch (_) {
-      return base;
+      return const <ClientRecord>[];
     }
-
-    return base;
   }
 
   String _normalizedClientKey(String value) => value.trim().toLowerCase();

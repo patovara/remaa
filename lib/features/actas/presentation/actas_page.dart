@@ -646,10 +646,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     try {
       final client = SupabaseBootstrap.client;
       if (client == null || !_isUuid(clientId)) {
-        _loadMockClient(clientId);
-      } else {
-        await _loadSupabaseClient(clientId);
+        return;
       }
+      await _loadSupabaseClient(clientId);
     } catch (error) {
       if (mounted) {
         showRemaMessage(context, 'No se pudo cargar el cliente: $error');
@@ -711,14 +710,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
   }
 
-  void _loadMockClient(String clientId) {
-    // Buscar en mock data
-    final client = _findMockClient(clientId);
-    if (client != null) {
-      _loadClientIntoControllers(client);
-    }
-  }
-
   Future<void> _loadSupabaseClient(String clientId) async {
     final client = SupabaseBootstrap.client;
     if (client == null) return;
@@ -761,14 +752,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       }
     } catch (e) {
       AppLogger.error('actas_load_client_failed', data: {'clientId': clientId, 'error': e.toString()});
-    }
-  }
-
-  ClientRecord? _findMockClient(String clientId) {
-    try {
-      return mockClients.firstWhere((c) => c.id == clientId);
-    } catch (_) {
-      return null;
     }
   }
 

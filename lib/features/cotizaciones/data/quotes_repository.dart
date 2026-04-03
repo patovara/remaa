@@ -11,36 +11,11 @@ class QuotesRepository {
   static int _localProjectKeySeq = 1;
   static const String _actaBucket = 'acta-files';
 
-  static final List<ProjectLookup> _localProjects = [
-    const ProjectLookup(
-      id: 'seed-project-001',
-      code: 'PRJ001',
-      name: 'Proyecto Demo Residencial',
-      siteAddress: 'Direccion demo',
-      description: 'Proyecto de ejemplo local',
-      managerName: 'Arq. Daniel M.',
-    ),
-  ];
+  static final List<ProjectLookup> _localProjects = [];
 
-  static final List<QuoteRecord> _localQuotes = [
-    const QuoteRecord(
-      id: 'seed-quote-001',
-      projectId: 'seed-project-001',
-      quoteNumber: 'RM-CL001-MNTO-PRJ001',
-      status: 'draft',
-      universeId: 'seed-u-recubrimientos',
-      projectTypeId: 'seed-pt-mantenimiento',
-      subtotal: 0,
-      tax: 0,
-      total: 0,
-      approvalPdfPath: null,
-      approvalPdfUploadedAt: null,
-    ),
-  ];
+  static final List<QuoteRecord> _localQuotes = [];
 
-  static final Map<String, List<QuoteItemRecord>> _localItems = {
-    'seed-quote-001': [],
-  };
+  static final Map<String, List<QuoteItemRecord>> _localItems = {};
 
   static final Map<String, List<SurveyEntryRecord>> _localSurveyEntries = {};
   static final Map<String, ActaDocumentRecord> _localActaDocuments = {};
