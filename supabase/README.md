@@ -124,6 +124,11 @@ Se agrego base tecnica para pipeline hibrido:
 	- envia email con Resend API
 	- registra resultado en `outbound_email_log`
 
+- `mailer-safe`:
+	- version minima segura para envios custom
+	- valida JWT, rol admin/super_admin, payload y limites de tamano
+	- registra resultado en `outbound_email_log`
+
 - `email-inbound`:
 	- recibe payload directo desde webhook de Resend
 	- autentica por header `x-email-webhook-secret`
@@ -146,6 +151,7 @@ En Resend (webhook endpoint):
 ### Despliegue local sugerido
 
 1. `supabase functions serve --env-file supabase/.env.local --no-verify-jwt`
+2. Desplegar version segura opcional: `supabase functions deploy mailer-safe`
 3. Configurar webhook de Resend directo al endpoint Supabase: `/functions/v1/email-inbound`
 
 Nota:
