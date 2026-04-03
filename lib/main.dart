@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,20 +10,30 @@ import 'core/logging/app_logger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const envFile = String.fromEnvironment('ENV_FILE', defaultValue: '.env');
+  const envFileFromDefine = String.fromEnvironment('ENV_FILE', defaultValue: '');
 
-  try {
-    await dotenv.load(fileName: envFile);
-  } catch (_) {
+  final candidates = <String>[
+    if (envFileFromDefine.isNotEmpty) envFileFromDefine,
+    if (envFileFromDefine.isEmpty && kReleaseMode) '.env.production',
+    if (envFileFromDefine.isEmpty && !kReleaseMode) '.env',
+    '.env.production',
+    '.env',
+    '.env.example',
+  ];
+
+  var loaded = false;
+  for (final file in candidates.toSet()) {
     try {
-      await dotenv.load(fileName: '.env.production');
+      await dotenv.load(fileName: file);
+      loaded = true;
+      break;
     } catch (_) {
-      try {
-        await dotenv.load(fileName: '.env');
-      } catch (_) {
-        await dotenv.load(fileName: '.env.example');
-      }
+      // Continue until a valid env file is loaded.
     }
+  }
+
+  if (!loaded) {
+    throw StateError('No se pudo cargar ningun archivo de entorno.');
   }
 
   Env.init();
