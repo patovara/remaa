@@ -43,6 +43,12 @@ final appRouter = GoRouter(
       return '/login';
     }
     if (hasSession && isAuthRoute) {
+      // Invited/reset users land on /register?mode=invite with a new session.
+      // Allow them through so they can set their password.
+      if (location == '/register') {
+        final mode = state.uri.queryParameters['mode'];
+        if (mode == 'invite' || mode == 'reset') return null;
+      }
       return '/levantamiento';
     }
     if (hasSession && !isAdmin && !_staffAllowedRoutes.contains(location)) {
@@ -59,8 +65,8 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/register',
-      pageBuilder: (context, state) => const NoTransitionPage(
-        child: RegisterPage(),
+      pageBuilder: (context, state) => NoTransitionPage(
+        child: RegisterPage(mode: state.uri.queryParameters['mode']),
       ),
     ),
     ShellRoute(

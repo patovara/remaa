@@ -8,7 +8,9 @@ import 'auth_controller.dart';
 import 'auth_frame.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
-  const RegisterPage({super.key});
+  const RegisterPage({super.key, this.mode});
+
+  final String? mode;
 
   @override
   ConsumerState<RegisterPage> createState() => _RegisterPageState();
@@ -33,25 +35,38 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       return;
     }
 
-    await ref.read(authControllerProvider.notifier).signUp(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
-        );
+    final isInviteMode = widget.mode == 'invite';
 
-    if (!mounted) {
-      return;
-    }
+    if (isInviteMode) {
+      await ref.read(authControllerProvider.notifier).updatePassword(
+            _passwordController.text,
+          );
 
-    final authState = ref.read(authControllerProvider);
-    if (!authState.hasError) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Cuenta creada. Inicia sesion para continuar.'),
-          ),
-        );
-      context.go('/login');
+      if (!mounted) return;
+
+      final authState = ref.read(authControllerProvider);
+      if (!authState.hasError) {
+        context.go('/levantamiento');
+      }
+    } else {
+      await ref.read(authControllerProvider.notifier).signUp(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+
+      if (!mounted) return;
+
+      final authState = ref.read(authControllerProvider);
+      if (!authState.hasError) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Cuenta creada. Inicia sesion para continuar.'),
+            ),
+          );
+        context.go('/login');
+      }
     }
   }
 
@@ -69,33 +84,38 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     final authState = ref.watch(authControllerProvider);
     final isLoading = authState.isLoading;
+    final isInviteMode = widget.mode == 'invite';
 
     return AuthFrame(
-      title: 'Crear cuenta',
-      subtitle: 'Registra tus credenciales para acceder al portal de REMA.',
+      title: isInviteMode ? 'Establece tu acceso' : 'Crear cuenta',
+      subtitle: isInviteMode
+          ? 'Crea una contraseña para activar tu acceso al portal REMA.'
+          : 'Registra tus credenciales para acceder al portal de REMA.',
       cardChild: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _AuthField(
-              controller: _emailController,
-              label: 'Correo',
-              icon: Icons.mail_outline,
-              keyboardType: TextInputType.emailAddress,
-              validator: (value) {
-                final input = value?.trim() ?? '';
-                if (input.isEmpty) {
-                  return 'Ingresa tu correo.';
-                }
-                final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                if (!emailRegex.hasMatch(input)) {
-                  return 'Correo invalido.';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
+            if (!isInviteMode) ...[
+              _AuthField(
+                controller: _emailController,
+                label: 'Correo',
+                icon: Icons.mail_outline,
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  final input = value?.trim() ?? '';
+                  if (input.isEmpty) {
+                    return 'Ingresa tu correo.';
+                  }
+                  final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                  if (!emailRegex.hasMatch(input)) {
+                    return 'Correo invalido.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
             _AuthField(
               controller: _passwordController,
               label: 'Contrasena',
@@ -142,16 +162,18 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('CREAR CUENTA'),
+                  : Text(isInviteMode ? 'ACTIVAR ACCESO' : 'CREAR CUENTA'),
             ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: isLoading ? null : () => context.go('/login'),
-                child: const Text('Ya tengo cuenta. Iniciar sesion'),
+            if (!isInviteMode) ...[
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: isLoading ? null : () => context.go('/login'),
+                  child: const Text('Ya tengo cuenta. Iniciar sesion'),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

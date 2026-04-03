@@ -24,6 +24,7 @@ const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "mvazquez@gruporemaa.com").tr
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 Deno.serve(async (req: Request) => {
@@ -147,30 +148,8 @@ async function handleInviteUser(
     return jsonError("Cannot invite a super-admin.", 403);
   }
 
-  const inviteOptions = redirectTo != null ? { redirectTo } : undefined;
-  const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, inviteOptions);
-  if (error) {
-    return jsonError(error.message, 500);
-  }
-
-  if (!data.user) {
-    return jsonError("No user returned after invite.", 500);
-  }
-
-  const mergedAppMetadata = {
-    ...(data.user.app_metadata ?? {}),
-    role,
-    is_active: true,
-  };
-
-  const { error: updateError } = await adminClient.auth.admin.updateUserById(data.user.id, {
-    app_metadata: mergedAppMetadata,
-  });
-
-  if (updateError) {
-    return jsonError(updateError.message, 500);
-  }
-
+  // Generate invite link via generateLink only (does NOT send a Supabase email).
+  // Creates the user if they don't yet exist.
   const inviteLinkPayload: Record<string, unknown> = {
     type: "invite",
     email,
@@ -191,6 +170,19 @@ async function handleInviteUser(
   const inviteActionLink = readActionLink(inviteLinkData);
   if (!inviteActionLink) {
     return jsonError("No invite action link returned by Supabase.", 500);
+  }
+
+  const userId = (inviteLinkData as Record<string, unknown> & { user?: { id?: string } })?.user?.id;
+  if (!userId) {
+    return jsonError("No user ID returned from generateLink.", 500);
+  }
+
+  const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
+    app_metadata: { role, is_active: true },
+  });
+
+  if (updateError) {
+    return jsonError(updateError.message, 500);
   }
 
   const emailDelivery = await sendResendEmail(adminClient, {
@@ -224,7 +216,7 @@ async function handleInviteUser(
   await auditLog(adminClient, {
     actorId,
     actorEmail,
-    targetUserId: data.user.id,
+    targetUserId: userId,
     targetEmail: email,
     action: "invite_user",
     payload: { role, redirect_to: redirectTo, delivery: "resend" },
@@ -625,7 +617,7 @@ function effectiveRedirectTo(raw: string | undefined): string | null {
   }
 
   try {
-    return new URL("/ajustes", configured).toString();
+    return new URL("/register?mode=invite", configured).toString();
   } catch {
     return configured;
   }

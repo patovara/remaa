@@ -157,9 +157,9 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
   String _inviteRedirectUrl() {
     final configured = Env.appPublicUrl.trim();
     if (configured.isNotEmpty) {
-      return Uri.parse(configured).replace(path: '/ajustes', query: '').toString();
+      return Uri.parse(configured).replace(path: '/register', query: 'mode=invite').toString();
     }
-    return Uri.base.replace(path: '/ajustes', query: '').toString();
+    return Uri.base.replace(path: '/register', query: 'mode=invite').toString();
   }
 
   Future<void> _openChangePasswordDialog() async {
