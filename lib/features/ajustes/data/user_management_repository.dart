@@ -10,6 +10,10 @@ class ManagedUser {
     required this.isActive,
     required this.emailConfirmed,
     required this.createdAt,
+    required this.lastSignInAt,
+    required this.invitePending,
+    required this.inviteExpired,
+    required this.canResendInvite,
   });
 
   final String id;
@@ -18,6 +22,10 @@ class ManagedUser {
   final bool isActive;
   final bool emailConfirmed;
   final DateTime? createdAt;
+  final DateTime? lastSignInAt;
+  final bool invitePending;
+  final bool inviteExpired;
+  final bool canResendInvite;
 
   factory ManagedUser.fromJson(Map<String, dynamic> json) {
     return ManagedUser(
@@ -27,6 +35,10 @@ class ManagedUser {
       isActive: json['is_active'] as bool? ?? true,
       emailConfirmed: json['email_confirmed'] as bool? ?? false,
       createdAt: DateTime.tryParse((json['created_at'] as String? ?? '').trim()),
+      lastSignInAt: DateTime.tryParse((json['last_sign_in_at'] as String? ?? '').trim()),
+      invitePending: json['invite_pending'] as bool? ?? false,
+      inviteExpired: json['invite_expired'] as bool? ?? false,
+      canResendInvite: json['can_resend_invite'] as bool? ?? false,
     );
   }
 }

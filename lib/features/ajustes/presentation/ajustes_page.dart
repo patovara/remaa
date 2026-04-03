@@ -983,6 +983,10 @@ class _ManageUsersDialogState extends State<_ManageUsersDialog> {
                               Text('Rol actual: ${user.role}'),
                               Text('Estado: ${user.isActive ? 'Activo' : 'Inactivo'}'),
                               Text('Email confirmado: ${user.emailConfirmed ? 'Si' : 'No'}'),
+                              if (user.invitePending)
+                                Text(
+                                  'Invitacion: ${user.inviteExpired ? 'Vencida (requiere reenvio)' : 'Vigente (<24h)'}',
+                                ),
                               const SizedBox(height: 8),
                               Wrap(
                                 spacing: 8,
@@ -1011,7 +1015,7 @@ class _ManageUsersDialogState extends State<_ManageUsersDialog> {
                                     child: const Text('Reset password'),
                                   ),
                                   TextButton(
-                                    onPressed: _busy || user.emailConfirmed
+                                    onPressed: _busy || !user.canResendInvite
                                         ? null
                                         : () => _run(() => widget.onResendInvite(user.id)),
                                     child: const Text('Reenviar invitacion'),

@@ -20,6 +20,7 @@ const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
 const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") ?? "";
 const appPublicUrl = Deno.env.get("APP_PUBLIC_URL") ?? "";
 const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "mvazquez@gruporemaa.com").trim().toLowerCase();
+const INVITE_EXPIRY_HOURS = 24;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,8 +116,19 @@ async function handleListUsers(adminClient: ReturnType<typeof createClient>, own
     return jsonError(error.message, 500);
   }
 
+  const nowMs = Date.now();
+
   const users = (data.users ?? []).map((user: any) => {
     const email = (user.email ?? "").trim().toLowerCase();
+    const createdAtRaw = typeof user.created_at === "string" ? user.created_at : null;
+    const createdAtMs = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
+    const hasLastSignIn = Boolean(user.last_sign_in_at);
+    const invitePending = !hasLastSignIn;
+    const inviteExpired =
+      invitePending && Number.isFinite(createdAtMs)
+        ? nowMs - createdAtMs >= INVITE_EXPIRY_HOURS * 60 * 60 * 1000
+        : false;
+
     return {
       id: user.id,
       email,
@@ -124,6 +136,10 @@ async function handleListUsers(adminClient: ReturnType<typeof createClient>, own
       is_active: readIsActive(user.app_metadata, user.user_metadata),
       email_confirmed: Boolean(user.email_confirmed_at),
       created_at: user.created_at,
+      last_sign_in_at: user.last_sign_in_at,
+      invite_pending: invitePending,
+      invite_expired: inviteExpired,
+      can_resend_invite: invitePending && inviteExpired,
     };
   });
 
@@ -439,8 +455,22 @@ async function handleResendInvite(
     return jsonError("Target user has no email.", 400);
   }
 
-  if (targetData.user.email_confirmed_at) {
-    return jsonError("User email is already confirmed.", 409);
+  if (targetData.user.last_sign_in_at) {
+    return jsonError("User has already activated access. Use reset password instead.", 409);
+  }
+
+  const createdAtRaw = typeof targetData.user.created_at === "string" ? targetData.user.created_at : null;
+  const createdAtMs = createdAtRaw ? Date.parse(createdAtRaw) : NaN;
+  if (Number.isFinite(createdAtMs)) {
+    const ageMs = Date.now() - createdAtMs;
+    const minResendMs = INVITE_EXPIRY_HOURS * 60 * 60 * 1000;
+    if (ageMs < minResendMs) {
+      const remainingHours = Math.ceil((minResendMs - ageMs) / (60 * 60 * 1000));
+      return jsonError(
+        `Invite is still valid. You can resend in approximately ${remainingHours}h.`,
+        429,
+      );
+    }
   }
 
   const targetRole = readRole(targetData.user.app_metadata, targetData.user.user_metadata, targetEmail, ownerEmail);
