@@ -20,7 +20,7 @@ const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
 const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") ?? "";
 const appPublicUrl = Deno.env.get("APP_PUBLIC_URL") ?? "";
 const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "mvazquez@gruporemaa.com").trim().toLowerCase();
-const INVITE_EXPIRY_HOURS = 24;
+const INVITE_EXPIRY_HOURS = 1;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
