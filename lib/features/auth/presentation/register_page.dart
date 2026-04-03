@@ -52,6 +52,36 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     super.dispose();
   }
 
+  Future<void> _ensureAuthSessionForPasswordSetup() async {
+    final client = Supabase.instance.client;
+    if (client.auth.currentSession != null) {
+      return;
+    }
+
+    final uri = Uri.base;
+    final code = (uri.queryParameters['code'] ?? '').trim();
+    if (code.isNotEmpty) {
+      await client.auth.exchangeCodeForSession(code);
+    }
+
+    if (client.auth.currentSession != null) {
+      return;
+    }
+
+    final fragment = uri.fragment.trim();
+    if (fragment.isNotEmpty) {
+      final params = Uri.splitQueryString(fragment);
+      final refreshToken = (params['refresh_token'] ?? '').trim();
+      if (refreshToken.isNotEmpty) {
+        await client.auth.setSession(refreshToken);
+      }
+    }
+
+    if (client.auth.currentSession == null) {
+      throw StateError('Auth session missing! Reabre el enlace desde el correo.');
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -60,6 +90,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final isInviteMode = _isPasswordSetupMode;
 
     if (isInviteMode) {
+      await _ensureAuthSessionForPasswordSetup();
+
       await ref.read(authControllerProvider.notifier).updatePassword(
             _passwordController.text,
           );
