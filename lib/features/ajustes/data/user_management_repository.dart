@@ -40,9 +40,20 @@ class UserManagementRepository {
     return client;
   }
 
+  Map<String, String> _authHeaders() {
+    final accessToken = _client.auth.currentSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw StateError('Sesion expirada. Inicia sesion de nuevo.');
+    }
+    return {
+      'Authorization': 'Bearer $accessToken',
+    };
+  }
+
   Future<List<ManagedUser>> listUsers() async {
     final response = await _client.functions.invoke(
       'user-admin',
+      headers: _authHeaders(),
       body: {'action': 'list_users'},
     );
 
@@ -129,6 +140,7 @@ class UserManagementRepository {
   }) async {
     final response = await _client.functions.invoke(
       'user-admin',
+      headers: _authHeaders(),
       body: {
         'action': action,
         ...payload,
