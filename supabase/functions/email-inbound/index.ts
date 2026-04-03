@@ -23,12 +23,17 @@ Deno.serve(async (req: Request) => {
     return jsonError("Missing environment variables.", 500);
   }
 
-  const providedSecret = req.headers.get("x-email-webhook-secret") ?? "";
-  if (providedSecret !== inboundSecret) {
+  const providedSecret = extractInboundSecret(req);
+  if (!constantTimeEquals(providedSecret, inboundSecret)) {
     return jsonError("Invalid webhook secret.", 401);
   }
 
-  const payload = await req.json().catch(() => null);
+  const rawBody = await req.text();
+  if (!rawBody || rawBody.trim().length === 0) {
+    return jsonError("Empty payload.", 400);
+  }
+
+  const payload = safeParseJson(rawBody);
   if (!payload || typeof payload !== "object") {
     return jsonError("Invalid JSON payload.", 400);
   }
@@ -59,14 +64,48 @@ Deno.serve(async (req: Request) => {
 
 function normalizeInboundPayload(payload: Record<string, unknown>) {
   const data = asRecord(payload.data);
-  const from = coalesceString(data?.from, payload.from);
-  const to = coalesceString(data?.to, payload.to);
+  const from = coalesceString(data?.from, data?.from_email, payload.from, payload.from_email);
+  const to = coalesceString(data?.to, data?.to_email, payload.to, payload.to_email);
   const subject = coalesceString(data?.subject, payload.subject);
-  const textBody = coalesceString(data?.text, payload.text);
-  const htmlBody = coalesceString(data?.html, payload.html);
-  const messageId = coalesceString(data?.id, payload.id, payload.message_id);
+  const textBody = coalesceString(data?.text, data?.text_body, payload.text, payload.text_body);
+  const htmlBody = coalesceString(data?.html, data?.html_body, payload.html, payload.html_body);
+  const messageId = coalesceString(data?.id, data?.message_id, payload.id, payload.message_id);
 
   return { from, to, subject, textBody, htmlBody, messageId };
+}
+
+function safeParseJson(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function extractInboundSecret(req: Request): string {
+  const headerSecret = req.headers.get("x-email-webhook-secret")?.trim() ?? "";
+  if (headerSecret) return headerSecret;
+
+  const authorization = req.headers.get("authorization") ?? "";
+  if (!authorization.toLowerCase().startsWith("bearer ")) return "";
+
+  return authorization.slice("Bearer ".length).trim();
+}
+
+function constantTimeEquals(a: string, b: string): boolean {
+  if (!a || !b) return false;
+
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i += 1) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
