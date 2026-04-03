@@ -30,9 +30,18 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+/build/*
+!/build/web
 /coverage/
 .env
+.env.*
+!.env.example
+!.env.production
+!.env.alpha.example
+!build/web/assets/.env.production
+supabase/.env.*
+!supabase/.env.example
+.rema_functions.*
 start_rema.sh
 stop_rema.sh
 

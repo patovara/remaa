@@ -185,6 +185,26 @@ class GeneratedConceptResult {
   final Map<String, Object?> generatedData;
 }
 
+class ConceptUsageItem {
+  const ConceptUsageItem({
+    required this.conceptId,
+    required this.name,
+    required this.usageCount,
+    required this.lastUsed,
+  });
+
+  final String conceptId;
+  final String name;
+  final int usageCount;
+  final DateTime lastUsed;
+}
+
+class ConceptUsageResponse {
+  const ConceptUsageResponse({required this.items});
+
+  final List<ConceptUsageItem> items;
+}
+
 class ConceptGenerator {
   const ConceptGenerator();
 
@@ -254,4 +274,72 @@ class ConceptGenerator {
     }
     return '(${parts.join(', ')})';
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Standalone utility
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Generates the full description text for a quotation concept.
+///
+/// Format:
+/// ```
+/// {ACTION} {CONCEPT} (attr1: val1, attr2: val2).
+///
+/// {CLOSURE}
+/// ```
+///
+/// Rules:
+/// - [action] and [concept] are trimmed and uppercased.
+/// - [attributes] entries with blank key or blank value are ignored.
+/// - The attribute block `(…)` is omitted entirely when no valid entries remain.
+/// - A single period closes the first line; no duplicate periods are introduced.
+/// - [closure] is appended after a blank line.
+///
+/// Example:
+/// ```dart
+/// generateConceptText(
+///   action: 'Suministro e instalación de',
+///   concept: 'Tablaroca',
+///   attributes: {'Acabado': 'Liso', 'Espesor': '13 mm'},
+///   closure: 'Incluye mano de obra…',
+/// );
+/// // → 'SUMINISTRO E INSTALACIÓN DE TABLAROCA (Acabado: Liso, Espesor: 13 mm).\n\nIncluye mano de obra…'
+/// ```
+String generateConceptText({
+  required String action,
+  required String concept,
+  required Map<String, String> attributes,
+  required String closure,
+}) {
+  final cleanAction = action.trim().toUpperCase();
+  final cleanConcept = concept.trim().toUpperCase();
+
+  // Build head: "ACTION CONCEPT"
+  final head = [cleanAction, cleanConcept]
+      .where((s) => s.isNotEmpty)
+      .join(' ')
+      .replaceAll(RegExp(r'\s+'), ' ');
+
+  // Build attribute fragment: "(key: value, …)" — skip blank entries
+  final attrParts = <String>[];
+  for (final entry in attributes.entries) {
+    final k = entry.key.trim();
+    final v = entry.value.trim();
+    if (k.isNotEmpty && v.isNotEmpty) {
+      attrParts.add('$k: $v');
+    }
+  }
+  final attrBlock = attrParts.isEmpty ? '' : '(${attrParts.join(', ')})';
+
+  // Assemble body, avoid duplicate spaces between head and attrBlock
+  final bodyParts = [head, attrBlock].where((s) => s.isNotEmpty).join(' ');
+
+  // Close with a single period (strip any trailing period the caller may have added)
+  final bodyNoPeriod = bodyParts.replaceAll(RegExp(r'\.\s*$'), '');
+
+  final cleanClosure = closure.trim();
+
+  if (cleanClosure.isEmpty) return '$bodyNoPeriod.';
+  return '$bodyNoPeriod.\n\n$cleanClosure';
 }

@@ -96,11 +96,66 @@ class ConceptsCatalogRepository {
     }
   }
 
+  Future<ConceptUsageResponse> fetchConceptUsageSuggestions({
+    required String universeId,
+    int limit = 10,
+  }) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null || universeId.trim().isEmpty) {
+      return const ConceptUsageResponse(items: []);
+    }
+
+    try {
+      final rows = await client
+          .from('concept_usage_view')
+          .select('concept_id, name, usage_count, last_used')
+          .eq('universe_id', universeId)
+          .order('usage_count', ascending: false)
+          .order('last_used', ascending: false)
+          .limit(limit);
+
+      return ConceptUsageResponse(
+        items: [
+          for (final row in rows)
+            ConceptUsageItem(
+              conceptId: row['concept_id'] as String? ?? '',
+              name: row['name'] as String? ?? '',
+              usageCount: _toInt(row['usage_count']),
+              lastUsed: _toDateTime(row['last_used']),
+            ),
+        ],
+      );
+    } catch (error) {
+      AppLogger.error('concept_usage_fetch_failed', data: {
+        'universe_id': universeId,
+        'error': error.toString(),
+      });
+      return const ConceptUsageResponse(items: []);
+    }
+  }
+
   double _toDouble(Object? value) {
     if (value is num) {
       return value.toDouble();
     }
     return double.tryParse('$value') ?? 0;
+  }
+
+  int _toInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse('$value') ?? 0;
+  }
+
+  DateTime _toDateTime(Object? value) {
+    if (value is DateTime) {
+      return value;
+    }
+    return DateTime.tryParse('$value') ?? DateTime.fromMillisecondsSinceEpoch(0);
   }
 }
 

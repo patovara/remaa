@@ -34,10 +34,12 @@ class RemaShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = MediaQuery.sizeOf(context).width >= 1024;
     final isAdmin = ref.watch(isAdminProvider);
-    final navItems = [
-      for (final item in _navItems)
-        if (item.route != '/catalogo' || isAdmin) item,
-    ];
+    final navItems = isAdmin
+        ? _navItems
+        : [
+            for (final item in _navItems)
+              if (item.route == '/levantamiento' || item.route == '/ajustes') item,
+          ];
 
     if (isDesktop) {
       return Scaffold(
@@ -101,12 +103,6 @@ class _DesktopNav extends StatelessWidget {
               item: item,
               isActive: location.startsWith(item.route),
             ),
-          const Spacer(),
-          OutlinedButton.icon(
-            onPressed: () => context.go('/presupuesto'),
-            icon: const Icon(Icons.receipt_long),
-            label: const Text('Presupuesto'),
-          ),
         ],
       ),
     );

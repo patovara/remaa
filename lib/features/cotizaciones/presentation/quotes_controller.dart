@@ -34,6 +34,16 @@ final projectSurveyEntriesProvider = FutureProvider.family<List<SurveyEntryRecor
   return ref.read(quotesRepositoryProvider).fetchSurveyEntries(projectId: projectId);
 });
 
+final recentTemplateItemsProvider = FutureProvider.family<List<QuoteItemRecord>, String>((
+  ref,
+  templateId,
+) {
+  return ref.read(quotesRepositoryProvider).fetchRecentItemsByTemplate(
+        templateId: templateId,
+        limit: 5,
+      );
+});
+
 class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
   late final QuotesRepository _repository = ref.read(quotesRepositoryProvider);
 

@@ -11,36 +11,11 @@ class QuotesRepository {
   static int _localProjectKeySeq = 1;
   static const String _actaBucket = 'acta-files';
 
-  static final List<ProjectLookup> _localProjects = [
-    const ProjectLookup(
-      id: 'seed-project-001',
-      code: 'PRJ001',
-      name: 'Proyecto Demo Residencial',
-      siteAddress: 'Direccion demo',
-      description: 'Proyecto de ejemplo local',
-      managerName: 'Arq. Daniel M.',
-    ),
-  ];
+  static final List<ProjectLookup> _localProjects = [];
 
-  static final List<QuoteRecord> _localQuotes = [
-    const QuoteRecord(
-      id: 'seed-quote-001',
-      projectId: 'seed-project-001',
-      quoteNumber: 'RM-CL001-MNTO-PRJ001',
-      status: 'draft',
-      universeId: 'seed-u-recubrimientos',
-      projectTypeId: 'seed-pt-mantenimiento',
-      subtotal: 0,
-      tax: 0,
-      total: 0,
-      approvalPdfPath: null,
-      approvalPdfUploadedAt: null,
-    ),
-  ];
+  static final List<QuoteRecord> _localQuotes = [];
 
-  static final Map<String, List<QuoteItemRecord>> _localItems = {
-    'seed-quote-001': [],
-  };
+  static final Map<String, List<QuoteItemRecord>> _localItems = {};
 
   static final Map<String, List<SurveyEntryRecord>> _localSurveyEntries = {};
   static final Map<String, ActaDocumentRecord> _localActaDocuments = {};
@@ -725,6 +700,61 @@ class QuotesRepository {
     }
   }
 
+  Future<List<QuoteItemRecord>> fetchRecentItemsByTemplate({
+    required String templateId,
+    int limit = 5,
+  }) async {
+    final cleanTemplateId = templateId.trim();
+    if (cleanTemplateId.isEmpty) {
+      return const [];
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null) {
+      final local = <QuoteItemRecord>[];
+      for (final items in _localItems.values) {
+        for (final item in items) {
+          if ((item.templateId ?? '').trim() == cleanTemplateId) {
+            local.add(item);
+          }
+        }
+      }
+      return local.reversed.take(limit).toList();
+    }
+
+    try {
+      final rows = await client
+          .from('quote_items')
+          .select(
+            'id, quote_id, template_id, concept, generated_data, unit, quantity, unit_price, line_total',
+          )
+          .eq('template_id', cleanTemplateId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      return [
+        for (final row in rows)
+          QuoteItemRecord(
+            id: row['id'] as String,
+            quoteId: row['quote_id'] as String? ?? '',
+            templateId: row['template_id'] as String?,
+            concept: row['concept'] as String? ?? '',
+            generatedData: _toMap(row['generated_data']),
+            unit: row['unit'] as String? ?? '',
+            quantity: _toDouble(row['quantity']),
+            unitPrice: _toDouble(row['unit_price']),
+            lineTotal: _toDouble(row['line_total']),
+          ),
+      ];
+    } catch (error) {
+      AppLogger.error('quote_items_recent_by_template_failed', data: {
+        'template_id': cleanTemplateId,
+        'error': error.toString(),
+      });
+      return const [];
+    }
+  }
+
   Future<List<QuoteItemRecord>> saveItem(QuoteItemRecord item) async {
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(item.quoteId)) {
@@ -1184,8 +1214,7 @@ class QuotesRepository {
     );
 
     final base = 'RM-$clientCode-$projectTypeKey-$projectCode';
-    final seq = await _nextSeq(base: base, client: client);
-    return '$base-${seq.toString().padLeft(3, '0')}';
+    return base;
   }
 
   Future<String> _resolveProjectCode({
@@ -1244,28 +1273,6 @@ class QuotesRepository {
       return 'CL$suffix';
     } catch (_) {
       return 'CL001';
-    }
-  }
-
-  /// Returns the next available sequence number for a given folio base string.
-  /// Counts existing quotes with that prefix and adds 1. Practically atomic for
-  /// single-user apps; a unique constraint on quote_number in the DB provides
-  /// the final safety net.
-  Future<int> _nextSeq({required String base, required dynamic client}) async {
-    // Local fallback
-    final localCount = _localQuotes.where((q) => q.quoteNumber.startsWith(base)).length;
-    if (client == null) {
-      return localCount + 1;
-    }
-    try {
-      final rows = await client
-          .from('quotes')
-          .select('id')
-          .like('quote_number', '$base%');
-      final remoteCount = (rows as List).length;
-      return remoteCount + localCount + 1;
-    } catch (_) {
-      return localCount + 1;
     }
   }
 

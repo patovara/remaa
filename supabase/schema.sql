@@ -321,6 +321,22 @@ create table if not exists public.quote_items (
   )
 );
 
+create or replace view public.concept_usage_view as
+select
+  q.universe_id,
+  ct.id as concept_id,
+  ct.name,
+  count(*) as usage_count,
+  max(qi.created_at) as last_used
+from public.quote_items qi
+join public.quotes q on q.id = qi.quote_id
+join public.concept_templates ct on ct.id = qi.template_id
+where qi.template_id is not null
+  and q.universe_id is not null
+group by q.universe_id, ct.id, ct.name;
+
+grant select on public.concept_usage_view to anon, authenticated;
+
 alter table public.quote_items
   add column if not exists template_id uuid;
 
@@ -588,3 +604,60 @@ on conflict (id) do nothing;
 insert into storage.buckets (id, name, public)
 values ('acta-files', 'acta-files', false)
 on conflict (id) do nothing;
+
+create table if not exists public.user_admin_audit (
+  id bigint generated always as identity primary key,
+  actor_user_id uuid not null,
+  actor_email text not null,
+  target_user_id uuid not null,
+  target_email text not null,
+  action text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists user_admin_audit_actor_idx on public.user_admin_audit (actor_user_id);
+create index if not exists user_admin_audit_target_idx on public.user_admin_audit (target_user_id);
+create index if not exists user_admin_audit_created_idx on public.user_admin_audit (created_at desc);
+
+create table if not exists public.outbound_email_log (
+  id uuid primary key default gen_random_uuid(),
+  actor_user_id uuid,
+  actor_email text,
+  to_email text not null,
+  subject text not null,
+  template_key text,
+  provider text not null default 'resend',
+  provider_message_id text,
+  status text not null default 'queued',
+  payload jsonb not null default '{}'::jsonb,
+  error_text text,
+  created_at timestamptz not null default now(),
+  constraint outbound_email_log_status_check
+    check (status in ('queued', 'sent', 'failed'))
+);
+
+create index if not exists outbound_email_log_created_idx
+  on public.outbound_email_log (created_at desc);
+create index if not exists outbound_email_log_to_email_idx
+  on public.outbound_email_log (to_email);
+
+create table if not exists public.inbound_email_events (
+  id uuid primary key default gen_random_uuid(),
+  provider text not null default 'resend',
+  message_id text,
+  from_email text,
+  to_email text,
+  subject text,
+  text_body text,
+  html_body text,
+  raw_payload jsonb not null default '{}'::jsonb,
+  received_at timestamptz not null default now(),
+  processed boolean not null default false,
+  processed_at timestamptz
+);
+
+create index if not exists inbound_email_events_received_idx
+  on public.inbound_email_events (received_at desc);
+create index if not exists inbound_email_events_message_idx
+  on public.inbound_email_events (message_id);

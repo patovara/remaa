@@ -4,10 +4,7 @@ import '../../../core/logging/app_logger.dart';
 import '../presentation/clientes_mock_data.dart';
 
 class ClientResponsiblesRepository {
-  static final Map<String, List<ClientResponsibleRecord>> _localStore = {
-    for (final client in mockClients)
-      client.id: List<ClientResponsibleRecord>.from(client.responsibles),
-  };
+  static final Map<String, List<ClientResponsibleRecord>> _localStore = {};
 
   Future<List<ClientResponsibleRecord>> fetchByClientId(String clientId) async {
     if (!_canUseRemote(clientId)) {

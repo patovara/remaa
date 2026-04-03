@@ -50,7 +50,110 @@ Nota:
 - Bucket privado: survey-photos
 - Bucket privado: acta-files
 
+## Gestion de usuarios (super-admin)
+
+Se agrego la Edge Function `user-admin` para que solo el super-admin gestione usuarios sin exponer `service_role` en Flutter.
+
+En el entorno actual, `invite_user` y `reset_password` ya no dependen del SMTP local de Supabase para la entrega final del correo: generan el action link con Supabase Auth y envian el email real por Resend.
+
+Acciones disponibles (POST body):
+
+- `list_users`
+- `invite_user` (`email`, `role` = `staff|admin`)
+- `update_role` (`user_id`, `role` = `staff|admin`)
+- `set_active` (`user_id`, `is_active`)
+- `reset_password` (`user_id`)
+
+Variables de entorno requeridas en la function:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `OWNER_EMAIL` (opcional, default: `mvazquez@gruporemaa.com`)
+- `RESEND_API_KEY` (para enviar invitaciones y reset por Resend)
+- `RESEND_FROM_EMAIL` (remitente verificado en Resend)
+
+Despliegue local (ejemplo):
+
+1. En desarrollo local, servir functions con `--no-verify-jwt` para evitar fallos de verificacion JWT de la CLI con tokens ES256:
+	`supabase functions serve --env-file supabase/.env.local --no-verify-jwt`
+2. Confirmar que el owner tenga rol `super_admin` o email igual a `OWNER_EMAIL`.
+
+## Quickstart alfa (Supabase Cloud)
+
+1. Configurar variables de funciones usando `supabase/.env.example` como plantilla (no commitear secretos reales).
+2. Cargar secretos en Supabase Cloud:
+
+	`supabase secrets set --env-file supabase/.env.cloud`
+
+3. Desplegar funciones:
+
+	`supabase functions deploy user-admin`
+	`supabase functions deploy mailer`
+	`supabase functions deploy email-inbound`
+
+4. Verificar endpoints desplegados en Cloud y luego probar:
+
+	- invitacion de usuario
+	- reenvio de invitacion
+	- reset password
+
 ## Nota sobre cPanel y BanaHosting
 
 Puedes mantener BanaHosting para otros sitios, pero para esta app conviene dejar backend y storage en Supabase por escalabilidad y menor mantenimiento.
 Flutter web se puede publicar como estatico en cPanel, consumiendo Supabase por HTTPS.
+
+## Email opcion C (Resend + Supabase)
+
+Se agrego base tecnica para pipeline hibrido:
+
+- Auth emails (validacion/reset) pueden seguir por Supabase SMTP apuntando a Resend.
+- Correos transaccionales propios via `supabase/functions/mailer`.
+- Captura inbound via webhook directo a `supabase/functions/email-inbound`.
+
+### Nuevas tablas
+
+- `public.outbound_email_log`: bitacora de envio de correos salientes.
+- `public.inbound_email_events`: captura de correos/eventos entrantes.
+
+### Nuevas Edge Functions
+
+- `mailer`:
+	- action: `send_custom`
+	- requiere usuario autenticado con rol admin/super_admin
+	- envia email con Resend API
+	- registra resultado en `outbound_email_log`
+
+- `email-inbound`:
+	- recibe payload directo desde webhook de Resend
+	- autentica por header `x-email-webhook-secret`
+	- persiste payload normalizado en `inbound_email_events`
+
+### Variables de entorno requeridas
+
+En `supabase/.env.local`:
+
+- `OWNER_EMAIL`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `EMAIL_WEBHOOK_SECRET`
+
+En Resend (webhook endpoint):
+
+- URL del endpoint: `https://<PROJECT_REF>.supabase.co/functions/v1/email-inbound`
+- Header: `x-email-webhook-secret` (mismo valor que `EMAIL_WEBHOOK_SECRET` en Supabase)
+
+### Despliegue local sugerido
+
+1. `supabase functions serve --env-file supabase/.env.local --no-verify-jwt`
+3. Configurar webhook de Resend directo al endpoint Supabase: `/functions/v1/email-inbound`
+
+Nota:
+
+- En este proyecto, `mailer` y `user-admin` ya validan el usuario dentro de la function con `auth.getUser()`, asi que desactivar la pre-verificacion de la CLI en local no abre acceso anonimo real; solo evita el bug de compatibilidad JWT del runtime local.
+
+### Seguridad recomendada
+
+- No guardar API keys reales en git.
+- Rotar inmediatamente cualquier key que se haya compartido fuera de un vault seguro.
+- Agregar validacion de firma de Resend en `email-inbound` cuando habilites `svix`.

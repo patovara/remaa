@@ -15,6 +15,9 @@ alter table public.attribute_options enable row level security;
 alter table public.concept_closures enable row level security;
 alter table public.documents enable row level security;
 alter table public.photos enable row level security;
+alter table public.user_admin_audit enable row level security;
+alter table public.outbound_email_log enable row level security;
+alter table public.inbound_email_events enable row level security;
 
 -- Admin helper: requiere JWT autenticado con role=admin (app_metadata o user_metadata).
 create or replace function public.is_admin()
@@ -38,6 +41,49 @@ as $$
 		false
 	);
 $$;
+
+create or replace function public.is_super_admin()
+returns boolean
+language sql
+stable
+as $$
+	select coalesce(
+		lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'role', '')) in ('super_admin', 'superadmin', 'owner')
+		or lower(coalesce(auth.jwt() -> 'user_metadata' ->> 'role', '')) in ('super_admin', 'superadmin', 'owner')
+		or lower(coalesce(auth.jwt() ->> 'email', '')) = 'mvazquez@gruporemaa.com',
+		false
+	);
+$$;
+
+drop policy if exists user_admin_audit_read_super_admin on public.user_admin_audit;
+create policy user_admin_audit_read_super_admin on public.user_admin_audit
+for select to authenticated
+using (public.is_super_admin());
+
+drop policy if exists user_admin_audit_insert_service on public.user_admin_audit;
+create policy user_admin_audit_insert_service on public.user_admin_audit
+for insert to service_role
+with check (true);
+
+drop policy if exists outbound_email_log_read_super_admin on public.outbound_email_log;
+create policy outbound_email_log_read_super_admin on public.outbound_email_log
+for select to authenticated
+using (public.is_super_admin());
+
+drop policy if exists outbound_email_log_insert_service on public.outbound_email_log;
+create policy outbound_email_log_insert_service on public.outbound_email_log
+for insert to service_role
+with check (true);
+
+drop policy if exists inbound_email_events_read_super_admin on public.inbound_email_events;
+create policy inbound_email_events_read_super_admin on public.inbound_email_events
+for select to authenticated
+using (public.is_super_admin());
+
+drop policy if exists inbound_email_events_insert_service on public.inbound_email_events;
+create policy inbound_email_events_insert_service on public.inbound_email_events
+for insert to service_role
+with check (true);
 
 -- Lectura del catalogo abierta para anon/authenticated (MVP sin login).
 drop policy if exists universes_read_all on public.universes;

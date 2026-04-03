@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../../cotizaciones/domain/quote_models.dart';
+import '../../cotizaciones/presentation/concepts_catalog_controller.dart';
+import '../../cotizaciones/presentation/quotes_controller.dart';
 
 class QuoteItemEditorResult {
   const QuoteItemEditorResult({required this.item});
@@ -10,7 +13,7 @@ class QuoteItemEditorResult {
   final QuoteItemRecord item;
 }
 
-class QuoteItemEditorDialog extends StatefulWidget {
+class QuoteItemEditorDialog extends ConsumerStatefulWidget {
   const QuoteItemEditorDialog({
     super.key,
     required this.quote,
@@ -23,10 +26,17 @@ class QuoteItemEditorDialog extends StatefulWidget {
   final QuoteItemRecord? initialValue;
 
   @override
-  State<QuoteItemEditorDialog> createState() => _QuoteItemEditorDialogState();
+  ConsumerState<QuoteItemEditorDialog> createState() => _QuoteItemEditorDialogState();
 }
 
-class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
+class _QuoteItemEditorDialogState extends ConsumerState<QuoteItemEditorDialog> {
+  static const List<String> _partidas = ['Muros', 'Acabados', 'Pintura'];
+  static const Map<String, List<String>> _partidaKeywords = {
+    'Muros': ['muro', 'tabique', 'block', 'panel', 'yeso', 'tablaroca', 'mamposteria'],
+    'Acabados': ['acabado', 'azulejo', 'loseta', 'piso', 'recubrimiento', 'lambrin'],
+    'Pintura': ['pintura', 'vinil', 'esmalte', 'sellador', 'impermeabilizante'],
+  };
+
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
   final _unitController = TextEditingController();
@@ -39,6 +49,8 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
   GeneratedConceptResult? _preview;
   bool _manualDescriptionEdit = false;
   bool _formattingUnitPrice = false;
+  String _selectedPartida = 'Muros';
+  String? _selectedRecentItemId;
 
   List<ConceptTemplateCatalogItem> get _templates =>
       widget.catalog.templatesForUniverseAndProjectType(
@@ -54,6 +66,37 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
 
   List<ProjectTypeCatalogItem> get _availableProjectTypesForUniverse =>
       widget.catalog.projectTypesForUniverse(widget.quote.universeId);
+
+  Map<String, List<ConceptTemplateCatalogItem>> get _templatesByPartida {
+    final map = {
+      for (final partida in _partidas) partida: <ConceptTemplateCatalogItem>[],
+    };
+
+    for (final template in _templates) {
+      final searchable = '${template.name} ${template.baseDescription}'.toLowerCase();
+      String? match;
+      for (final partida in _partidas) {
+        final keywords = _partidaKeywords[partida] ?? const <String>[];
+        final hits = keywords.any(searchable.contains);
+        if (hits) {
+          match = partida;
+          break;
+        }
+      }
+      final target = match ?? 'Muros';
+      map[target]!.add(template);
+    }
+
+    return map;
+  }
+
+  List<ConceptTemplateCatalogItem> get _templatesForSelectedPartida {
+    final scoped = _templatesByPartida[_selectedPartida] ?? const <ConceptTemplateCatalogItem>[];
+    if (scoped.isNotEmpty) {
+      return scoped;
+    }
+    return _templates;
+  }
 
   String _missingTemplatesMessage() {
     final alternatives = [
@@ -75,10 +118,17 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
   @override
   void initState() {
     super.initState();
+    final map = _templatesByPartida;
+    final firstWithData = _partidas.firstWhere(
+      (key) => (map[key] ?? const <ConceptTemplateCatalogItem>[]).isNotEmpty,
+      orElse: () => _partidas.first,
+    );
+    _selectedPartida = firstWithData;
+
     if (_templates.isNotEmpty) {
-      _selectedTemplate = _templates.firstWhere(
+      _selectedTemplate = _templatesForSelectedPartida.firstWhere(
         (item) => item.id == widget.initialValue?.templateId,
-        orElse: () => _templates.first,
+        orElse: () => _templatesForSelectedPartida.first,
       );
       _hydrateFromTemplate();
     }
@@ -106,6 +156,93 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
     _quantityController.dispose();
     _unitPriceController.dispose();
     super.dispose();
+  }
+
+  void _selectTemplateById(String conceptId) {
+    final match = _templates.where((t) => t.id == conceptId).firstOrNull;
+    if (match == null) return;
+
+    _selectPartidaForTemplate(match);
+    _selectConcept(match);
+  }
+
+  void _selectConcept(ConceptTemplateCatalogItem template) {
+    setState(() {
+      _selectedTemplate = template;
+      _selectedRecentItemId = null;
+      _manualDescriptionEdit = false;
+      _attributeSelection.clear();
+    });
+    _hydrateFromTemplate();
+  }
+
+  void _selectPartida(String partida) {
+    final scoped = _templatesByPartida[partida] ?? const <ConceptTemplateCatalogItem>[];
+    setState(() {
+      _selectedPartida = partida;
+    });
+    final currentTemplate = _selectedTemplate;
+    if (scoped.isEmpty) {
+      return;
+    }
+    if (currentTemplate == null || !scoped.any((item) => item.id == currentTemplate.id)) {
+      _selectConcept(scoped.first);
+    }
+  }
+
+  void _selectPartidaForTemplate(ConceptTemplateCatalogItem template) {
+    for (final partida in _partidas) {
+      final scoped = _templatesByPartida[partida] ?? const <ConceptTemplateCatalogItem>[];
+      if (scoped.any((item) => item.id == template.id)) {
+        _selectedPartida = partida;
+        return;
+      }
+    }
+    _selectedPartida = _partidas.first;
+  }
+
+  void _useRecentSuggestion(QuoteItemRecord item) {
+    final template = _selectedTemplate;
+    if (template == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedRecentItemId = item.id;
+      _manualDescriptionEdit = true;
+    });
+
+    _hydrateFromTemplate();
+
+    _unitController.text = item.unit;
+    _quantityController.text = item.quantity.toStringAsFixed(2);
+    _unitPriceController.text = _formatMoneyInput(item.unitPrice);
+    _descriptionController.text = item.concept;
+
+    final attrs = item.generatedData?['attributes'];
+    if (attrs is Map) {
+      for (final entry in attrs.entries) {
+        _attributeSelection['${entry.key}'] = '${entry.value}';
+      }
+    }
+
+    _preview = GeneratedConceptResult(
+      description: item.concept,
+      generatedData: {
+        ...?item.generatedData,
+        'attributes': Map<String, String>.from(_attributeSelection),
+      },
+    );
+    setState(() {});
+  }
+
+  void _createNewFromTemplate() {
+    setState(() {
+      _selectedRecentItemId = null;
+      _manualDescriptionEdit = false;
+      _attributeSelection.clear();
+    });
+    _hydrateFromTemplate();
   }
 
   void _hydrateFromTemplate() {
@@ -166,8 +303,8 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
 
     return AlertDialog(
       title: Text(widget.initialValue == null ? 'Nuevo concepto' : 'Editar concepto'),
-      content: SizedBox(
-        width: 760,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -187,28 +324,60 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
                       style: TextStyle(color: Colors.red),
                     ),
                   )
-                else
+                else ...[
+                  Text(
+                    'Partida',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final partida in _partidas)
+                        ChoiceChip(
+                          label: Text(partida),
+                          selected: _selectedPartida == partida,
+                          onSelected: (_) => _selectPartida(partida),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _ConceptSuggestionsBar(
+                    universeId: widget.quote.universeId,
+                    onSelected: _selectTemplateById,
+                  ),
                   DropdownButtonFormField<ConceptTemplateCatalogItem>(
                     initialValue: template,
                     decoration: const InputDecoration(labelText: 'Concepto base'),
+                    isExpanded: true,
                     items: [
-                      for (final item in _templates)
+                      for (final item in _templatesForSelectedPartida)
                         DropdownMenuItem(
                           value: item,
-                          child: Text(item.name),
+                          child: Text(
+                            item.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                     ],
                     onChanged: (value) {
                       if (value == null) {
                         return;
                       }
-                      _manualDescriptionEdit = false;
-                      _selectedTemplate = value;
-                      _attributeSelection.clear();
-                      _hydrateFromTemplate();
+                      _selectConcept(value);
                     },
                     validator: (value) => value == null ? 'Selecciona un concepto base.' : null,
                   ),
+                  const SizedBox(height: 12),
+                  _RecentConceptSuggestionsBar(
+                    templateId: template?.id,
+                    selectedItemId: _selectedRecentItemId,
+                    onSelectSuggestion: _useRecentSuggestion,
+                    onCreateNew: _createNewFromTemplate,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 if (template != null)
                   ..._buildAttributeSelectors(template),
@@ -400,5 +569,124 @@ class _QuoteItemEditorDialogState extends State<QuoteItemEditorDialog> {
       return null;
     }
     return double.tryParse(clean);
+  }
+}
+
+class _ConceptSuggestionsBar extends ConsumerWidget {
+  const _ConceptSuggestionsBar({
+    required this.universeId,
+    required this.onSelected,
+  });
+
+  final String universeId;
+  final void Function(String conceptId) onSelected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final suggestionsAsync = ref.watch(conceptUsageSuggestionsProvider(universeId));
+
+    return suggestionsAsync.when(
+      data: (response) {
+        if (response.items.isEmpty) return const SizedBox();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '🔥 Sugeridos',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final item in response.items)
+                  ActionChip(
+                    label: Text(item.name),
+                    onPressed: () => onSelected(item.conceptId),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+      loading: () => const SizedBox(),
+      error: (_, __) => const SizedBox(),
+    );
+  }
+}
+
+class _RecentConceptSuggestionsBar extends ConsumerWidget {
+  const _RecentConceptSuggestionsBar({
+    required this.templateId,
+    required this.selectedItemId,
+    required this.onSelectSuggestion,
+    required this.onCreateNew,
+  });
+
+  final String? templateId;
+  final String? selectedItemId;
+  final void Function(QuoteItemRecord item) onSelectSuggestion;
+  final VoidCallback onCreateNew;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = templateId;
+    if (id == null || id.trim().isEmpty) {
+      return const SizedBox();
+    }
+
+    final recentAsync = ref.watch(recentTemplateItemsProvider(id));
+    return recentAsync.when(
+      data: (items) {
+        if (items.isEmpty) {
+          return const SizedBox();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sugerencias recientes',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                ChoiceChip(
+                  label: const Text('Crear nuevo'),
+                  selected: selectedItemId == null,
+                  onSelected: (_) => onCreateNew(),
+                ),
+                for (final item in items)
+                  ChoiceChip(
+                    label: Text(
+                      _shortLabel(item.concept),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    selected: selectedItemId == item.id,
+                    onSelected: (_) => onSelectSuggestion(item),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+      loading: () => const SizedBox(),
+      error: (_, __) => const SizedBox(),
+    );
+  }
+
+  String _shortLabel(String value) {
+    final clean = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length <= 42) {
+      return clean;
+    }
+    return '${clean.substring(0, 42)}...';
   }
 }

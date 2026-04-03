@@ -15,7 +15,8 @@ Aplicacion Flutter multiplataforma (iOS, Android y Web) para flujo de levantamie
 	- SUPABASE_URL
 	- SUPABASE_ANON_KEY
 	- ENABLE_BILLING=false (por defecto apagado)
-2. Instalar dependencias:
+2. Para un entorno alfa/staging, crear .env.alpha usando .env.alpha.example como base.
+3. Instalar dependencias:
 
 ```bash
 flutter pub get
@@ -28,6 +29,25 @@ flutter run -d chrome
 flutter run -d ios
 flutter run -d android
 ```
+
+Para correr con entorno alfa:
+
+```bash
+flutter run -d chrome --dart-define=ENV_FILE=.env.alpha
+```
+
+Para build web alfa (Vercel):
+
+```bash
+flutter build web --dart-define=ENV_FILE=.env.alpha
+```
+
+## Estrategia de alfa recomendada
+
+- Frontend web en Vercel.
+- Backend, Auth, BD y Storage en Supabase Cloud.
+- Supabase local solo para desarrollo.
+- Secrets reales en Vercel y Supabase Secrets; nunca en archivos versionados.
 
 ## Tests y analisis
 
