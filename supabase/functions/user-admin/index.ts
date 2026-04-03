@@ -647,7 +647,7 @@ function effectiveRedirectTo(raw: string | undefined): string | null {
   }
 
   try {
-    return new URL("/#/register?mode=invite", configured).toString();
+    return new URL("/register?mode=invite", configured).toString();
   } catch {
     return configured;
   }

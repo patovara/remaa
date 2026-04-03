@@ -162,8 +162,7 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
     final configured = Env.appPublicUrl.trim();
     final base = configured.isNotEmpty ? configured : Uri.base.toString();
     final uri = Uri.parse(base);
-    // Flutter web usa hash routing por defecto: /#/register?mode=...
-    return uri.replace(path: '/', query: '', fragment: '/register?mode=$mode').toString();
+    return uri.replace(path: '/register', query: 'mode=$mode', fragment: '').toString();
   }
 
   Future<void> _openChangePasswordDialog() async {
