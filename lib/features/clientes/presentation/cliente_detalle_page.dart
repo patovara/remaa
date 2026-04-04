@@ -430,6 +430,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   bool _isUpdatingVisibility = false;
   String? _nameError;
   String? _contactNameError;
+  String? _rfcError;
   String? _emailError;
   String? _phoneError;
   String? _addressError;
@@ -604,30 +605,45 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     final phoneDigits = ClientInputRules.digitsOnly(_phoneCtrl.text);
     final email = ClientInputRules.normalizeEmail(_emailCtrl.text);
     final address = _addressCtrl.text.trim();
+    final rfc = _rfcCtrl.text.trim().toUpperCase();
     final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
 
     String? nameError;
     String? contactNameError;
+    String? rfcError;
     String? emailError;
     String? phoneError;
     String? addressError;
     String? sectorError;
 
-    if (businessName.isEmpty) {
-      nameError = 'Ingresa la razon social del cliente.';
+    if (businessName.length < ClientInputRules.minTextLength) {
+      nameError = 'La razon social debe tener al menos ${ClientInputRules.minTextLength} caracteres.';
+    } else if (businessName.length > ClientInputRules.maxTextLength) {
+      nameError = 'La razon social no puede superar ${ClientInputRules.maxTextLength} caracteres.';
     }
+
     if (contactName.isNotEmpty && !ClientInputRules.isValidTextOnly(contactName)) {
-      contactNameError = 'El nombre de contacto solo admite letras.';
+      contactNameError = ClientInputRules.textOnlyErrorMessage(fieldLabel: 'nombre de contacto');
     }
+
+    if (!ClientInputRules.isValidRfc(rfc)) {
+      rfcError = ClientInputRules.rfcErrorMessage();
+    }
+
     if (!ClientInputRules.isValidTenDigitPhone(phoneDigits)) {
       phoneError = ClientInputRules.phoneTenDigitsErrorMessage();
     }
+
     if (!ClientInputRules.isValidEmail(email)) {
       emailError = ClientInputRules.emailErrorMessage(fieldLabel: 'correo principal');
     }
-    if (address.isEmpty) {
+
+    if (address.isNotEmpty && !ClientInputRules.isValidAddress(address)) {
+      addressError = ClientInputRules.addressErrorMessage();
+    } else if (address.isEmpty) {
       addressError = 'Ingresa la direccion del cliente.';
     }
+
     if (sector.isEmpty) {
       sectorError = 'Selecciona un sector para el cliente.';
     }
@@ -635,6 +651,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     setState(() {
       _nameError = nameError;
       _contactNameError = contactNameError;
+      _rfcError = rfcError;
       _emailError = emailError;
       _phoneError = phoneError;
       _addressError = addressError;
@@ -643,6 +660,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
 
     return nameError == null &&
       contactNameError == null &&
+      rfcError == null &&
       emailError == null &&
       phoneError == null &&
       addressError == null &&
@@ -658,6 +676,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     final contactName = ClientInputRules.sanitizeTextOnly(_contactNameCtrl.text);
     final rfc = _rfcCtrl.text.trim().toUpperCase();
     final phoneDigits = ClientInputRules.digitsOnly(_phoneCtrl.text);
+    final phoneE164 = ClientInputRules.toE164Mx(phoneDigits) ?? phoneDigits;
     final email = ClientInputRules.normalizeEmail(_emailCtrl.text);
     final address = _addressCtrl.text.trim();
     final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
@@ -684,7 +703,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         months: widget.client.months,
         icon: widget.client.icon,
         contactEmail: email,
-        phone: phoneDigits,
+        phone: phoneE164,
         address: address,
         responsibles: widget.client.responsibles,
         logoPath: logoPath,
@@ -714,7 +733,11 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         });
         widget.onEditingChanged(false);
       }
-    } catch (_) {
+    } catch (error) {
+      final dbMsg = ClientInputRules.mapDbError(error.toString());
+      if (mounted && dbMsg != null) {
+        showRemaMessage(context, dbMsg);
+      }
       // keep editing on error
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -883,9 +906,15 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _rfcCtrl,
+                  onChanged: (_) {
+                    if (_rfcError != null) {
+                      setState(() => _rfcError = null);
+                    }
+                  },
                   inputFormatters: const [_UpperCaseTextFormatter()],
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'RFC',
+                    errorText: _rfcError,
                   ),
                 ),
                 const SizedBox(height: 16),

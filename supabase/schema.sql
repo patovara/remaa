@@ -28,7 +28,22 @@ create table if not exists public.clients (
   state text,
   notes text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- Validaciones de formato (aplicadas vía migración 202604030001)
+  constraint clients_business_name_notempty check (length(trim(business_name)) >= 2),
+  constraint clients_rfc_format check (
+    rfc is null
+    or (upper(trim(rfc)) ~ '^[A-Z&\u00D1]{3,4}[0-9]{6}[A-Z0-9]{3}$' and length(trim(rfc)) in (12, 13))
+  ),
+  constraint clients_phone_e164 check (
+    phone is null or phone ~ '^\+52[0-9]{10}$'
+  ),
+  constraint clients_address_format check (
+    address_line is null
+    or (length(trim(address_line)) between 10 and 255
+        and trim(address_line) ~ '[A-Za-záéíóúüñÁÉÍÓÚÜÑ]'
+        and trim(address_line) ~ '[0-9]')
+  )
 );
 
 alter table public.clients

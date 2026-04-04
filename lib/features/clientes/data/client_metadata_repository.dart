@@ -164,6 +164,9 @@ class ClientMetadataRepository {
       return;
     }
 
+    final rawPhone = phone.trim();
+    final phoneE164 = ClientInputRules.toE164Mx(rawPhone) ?? rawPhone;
+
     final payload = <String, Object?>{
       'business_name': businessName.trim().toUpperCase(),
       'contact_name': (contactName == null || contactName.trim().isEmpty)
@@ -171,8 +174,8 @@ class ClientMetadataRepository {
           : normalizeContactName(contactName),
       'rfc': (rfc == null || rfc.trim().isEmpty) ? null : rfc.trim().toUpperCase(),
       'email': email.trim().toLowerCase(),
-      'phone': phone.trim(),
-      'address_line': address.trim(),
+      'phone': phoneE164.isEmpty ? null : phoneE164,
+      'address_line': address.trim().isEmpty ? null : address.trim(),
       'sector_label': normalizeSectorLabel(sectorLabel),
     };
     if (logoPath != null) {

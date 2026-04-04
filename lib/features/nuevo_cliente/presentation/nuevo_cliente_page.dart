@@ -26,8 +26,12 @@ class NuevoClientePage extends StatefulWidget {
 }
 
 class _NuevoClientePageState extends State<NuevoClientePage> {
+  String? _businessNameError;
+  String? _contactNameError;
+  String? _rfcError;
   String? _phoneError;
   String? _emailError;
+  String? _addressError;
   final _metadataRepository = ClientMetadataRepository();
   final _businessNameController = TextEditingController();
   final _nameController = TextEditingController();
@@ -168,33 +172,68 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
   }
 
   bool _validateClientInput() {
+    final businessName = _businessNameController.text.trim();
+    final contactName = _nameController.text.trim();
+    final rfc = _rfcController.text.trim().toUpperCase();
     final phoneDigits = _phoneController.text.trim();
     final email = ClientInputRules.normalizeEmail(_emailController.text);
+    final address = _addressController.text.trim();
+
+    String? businessNameError;
+    String? contactNameError;
+    String? rfcError;
     String? phoneError;
     String? emailError;
+    String? addressError;
+
+    if (businessName.length < ClientInputRules.minTextLength) {
+      businessNameError = 'La razon social debe tener al menos ${ClientInputRules.minTextLength} caracteres.';
+    } else if (businessName.length > ClientInputRules.maxTextLength) {
+      businessNameError = 'La razon social no puede superar ${ClientInputRules.maxTextLength} caracteres.';
+    }
+
+    if (contactName.isNotEmpty && !ClientInputRules.isValidTextOnly(contactName)) {
+      contactNameError = ClientInputRules.textOnlyErrorMessage(fieldLabel: 'nombre de contacto');
+    }
+
+    if (!ClientInputRules.isValidRfc(rfc)) {
+      rfcError = ClientInputRules.rfcErrorMessage();
+    }
 
     if (phoneDigits.isEmpty) {
       phoneError = ClientInputRules.phoneRequiredMessage(fieldLabel: 'telefono de contacto');
-    }
-    if (phoneError == null && _selectedCountry.dialCode == '+52' && phoneDigits.length != 10) {
+    } else if (_selectedCountry.dialCode == '+52' && phoneDigits.length != 10) {
       phoneError = ClientInputRules.mexicoPhoneExactErrorMessage();
-    }
-    if (phoneError == null && phoneDigits.length > _selectedCountry.maxDigits) {
+    } else if (phoneDigits.length > _selectedCountry.maxDigits) {
       phoneError = ClientInputRules.phoneMaxDigitsErrorMessage(
         countryName: _selectedCountry.name,
         maxDigits: _selectedCountry.maxDigits,
       );
     }
+
     if (!ClientInputRules.isValidEmail(email)) {
       emailError = ClientInputRules.emailErrorMessage();
     }
 
+    if (address.isNotEmpty && !ClientInputRules.isValidAddress(address)) {
+      addressError = ClientInputRules.addressErrorMessage();
+    }
+
     setState(() {
+      _businessNameError = businessNameError;
+      _contactNameError = contactNameError;
+      _rfcError = rfcError;
       _phoneError = phoneError;
       _emailError = emailError;
+      _addressError = addressError;
     });
 
-    return phoneError == null && emailError == null;
+    return businessNameError == null &&
+        contactNameError == null &&
+        rfcError == null &&
+        phoneError == null &&
+        emailError == null &&
+        addressError == null;
   }
 
   Future<void> _pickDocuments() async {
@@ -251,11 +290,14 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
 
     try {
       final businessName = _businessNameController.text.trim().toUpperCase();
-      final contactName = _nameController.text.trim().toUpperCase();
+      final contactName = ClientInputRules.sanitizeTextOnly(_nameController.text);
       final rfc = _rfcController.text.trim().toUpperCase();
       final phoneDigits = _phoneController.text.trim();
       final email = ClientInputRules.normalizeEmail(_emailController.text);
-      final phone = '${_selectedCountry.dialCode}$phoneDigits';
+      final phone = ClientInputRules.toE164Mx(
+            '${_selectedCountry.dialCode}$phoneDigits',
+          ) ??
+          '${_selectedCountry.dialCode}$phoneDigits';
 
       await _metadataRepository.ensureSectorLabel(normalizedSector);
 
@@ -327,9 +369,10 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
       if (!mounted) {
         return;
       }
+      final dbMsg = ClientInputRules.mapDbError(error.toString());
       showRemaMessage(
         context,
-        'No se pudo guardar el cliente. Revisa permisos RLS o datos requeridos.',
+        dbMsg ?? 'No se pudo guardar el cliente. Revisa los datos e intenta de nuevo.',
       );
     }
   }
@@ -392,8 +435,26 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
           final isWide = constraints.maxWidth >= 1080;
           final formPanel = _ClientFormPanel(
             businessNameController: _businessNameController,
+            businessNameError: _businessNameError,
+            onBusinessNameChanged: (_) {
+              if (_businessNameError != null) {
+                setState(() => _businessNameError = null);
+              }
+            },
             nameController: _nameController,
+            contactNameError: _contactNameError,
+            onContactNameChanged: (_) {
+              if (_contactNameError != null) {
+                setState(() => _contactNameError = null);
+              }
+            },
             rfcController: _rfcController,
+            rfcError: _rfcError,
+            onRfcChanged: (_) {
+              if (_rfcError != null) {
+                setState(() => _rfcError = null);
+              }
+            },
             phoneController: _phoneController,
             phoneError: _phoneError,
             onPhoneChanged: (_) {
@@ -409,6 +470,12 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
               }
             },
             addressController: _addressController,
+            addressError: _addressError,
+            onAddressChanged: (_) {
+              if (_addressError != null) {
+                setState(() => _addressError = null);
+              }
+            },
             stateController: _stateController,
             cityController: _cityController,
             selectedCountry: _selectedCountry,
@@ -485,8 +552,14 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
 class _ClientFormPanel extends StatelessWidget {
   const _ClientFormPanel({
     required this.businessNameController,
+    required this.businessNameError,
+    required this.onBusinessNameChanged,
     required this.nameController,
+    required this.contactNameError,
+    required this.onContactNameChanged,
     required this.rfcController,
+    required this.rfcError,
+    required this.onRfcChanged,
     required this.phoneController,
     required this.phoneError,
     required this.onPhoneChanged,
@@ -494,6 +567,8 @@ class _ClientFormPanel extends StatelessWidget {
     required this.emailError,
     required this.onEmailChanged,
     required this.addressController,
+    required this.addressError,
+    required this.onAddressChanged,
     required this.stateController,
     required this.cityController,
     required this.selectedCountry,
@@ -508,8 +583,14 @@ class _ClientFormPanel extends StatelessWidget {
   });
 
   final TextEditingController businessNameController;
+  final String? businessNameError;
+  final ValueChanged<String> onBusinessNameChanged;
   final TextEditingController nameController;
+  final String? contactNameError;
+  final ValueChanged<String> onContactNameChanged;
   final TextEditingController rfcController;
+  final String? rfcError;
+  final ValueChanged<String> onRfcChanged;
   final TextEditingController phoneController;
   final String? phoneError;
   final ValueChanged<String> onPhoneChanged;
@@ -517,6 +598,8 @@ class _ClientFormPanel extends StatelessWidget {
   final String? emailError;
   final ValueChanged<String> onEmailChanged;
   final TextEditingController addressController;
+  final String? addressError;
+  final ValueChanged<String> onAddressChanged;
   final TextEditingController stateController;
   final TextEditingController cityController;
   final _CountryDialCode selectedCountry;
@@ -540,12 +623,16 @@ class _ClientFormPanel extends StatelessWidget {
           _ClientField(
             label: 'Razon social / Nombre legal',
             controller: businessNameController,
+            errorText: businessNameError,
+            onChanged: onBusinessNameChanged,
             inputFormatters: const [_UpperCaseTextFormatter()],
           ),
           const SizedBox(height: 18),
           _ClientField(
             label: 'Nombre de contacto',
             controller: nameController,
+            errorText: contactNameError,
+            onChanged: onContactNameChanged,
             inputFormatters: const [_UpperCaseTextFormatter()],
           ),
           const SizedBox(height: 18),
@@ -555,6 +642,8 @@ class _ClientFormPanel extends StatelessWidget {
                 child: _ClientField(
                   label: 'RFC / ID Fiscal',
                   controller: rfcController,
+                  errorText: rfcError,
+                  onChanged: onRfcChanged,
                   inputFormatters: const [_UpperCaseTextFormatter()],
                 ),
               ),
@@ -624,6 +713,8 @@ class _ClientFormPanel extends StatelessWidget {
           _ClientField(
             label: 'Direccion fiscal',
             controller: addressController,
+            errorText: addressError,
+            onChanged: onAddressChanged,
             inputFormatters: const [_TitleCaseTextFormatter()],
           ),
           const SizedBox(height: 18),
