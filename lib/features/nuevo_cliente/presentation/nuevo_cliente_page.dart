@@ -26,6 +26,7 @@ class NuevoClientePage extends StatefulWidget {
 }
 
 class _NuevoClientePageState extends State<NuevoClientePage> {
+  bool _isSaving = false;
   String? _businessNameError;
   String? _contactNameError;
   String? _rfcError;
@@ -269,26 +270,28 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
   }
 
   Future<void> _saveClient() async {
-    if (!_validateClientInput()) {
-      return;
-    }
-
-    final normalizedSector = _metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
-    if (normalizedSector.isEmpty) {
-      showRemaMessage(context, 'Selecciona un sector para el cliente.');
-      return;
-    }
-
-    final client = SupabaseBootstrap.client;
-    if (client == null) {
-      showRemaMessage(
-        context,
-        'No hay conexion activa con Supabase. Revisa el .env local.',
-      );
-      return;
-    }
+    if (_isSaving) return;
+    _isSaving = true;
+    setState(() {});
 
     try {
+      if (!_validateClientInput()) {
+        return;
+      }
+
+    final normalizedSector = _metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
+      if (normalizedSector.isEmpty) {
+        showRemaMessage(context, 'Selecciona un sector para el cliente.');
+        return;
+      }
+      final client = SupabaseBootstrap.client;
+      if (client == null) {
+        showRemaMessage(
+          context,
+          'No hay conexion activa con Supabase. Revisa el .env local.',
+        );
+        return;
+      }
       final businessName = _businessNameController.text.trim().toUpperCase();
       final contactName = ClientInputRules.sanitizeTextOnly(_nameController.text);
       final rfc = _rfcController.text.trim().toUpperCase();
@@ -348,6 +351,15 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         return;
       }
       if (clientId != null && clientId.isNotEmpty) {
+        if (!mounted) return;
+        showRemaMessage(
+          context,
+          'Cliente creado correctamente.',
+          duration: const Duration(milliseconds: 800),
+        );
+        await Future.delayed(const Duration(milliseconds: 900));
+
+        if (!mounted) return;
         final returnTo = widget.returnTo?.trim();
         if (returnTo == 'pop') {
           context.pop(clientId);
@@ -360,7 +372,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         context.go('/clientes/$clientId');
         return;
       }
-      showRemaMessage(context, 'Cliente creado correctamente.');
+      showRemaMessage(context, 'No se pudo crear el cliente: datos inválidos.');
     } catch (error) {
       AppLogger.error('client_create_failed', data: {
         'supabase_url': Env.supabaseUrl,
@@ -374,6 +386,11 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         context,
         dbMsg ?? 'No se pudo guardar el cliente. Revisa los datos e intenta de nuevo.',
       );
+    } finally {
+      if (mounted) {
+        _isSaving = false;
+        setState(() {});
+      }
     }
   }
 
@@ -511,6 +528,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
             logoBytes: _logoBytes,
             logoName: _logoName,
             onPickLogo: _pickLogo,
+            isSaving: _isSaving,
           );
 
           return Column(
@@ -868,6 +886,7 @@ class _ClientSidebar extends StatelessWidget {
     required this.logoBytes,
     required this.logoName,
     required this.onPickLogo,
+    required this.isSaving,
   });
 
   final VoidCallback onSave;
@@ -875,6 +894,7 @@ class _ClientSidebar extends StatelessWidget {
   final Uint8List? logoBytes;
   final String? logoName;
   final VoidCallback onPickLogo;
+  final bool isSaving;
 
   @override
   Widget build(BuildContext context) {
@@ -959,9 +979,15 @@ class _ClientSidebar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton.icon(
-                onPressed: onSave,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Guardar Cliente'),
+                onPressed: isSaving ? null : onSave,
+                icon: isSaving
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(isSaving ? 'Guardando...' : 'Guardar Cliente'),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(

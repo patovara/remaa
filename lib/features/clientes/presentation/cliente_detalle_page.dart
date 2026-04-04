@@ -727,6 +727,11 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       }
       widget.onClientUpdated(updated);
       if (mounted) {
+        showRemaMessage(
+          context,
+          'Cliente actualizado correctamente.',
+          duration: const Duration(milliseconds: 800),
+        );
         setState(() {
           _logoName = null;
           _isEditing = false;
@@ -1054,10 +1059,17 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                     FilledButton(
                       onPressed: _isSaving ? null : _save,
                       child: _isSaving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Guardando...'),
+                              ],
                             )
                           : const Text('Guardar'),
                     ),
