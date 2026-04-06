@@ -751,7 +751,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
           logoPath: _logoUploadFailed ? null : updated.logoPath,
           logoMimeType: (_logoName == null || _logoUploadFailed)
               ? null
-              : widget.metadataRepository.logoMimeTypeFromFileName(_logoName!),
+              : widget.metadataRepository.logoMimeTypeFromFileName(
+                  updated.logoPath ?? _logoName!,
+                ),
         );
       }
       widget.onClientUpdated(updated);

@@ -355,7 +355,7 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
           if (logoPath != null) {
             await client.from('clients').update({
               'logo_path': logoPath,
-              'logo_mime_type': _metadataRepository.logoMimeTypeFromFileName(_logoName!),
+              'logo_mime_type': _metadataRepository.logoMimeTypeFromFileName(logoPath),
             }).eq('id', clientId);
           } else {
             logoPersistenceFailed = true;

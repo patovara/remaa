@@ -106,10 +106,8 @@ class ClientMetadataRepository {
       return null;
     }
 
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'jpg';
-    final safeExt = ext.isEmpty ? 'jpg' : ext;
-    final objectPath = '$clientId/logo_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
-    final mime = logoMimeTypeFromFileName(fileName);
+    final objectPath = '$clientId/logo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    const mime = 'image/jpeg';
 
     await client.storage.from('client-logos').uploadBinary(
           objectPath,
