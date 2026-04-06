@@ -32,6 +32,8 @@ class ImageOptimizationException implements Exception {
 
 const int maxImageInputBytes = 10 * 1024 * 1024;
 const int targetImageMaxBytes = 300 * 1024;
+const int clientLogoMaxSidePx = 500;
+const int targetClientLogoMaxBytes = 180 * 1024;
 
 Future<OptimizedImageResult> optimizeImageForDocument({
   required Uint8List inputBytes,
@@ -58,6 +60,41 @@ Future<OptimizedImageResult> optimizeImageForDocument({
 
   if (result['ok'] != true) {
     final message = result['message'] as String? ?? 'No se pudo optimizar la imagen.';
+    throw ImageOptimizationException(message);
+  }
+
+  return OptimizedImageResult(
+    bytes: result['bytes'] as Uint8List,
+    fileName: result['fileName'] as String,
+    mimeType: result['mimeType'] as String,
+    widthPx: result['widthPx'] as int,
+    heightPx: result['heightPx'] as int,
+  );
+}
+
+Future<OptimizedImageResult> optimizeImageForClientLogo({
+  required Uint8List inputBytes,
+  required String fileName,
+}) async {
+  if (inputBytes.isEmpty) {
+    throw const ImageOptimizationException('La imagen seleccionada esta vacia.');
+  }
+  if (inputBytes.length > maxImageInputBytes) {
+    throw const ImageOptimizationException(
+      'La imagen excede el maximo permitido de 10 MB antes de procesarla.',
+    );
+  }
+
+  final result = await compute(
+    _optimizeClientLogoPayload,
+    <String, Object>{
+      'bytes': inputBytes,
+      'fileName': fileName,
+    },
+  );
+
+  if (result['ok'] != true) {
+    final message = result['message'] as String? ?? 'No se pudo optimizar el logo.';
     throw ImageOptimizationException(message);
   }
 
@@ -134,6 +171,76 @@ Map<String, Object> _optimizeImagePayload(Map<String, Object> payload) {
     'mimeType': 'image/jpeg',
     'widthPx': bestWidth,
     'heightPx': bestHeight,
+  };
+}
+
+Map<String, Object> _optimizeClientLogoPayload(Map<String, Object> payload) {
+  final inputBytes = payload['bytes'] as Uint8List;
+  final fileName = payload['fileName'] as String;
+
+  final decoded = img.decodeImage(inputBytes);
+  if (decoded == null) {
+    return <String, Object>{
+      'ok': false,
+      'message': 'No se pudo decodificar la imagen seleccionada.',
+    };
+  }
+
+  final baked = img.bakeOrientation(decoded);
+  final squareSide = baked.width < baked.height ? baked.width : baked.height;
+  final cropX = (baked.width - squareSide) ~/ 2;
+  final cropY = (baked.height - squareSide) ~/ 2;
+  final cropped = img.copyCrop(
+    baked,
+    x: cropX,
+    y: cropY,
+    width: squareSide,
+    height: squareSide,
+  );
+  final targetSide = squareSide > clientLogoMaxSidePx ? clientLogoMaxSidePx : squareSide;
+  final resized = targetSide == cropped.width
+      ? cropped
+      : img.copyResize(
+          cropped,
+          width: targetSide,
+          height: targetSide,
+          interpolation: img.Interpolation.average,
+        );
+
+  const qualityCandidates = <int>[82, 78, 74, 70, 66];
+  Uint8List? bestBytes;
+
+  for (final quality in qualityCandidates) {
+    final encoded = Uint8List.fromList(img.encodeJpg(resized, quality: quality));
+    if (bestBytes == null || encoded.length < bestBytes.length) {
+      bestBytes = encoded;
+    }
+    if (encoded.length <= targetClientLogoMaxBytes) {
+      return <String, Object>{
+        'ok': true,
+        'bytes': encoded,
+        'fileName': _normalizedJpgName(fileName),
+        'mimeType': 'image/jpeg',
+        'widthPx': resized.width,
+        'heightPx': resized.height,
+      };
+    }
+  }
+
+  if (bestBytes == null) {
+    return <String, Object>{
+      'ok': false,
+      'message': 'No se pudo generar una version optimizada del logo.',
+    };
+  }
+
+  return <String, Object>{
+    'ok': true,
+    'bytes': bestBytes,
+    'fileName': _normalizedJpgName(fileName),
+    'mimeType': 'image/jpeg',
+    'widthPx': resized.width,
+    'heightPx': resized.height,
   };
 }
 

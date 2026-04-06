@@ -384,6 +384,11 @@ class _ClientCard extends StatelessWidget {
                           width: 64,
                           height: 64,
                           fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Icon(
+                            client.icon,
+                            color: RemaColors.onSurfaceVariant,
+                            size: 28,
+                          ),
                         ),
                       )
                     : Icon(client.icon, color: RemaColors.onSurfaceVariant, size: 28),

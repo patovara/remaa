@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/client_input_rules.dart';
+import '../../../core/utils/image_optimizer.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
@@ -554,10 +555,26 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       return;
     }
 
-    setState(() {
-      _logoBytes = bytes;
-      _logoName = file.name;
-    });
+    try {
+      final optimized = await optimizeImageForClientLogo(
+        inputBytes: bytes,
+        fileName: file.name,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _logoBytes = optimized.bytes;
+        _logoName = optimized.fileName;
+      });
+      showRemaMessage(context, 'Logo optimizado a formato cuadrado maximo 500x500.');
+    } on ImageOptimizationException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, error.message);
+    }
   }
 
   Future<void> _addSector() async {
@@ -810,6 +827,11 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                           width: 72,
                           height: 72,
                           fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Icon(
+                            client.icon,
+                            color: Colors.white,
+                            size: 32,
+                          ),
                         ),
                       )
                     : Icon(client.icon, color: Colors.white, size: 32),
@@ -1471,6 +1493,14 @@ class _EditableLogoCard extends StatelessWidget {
                       width: double.infinity,
                       height: double.infinity,
                       fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(fallbackIcon, size: 42, color: RemaColors.onSurfaceVariant),
+                          const SizedBox(height: 10),
+                          const Text('No se pudo mostrar el logo'),
+                        ],
+                      ),
                     ),
                   )
                 : Column(

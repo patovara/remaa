@@ -10,6 +10,7 @@ import '../../../core/config/env.dart';
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/utils/client_input_rules.dart';
+import '../../../core/utils/image_optimizer.dart';
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
@@ -105,10 +106,26 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
       return;
     }
 
-    setState(() {
-      _logoBytes = bytes;
-      _logoName = file.name;
-    });
+    try {
+      final optimized = await optimizeImageForClientLogo(
+        inputBytes: bytes,
+        fileName: file.name,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _logoBytes = optimized.bytes;
+        _logoName = optimized.fileName;
+      });
+      showRemaMessage(context, 'Logo optimizado a formato cuadrado maximo 500x500.');
+    } on ImageOptimizationException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, error.message);
+    }
   }
 
   Future<void> _addSector() async {
@@ -327,17 +344,29 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         'client_id': clientId,
         'business_name': businessName,
       });
+      bool logoPersistenceFailed = false;
       if (clientId != null && _logoBytes != null && _logoName != null) {
-        final logoPath = await _metadataRepository.uploadLogo(
-          clientId: clientId,
-          bytes: _logoBytes!,
-          fileName: _logoName!,
-        );
-        if (logoPath != null) {
-          await client.from('clients').update({
-            'logo_path': logoPath,
-            'logo_mime_type': _mimeFromName(_logoName!),
-          }).eq('id', clientId);
+        try {
+          final logoPath = await _metadataRepository.uploadLogo(
+            clientId: clientId,
+            bytes: _logoBytes!,
+            fileName: _logoName!,
+          );
+          if (logoPath != null) {
+            await client.from('clients').update({
+              'logo_path': logoPath,
+              'logo_mime_type': _metadataRepository.logoMimeTypeFromFileName(_logoName!),
+            }).eq('id', clientId);
+          } else {
+            logoPersistenceFailed = true;
+          }
+        } catch (error) {
+          logoPersistenceFailed = true;
+          AppLogger.error('client_logo_persist_failed', data: {
+            'supabase_url': Env.supabaseUrl,
+            'client_id': clientId,
+            'error': error.toString(),
+          });
         }
       }
       if (clientId != null && _documents.isNotEmpty) {
@@ -356,6 +385,12 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         if (returnTo != null && returnTo.isNotEmpty) {
           context.go('$returnTo?clientId=$clientId');
           return;
+        }
+        if (logoPersistenceFailed) {
+          showRemaMessage(
+            context,
+            'Cliente creado, pero el logo no se pudo guardar en la base de datos.',
+          );
         }
         context.go('/clientes/$clientId');
         return;
@@ -932,6 +967,14 @@ class _ClientSidebar extends StatelessWidget {
                             width: double.infinity,
                             height: double.infinity,
                             fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.image_not_supported_outlined, size: 40),
+                                SizedBox(height: 10),
+                                Text('No se pudo mostrar el logo'),
+                              ],
+                            ),
                           ),
                         )
                       : const Column(
@@ -941,7 +984,7 @@ class _ClientSidebar extends StatelessWidget {
                             SizedBox(height: 10),
                             Text('Haz clic para subir logo'),
                             SizedBox(height: 6),
-                            Text('PNG, JPG o WEBP'),
+                            Text('PNG, JPG o WEBP, salida JPG 500x500'),
                           ],
                         ),
                 ),

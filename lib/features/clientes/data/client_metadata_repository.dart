@@ -45,7 +45,7 @@ class ClientMetadataRepository {
   }
 
   String logoMimeTypeFromFileName(String fileName) {
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'png';
+    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'jpg';
     return switch (ext) {
       'jpg' || 'jpeg' => 'image/jpeg',
       'webp' => 'image/webp',
@@ -106,8 +106,8 @@ class ClientMetadataRepository {
       return null;
     }
 
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'png';
-    final safeExt = ext.isEmpty ? 'png' : ext;
+    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'jpg';
+    final safeExt = ext.isEmpty ? 'jpg' : ext;
     final objectPath = '$clientId/logo_${DateTime.now().millisecondsSinceEpoch}.$safeExt';
     final mime = logoMimeTypeFromFileName(fileName);
 
@@ -180,7 +180,9 @@ class ClientMetadataRepository {
     };
     if (logoPath != null) {
       payload['logo_path'] = logoPath;
-      payload['logo_mime_type'] = logoMimeType;
+      if (logoMimeType != null && logoMimeType.trim().isNotEmpty) {
+        payload['logo_mime_type'] = logoMimeType;
+      }
     }
 
     try {
