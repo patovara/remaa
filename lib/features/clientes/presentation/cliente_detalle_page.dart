@@ -691,15 +691,23 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
 
     setState(() => _isSaving = true);
     try {
+      // ── Paso 1: subir logo (no bloquea el guardado si falla) ───────────────
       String? logoPath = widget.client.logoPath;
+      bool _logoUploadFailed = false;
       if (_logoBytes != null && _logoName != null && _uuidRe.hasMatch(widget.client.id)) {
-        logoPath = await widget.metadataRepository.uploadLogo(
-          clientId: widget.client.id,
-          bytes: _logoBytes!,
-          fileName: _logoName!,
-        );
+        try {
+          final uploaded = await widget.metadataRepository.uploadLogo(
+            clientId: widget.client.id,
+            bytes: _logoBytes!,
+            fileName: _logoName!,
+          );
+          if (uploaded != null) logoPath = uploaded;
+        } catch (_) {
+          _logoUploadFailed = true;
+        }
       }
 
+      // ── Paso 2: armar y persistir el resto de metadatos ───────────────────
       final updated = ClientRecord(
         id: widget.client.id,
         name: businessName,
@@ -715,7 +723,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         address: address,
         responsibles: widget.client.responsibles,
         logoPath: logoPath,
-        logoBytes: _logoBytes,
+        logoBytes: _logoUploadFailed ? widget.client.logoBytes : _logoBytes,
         isHidden: widget.client.isHidden,
       );
       if (_uuidRe.hasMatch(widget.client.id) && SupabaseBootstrap.client != null) {
@@ -729,17 +737,26 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
           address: updated.address,
           sectorLabel: updated.sector,
           rfc: updated.rfc,
-          logoPath: updated.logoPath,
-          logoMimeType: _logoName == null ? null : widget.metadataRepository.logoMimeTypeFromFileName(_logoName!),
+          logoPath: _logoUploadFailed ? null : updated.logoPath,
+          logoMimeType: (_logoName == null || _logoUploadFailed)
+              ? null
+              : widget.metadataRepository.logoMimeTypeFromFileName(_logoName!),
         );
       }
       widget.onClientUpdated(updated);
       if (mounted) {
-        showRemaMessage(
-          context,
-          'Cliente actualizado correctamente.',
-          duration: const Duration(milliseconds: 800),
-        );
+        if (_logoUploadFailed) {
+          showRemaMessage(
+            context,
+            'Datos guardados. No fue posible subir el logo; verifica conexion o permisos.',
+          );
+        } else {
+          showRemaMessage(
+            context,
+            'Cliente actualizado correctamente.',
+            duration: const Duration(milliseconds: 800),
+          );
+        }
         setState(() {
           _logoName = null;
           _isEditing = false;
@@ -748,8 +765,11 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       }
     } catch (error) {
       final dbMsg = ClientInputRules.mapDbError(error.toString());
-      if (mounted && dbMsg != null) {
-        showRemaMessage(context, dbMsg);
+      if (mounted) {
+        showRemaMessage(
+          context,
+          dbMsg ?? 'No fue posible guardar los cambios. Intenta de nuevo.',
+        );
       }
       // keep editing on error
     } finally {
