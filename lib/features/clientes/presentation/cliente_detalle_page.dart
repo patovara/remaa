@@ -476,7 +476,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     _contactNameCtrl = TextEditingController(text: widget.client.contactName ?? '');
     _rfcCtrl = TextEditingController(text: widget.client.rfc ?? '');
     _emailCtrl = TextEditingController(text: widget.client.contactEmail);
-    _phoneCtrl = TextEditingController(text: widget.client.phone);
+    _phoneCtrl = TextEditingController(text: _phoneForEditing(widget.client.phone));
     _addressCtrl = TextEditingController(text: widget.client.address);
     _selectedSector = _normalizeSectorSelection(widget.client.sector);
     _logoBytes = widget.client.logoBytes;
@@ -496,7 +496,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       _contactNameCtrl.text = widget.client.contactName ?? '';
       _rfcCtrl.text = widget.client.rfc ?? '';
       _emailCtrl.text = widget.client.contactEmail;
-      _phoneCtrl.text = widget.client.phone;
+      _phoneCtrl.text = _phoneForEditing(widget.client.phone);
       _addressCtrl.text = widget.client.address;
       _selectedSector = _normalizeSectorSelection(widget.client.sector);
       _sectorLabels = _buildSectorLabels(_sectorLabels, _selectedSector);
@@ -519,6 +519,14 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   static final _uuidRe = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
   );
+
+  /// Devuelve los 10 dígitos locales quitando el prefijo +52 / 52 si existe.
+  static String _phoneForEditing(String stored) {
+    final digits = ClientInputRules.digitsOnly(stored);
+    if (digits.length == 12 && digits.startsWith('52')) return digits.substring(2);
+    if (digits.length == 10) return digits;
+    return digits;
+  }
 
   Future<void> _loadSectorLabels() async {
     final labels = await widget.metadataRepository.fetchSectorLabels();
@@ -1036,7 +1044,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                               _contactNameCtrl.text = widget.client.contactName ?? '';
                               _rfcCtrl.text = widget.client.rfc ?? '';
                               _emailCtrl.text = widget.client.contactEmail;
-                              _phoneCtrl.text = widget.client.phone;
+                              _phoneCtrl.text = _phoneForEditing(widget.client.phone);
                               _addressCtrl.text = widget.client.address;
                               setState(() {
                                 _selectedSector = _normalizeSectorSelection(widget.client.sector);
