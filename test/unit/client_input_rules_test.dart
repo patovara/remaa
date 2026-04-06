@@ -55,7 +55,10 @@ void main() {
       expect(ClientInputRules.isValidTenDigitPhone('9981234567'), isTrue);
     });
     test('10 dígitos con prefijo +52 (se extrae dígitos)', () {
-      expect(ClientInputRules.isValidTenDigitPhone('+529981234567'), isFalse); // 12 dígitos totales
+      expect(ClientInputRules.isValidTenDigitPhone('+529981234567'), isTrue);
+    });
+    test('10 dígitos con prefijo legado +521', () {
+      expect(ClientInputRules.isValidTenDigitPhone('+5219981234567'), isTrue);
     });
     test('9 dígitos', () {
       expect(ClientInputRules.isValidTenDigitPhone('998123456'), isFalse);
@@ -84,11 +87,26 @@ void main() {
     test('12 dígitos sin +', () {
       expect(ClientInputRules.toE164Mx('529981234567'), '+529981234567');
     });
+    test('13 dígitos con prefijo legado 521', () {
+      expect(ClientInputRules.toE164Mx('+5219981234567'), '+529981234567');
+    });
     test('8 dígitos → null (inválido)', () {
       expect(ClientInputRules.toE164Mx('99812345'), isNull);
     });
     test('vacío → null', () {
       expect(ClientInputRules.toE164Mx(''), isNull);
+    });
+  });
+
+  group('editableMxPhoneDigits', () {
+    test('deja 10 dígitos locales intactos', () {
+      expect(ClientInputRules.editableMxPhoneDigits('9981234567'), '9981234567');
+    });
+    test('quita prefijo 52 para edición', () {
+      expect(ClientInputRules.editableMxPhoneDigits('+529981234567'), '9981234567');
+    });
+    test('quita prefijo legado 521 para edición', () {
+      expect(ClientInputRules.editableMxPhoneDigits('+5219981234567'), '9981234567');
     });
   });
 

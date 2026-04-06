@@ -26,8 +26,28 @@ class ClientInputRules {
   static String digitsOnly(String value) =>
       value.replaceAll(RegExp(r'\D'), '');
 
+  /// Devuelve los 10 dígitos locales para edición en UI.
+  /// Acepta formatos guardados como +52XXXXXXXXXX, 52XXXXXXXXXX y +521XXXXXXXXXX.
+  static String editableMxPhoneDigits(String value) {
+    final digits = digitsOnly(value);
+    if (digits.length == 10) {
+      return digits;
+    }
+    if (digits.length == 12 && digits.startsWith('52')) {
+      return digits.substring(2);
+    }
+    if (digits.length == 13 && digits.startsWith('521')) {
+      return digits.substring(3);
+    }
+    if (digits.length > 10) {
+      return digits.substring(digits.length - 10);
+    }
+    return digits;
+  }
+
   /// Construye teléfono canónico E.164 para México: "+52XXXXXXXXXX".
   /// Acepta entrada con o sin prefijo (+52 / 52) y con o sin separadores.
+  /// También normaliza el prefijo legado +521 a +52.
   /// Retorna null si los dígitos no suman exactamente 10 (local) o 12 (+52).
   static String? toE164Mx(String value) {
     final digits = digitsOnly(value);
@@ -36,6 +56,9 @@ class ClientInputRules {
     }
     if (digits.length == 12 && digits.startsWith('52')) {
       return '+52${digits.substring(2)}';
+    }
+    if (digits.length == 13 && digits.startsWith('521')) {
+      return '+52${digits.substring(3)}';
     }
     return null;
   }
@@ -76,7 +99,12 @@ class ClientInputRules {
 
   /// Teléfono: valida que los dígitos sean exactamente 10 (MX).
   static bool isValidTenDigitPhone(String value) =>
-      digitsOnly(value).length == 10;
+      switch (digitsOnly(value)) {
+        final digits when digits.length == 10 => true,
+        final digits when digits.length == 12 && digits.startsWith('52') => true,
+        final digits when digits.length == 13 && digits.startsWith('521') => true,
+        _ => false,
+      };
 
   /// Dirección: 10-255 caracteres, debe contener letras y al menos un número.
   static bool isValidAddress(String value) {
