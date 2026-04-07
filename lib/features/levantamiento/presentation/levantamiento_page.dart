@@ -686,18 +686,24 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
   Future<String> _ensureProjectKey() async {
     final current = _projectKeyController.text.trim().toUpperCase();
-    if (current.startsWith('PRJ')) {
+    if (current.startsWith('RM-')) {
       return current;
     }
 
     try {
-      final key = await ref.read(quotesProvider.notifier).reserveProjectKey();
+      final key = await ref.read(quotesProvider.notifier).reserveProjectKey(
+            clientId: _selectedClientId,
+            projectTypeId: _selectedProjectTypeId,
+          );
       if (!mounted) {
         return key;
       }
       _projectKeyController.text = key;
       return key;
     } catch (_) {
+      if (current.isNotEmpty) {
+        return current;
+      }
       final fallback = 'PRJ${DateTime.now().millisecondsSinceEpoch}';
       if (mounted && _projectKeyController.text.trim().isEmpty) {
         _projectKeyController.text = fallback;

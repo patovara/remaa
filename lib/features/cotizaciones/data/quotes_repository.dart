@@ -1390,6 +1390,10 @@ class QuotesRepository {
       client: client,
       projectKey: projectKey,
     );
+    if (_isStructuredProjectKey(projectCode)) {
+      return projectCode;
+    }
+
     final clientCode = await _resolveClientCode(projectId: projectId, client: client);
     final projectTypeKey = await _resolveProjectTypeKey(
       projectTypeId: projectTypeId,
@@ -1410,15 +1414,40 @@ class QuotesRepository {
       return manual;
     }
 
-    return reserveProjectKey(client: client);
+    return reserveProjectKey(
+      client: client,
+      projectTypeId: null,
+      clientId: null,
+    );
   }
 
-  Future<String> reserveProjectKey({required dynamic client}) async {
+  Future<String> reserveProjectKey({
+    required dynamic client,
+    String? clientId,
+    String? projectTypeId,
+  }) async {
     if (client == null) {
       return _nextLocalProjectKey();
     }
 
+    final normalizedClientId = (clientId ?? '').trim();
+    final normalizedProjectTypeId = (projectTypeId ?? '').trim();
+    final hasStructuredParams = _isUuid(normalizedClientId) && _isUuid(normalizedProjectTypeId);
+
     try {
+      if (hasStructuredParams) {
+        final structuredResponse = await client.rpc(
+          'next_structured_project_key',
+          params: {
+            'p_client_id': normalizedClientId,
+            'p_project_type_id': normalizedProjectTypeId,
+          },
+        );
+        if (structuredResponse is String && structuredResponse.trim().isNotEmpty) {
+          return structuredResponse.trim().toUpperCase();
+        }
+      }
+
       final response = await client.rpc('next_project_key');
       if (response is String && response.trim().isNotEmpty) {
         return response.trim().toUpperCase();
@@ -1428,6 +1457,11 @@ class QuotesRepository {
     }
 
     return _nextLocalProjectKey();
+  }
+
+  bool _isStructuredProjectKey(String value) {
+    final normalized = value.trim().toUpperCase();
+    return RegExp(r'^RM-[A-Z]{3}-[0-9]{3,}-[A-Z]{4}-PRJ[0-9]{3,}$').hasMatch(normalized);
   }
 
   String _nextLocalProjectKey() {
@@ -1482,19 +1516,19 @@ class QuotesRepository {
       return 'MNTO';
     }
     if (value.contains('remodel')) {
-      return 'RMD';
+      return 'RMDL';
     }
     if (value.contains('constru')) {
-      return 'CNST';
+      return 'CONS';
     }
     if (value.contains('seed-pt-mantenimiento')) {
       return 'MNTO';
     }
     if (value.contains('seed-pt-remodelacion')) {
-      return 'RMD';
+      return 'RMDL';
     }
     if (value.contains('seed-pt-construccion')) {
-      return 'CNST';
+      return 'CONS';
     }
     return 'GEN';
   }

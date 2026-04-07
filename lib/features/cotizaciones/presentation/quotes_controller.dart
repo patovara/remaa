@@ -69,8 +69,15 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
     return quote;
   }
 
-  Future<String> reserveProjectKey() async {
-    return _repository.reserveProjectKey(client: SupabaseBootstrap.client);
+  Future<String> reserveProjectKey({
+    String? clientId,
+    String? projectTypeId,
+  }) async {
+    return _repository.reserveProjectKey(
+      client: SupabaseBootstrap.client,
+      clientId: clientId,
+      projectTypeId: projectTypeId,
+    );
   }
 
   Future<ProjectLookup> createProject({required NewProjectInput input}) async {
