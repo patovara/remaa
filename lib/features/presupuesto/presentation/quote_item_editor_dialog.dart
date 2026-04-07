@@ -612,7 +612,7 @@ class _ConceptSuggestionsBar extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox(),
-      error: (_, __) => const SizedBox(),
+      error: (_, _) => const SizedBox(),
     );
   }
 }
@@ -678,7 +678,7 @@ class _RecentConceptSuggestionsBar extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox(),
-      error: (_, __) => const SizedBox(),
+      error: (_, _) => const SizedBox(),
     );
   }
 

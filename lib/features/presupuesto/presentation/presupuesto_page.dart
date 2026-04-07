@@ -368,13 +368,13 @@ class PresupuestoPage extends ConsumerWidget {
               if (mergedEntries.isNotEmpty)
                 ...mergedEntries
                     .map((entry) => _LevantamientoEntryCard(entry: entry))
-                    .toList(),
+                    ,
               if (mergedEntries.isEmpty)
                 ...parsedDescriptions
                     .map((entry) => _LevantamientoEntryCard(
                           entry: SurveyEntryRecord(description: entry),
                         ))
-                    .toList(),
+                    ,
             ],
           ),
           ),
@@ -747,7 +747,7 @@ class _BudgetView extends StatelessWidget {
                   ),
                 ),
                 loading: () => const LinearProgressIndicator(minHeight: 2),
-                error: (_, __) => Container(
+                error: (_, _) => Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -704,7 +703,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     try {
       // ── Paso 1: subir logo (no bloquea el guardado si falla) ───────────────
       String? logoPath = widget.client.logoPath;
-      bool _logoUploadFailed = false;
+      bool logoUploadFailed = false;
       if (_logoBytes != null && _logoName != null && _uuidRe.hasMatch(widget.client.id)) {
         try {
           final uploaded = await widget.metadataRepository.uploadLogo(
@@ -714,7 +713,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
           );
           if (uploaded != null) logoPath = uploaded;
         } catch (_) {
-          _logoUploadFailed = true;
+          logoUploadFailed = true;
         }
       }
 
@@ -734,7 +733,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         address: address,
         responsibles: widget.client.responsibles,
         logoPath: logoPath,
-        logoBytes: _logoUploadFailed ? widget.client.logoBytes : _logoBytes,
+        logoBytes: logoUploadFailed ? widget.client.logoBytes : _logoBytes,
         isHidden: widget.client.isHidden,
       );
       if (_uuidRe.hasMatch(widget.client.id) && SupabaseBootstrap.client != null) {
@@ -747,8 +746,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
           address: updated.address,
           sectorLabel: updated.sector,
           rfc: updated.rfc,
-          logoPath: _logoUploadFailed ? null : updated.logoPath,
-          logoMimeType: (_logoName == null || _logoUploadFailed)
+          logoPath: logoUploadFailed ? null : updated.logoPath,
+          logoMimeType: (_logoName == null || logoUploadFailed)
               ? null
               : widget.metadataRepository.logoMimeTypeFromFileName(
                   updated.logoPath ?? _logoName!,
@@ -828,7 +827,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                           width: 72,
                           height: 72,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Icon(
+                          errorBuilder: (_, _, _) => Icon(
                             client.icon,
                             color: Colors.white,
                             size: 32,
@@ -990,7 +989,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                   builder: (context, constraints) {
                     final compact = constraints.maxWidth < 680;
                     final sectorField = DropdownButtonFormField<String>(
-                      value: _selectedSector,
+                      initialValue: _selectedSector,
                       isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Sector',
@@ -1494,7 +1493,7 @@ class _EditableLogoCard extends StatelessWidget {
                       width: double.infinity,
                       height: double.infinity,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Column(
+                      errorBuilder: (_, _, _) => Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(fallbackIcon, size: 42, color: RemaColors.onSurfaceVariant),

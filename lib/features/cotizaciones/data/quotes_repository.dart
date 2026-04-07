@@ -1030,7 +1030,7 @@ class QuotesRepository {
         'description': _asNullable(trimmed),
         'evidence_paths': evidencePaths,
         'evidence_meta': evidenceMetaMaps,
-        if (currentUserId != null) 'captured_by_user_id': currentUserId,
+        'captured_by_user_id': ?currentUserId,
       };
       if (_isUuid(quoteId ?? '')) {
         payload['quote_id'] = quoteId;
@@ -1472,7 +1472,7 @@ class QuotesRepository {
   String _nextLocalProjectKey() {
     final value = _localProjectKeySeq++;
     final millis = DateTime.now().millisecondsSinceEpoch;
-    return 'PRJ${millis}${value.toString().padLeft(2, '0')}';
+    return 'PRJ$millis${value.toString().padLeft(2, '0')}';
   }
 
   Future<String> _resolveClientCode({

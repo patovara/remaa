@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -692,7 +691,7 @@ class _ClientFormPanel extends StatelessWidget {
                         SizedBox(
                           width: 170,
                           child: DropdownButtonFormField<_CountryDialCode>(
-                            value: selectedCountry,
+                            initialValue: selectedCountry,
                             isExpanded: true,
                             decoration: const InputDecoration(
                               contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 14),
@@ -782,7 +781,7 @@ class _ClientFormPanel extends StatelessWidget {
                   Text('SECTOR', style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: selectedSector,
+                    initialValue: selectedSector,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       hintText: 'Selecciona un sector',
@@ -965,7 +964,7 @@ class _ClientSidebar extends StatelessWidget {
                             width: double.infinity,
                             height: double.infinity,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Column(
+                            errorBuilder: (_, _, _) => const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.image_not_supported_outlined, size: 40),

@@ -6,7 +6,7 @@ import '../data/surveys_staff_provider.dart';
 import '../data/surveys_staff_repository.dart';
 
 class SurveysStaffPage extends ConsumerWidget {
-  const SurveysStaffPage({Key? key}) : super(key: key);
+  const SurveysStaffPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -141,8 +141,6 @@ class _QuoteExpansionTile extends StatefulWidget {
 }
 
 class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
-  bool _expanded = false;
-
   @override
   Widget build(BuildContext context) {
     if (widget.surveys.isEmpty) {
@@ -155,9 +153,6 @@ class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
     return Card(
       elevation: 2,
       child: ExpansionTile(
-        onExpansionChanged: (value) {
-          setState(() => _expanded = value);
-        },
         title: Row(
           children: [
             Expanded(
@@ -181,7 +176,7 @@ class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(

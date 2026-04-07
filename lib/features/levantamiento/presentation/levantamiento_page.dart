@@ -39,7 +39,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   String? _pendingClientIdFromRoute;
   String? _clientErrorText;
 
-  DateTime _selectedDate = DateTime.now();
+  final DateTime _selectedDate = DateTime.now();
   String? _selectedClientId;
   String? _selectedProjectId;
   String? _selectedUniverseId;
@@ -258,6 +258,10 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         } on ImageOptimizationException catch (error) {
           rejectedMessages.add('${file.name}: ${error.message}');
         }
+      }
+
+      if (!mounted) {
+        return;
       }
 
       if (normalizedMedia.isNotEmpty) {

@@ -236,7 +236,7 @@ class _ClientesPageState extends State<ClientesPage> {
               SizedBox(
                 width: 260,
                 child: DropdownButtonFormField<String>(
-                  value: _selectedSector,
+                  initialValue: _selectedSector,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Filtrar por sector'),
                   items: [
@@ -384,7 +384,7 @@ class _ClientCard extends StatelessWidget {
                           width: 64,
                           height: 64,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Icon(
+                          errorBuilder: (_, _, _) => Icon(
                             client.icon,
                             color: RemaColors.onSurfaceVariant,
                             size: 28,

@@ -532,7 +532,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           }
         }),
       );
-      final evidenceList = [for (final bytes in downloaded) if (bytes != null) bytes];
+      final evidenceList = [for (final bytes in downloaded) ?bytes];
       if (evidenceList.isEmpty || !mounted) {
         return;
       }
@@ -556,13 +556,11 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
 
     setState(() {
-      if (_fotoAntes == null) {
-        _fotoAntes = _PickedMedia(
+      _fotoAntes ??= _PickedMedia(
           name: 'antes_${DateTime.now().millisecondsSinceEpoch}.png',
           bytes: evidenceList.first,
           size: evidenceList.first.length,
         );
-      }
 
       if (_fotosDurante.isEmpty && evidenceList.length > 1) {
         for (var index = 1; index < evidenceList.length; index++) {
@@ -922,6 +920,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         } on ImageOptimizationException catch (error) {
           rejectedMessages.add('${file.name}: ${error.message}');
         }
+      }
+
+      if (!mounted) {
+        return;
       }
 
       if (optimizedMedia.isNotEmpty) {

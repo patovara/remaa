@@ -122,7 +122,7 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
     }
     await showDialog<void>(
       context: context,
-      builder: (context) => _ManageUsersDialog(
+      builder: (dialogContext) => _ManageUsersDialog(
         users: _users,
         onRefresh: _refreshUsers,
         onSetRole: (userId, role) async {
@@ -136,18 +136,18 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
         onResetPassword: (userId) async {
           final redirectTo = _authRedirectUrl('reset');
           await _userRepository.resetPassword(userId: userId, redirectTo: redirectTo);
-          if (!mounted) {
+          if (!dialogContext.mounted) {
             return;
           }
-          showRemaMessage(context, 'Correo de reset enviado.');
+          showRemaMessage(dialogContext, 'Correo de reset enviado.');
         },
         onResendInvite: (userId) async {
           final redirectTo = _authRedirectUrl('invite');
           await _userRepository.resendInvite(userId: userId, redirectTo: redirectTo);
-          if (!mounted) {
+          if (!dialogContext.mounted) {
             return;
           }
-          showRemaMessage(context, 'Invitacion reenviada correctamente.');
+          showRemaMessage(dialogContext, 'Invitacion reenviada correctamente.');
           await _refreshUsers();
         },
       ),
@@ -168,11 +168,11 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
   Future<void> _openChangePasswordDialog() async {
     await showDialog<void>(
       context: context,
-      builder: (context) => _ChangePasswordDialog(
+      builder: (dialogContext) => _ChangePasswordDialog(
         onSave: (newPassword) async {
           await _authRepository.updatePassword(newPassword);
-          if (!mounted) return;
-          showRemaMessage(context, 'Contraseña actualizada exitosamente.');
+          if (!dialogContext.mounted) return;
+          showRemaMessage(dialogContext, 'Contraseña actualizada exitosamente.');
         },
       ),
     );
@@ -285,7 +285,7 @@ class _ProfileHeroState extends ConsumerState<_ProfileHero> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) => _EditProfileDialog(
+      builder: (dialogContext) => _EditProfileDialog(
         initialName: initialName,
         initialTitle: initialTitle,
         onSave: (name, title) async {
@@ -294,13 +294,13 @@ class _ProfileHeroState extends ConsumerState<_ProfileHero> {
               fullName: name.trim(),
               jobTitle: title.trim(),
             );
-            if (!mounted) return;
+            if (!dialogContext.mounted) return;
             ref.invalidate(currentUserProvider);
             ref.invalidate(appUserRoleProvider);
-            showRemaMessage(context, 'Perfil actualizado exitosamente.');
+            showRemaMessage(dialogContext, 'Perfil actualizado exitosamente.');
           } catch (e) {
-            if (!mounted) return;
-            showRemaMessage(context, 'Error al actualizar perfil: $e');
+            if (!dialogContext.mounted) return;
+            showRemaMessage(dialogContext, 'Error al actualizar perfil: $e');
           }
         },
       ),

@@ -13,5 +13,5 @@ final surveysByStaffProvider = FutureProvider<List<SurveyWithQuoteContext>>((ref
 
 /// Provider to refetch surveys (used by refresh actions)
 final surveysByStaffRefreshProvider = FutureProvider<void>((ref) async {
-  ref.refresh(surveysByStaffProvider);
+  ref.invalidate(surveysByStaffProvider);
 });

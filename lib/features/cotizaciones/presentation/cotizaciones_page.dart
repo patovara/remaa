@@ -14,7 +14,6 @@ import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import '../domain/concept_generation.dart';
 import '../domain/quote_models.dart';
-import '../../clientes/presentation/clientes_mock_data.dart';
 import 'concepts_catalog_controller.dart';
 import 'quotes_controller.dart';
 
@@ -289,6 +288,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       } catch (_) {}
     }
 
+    if (!mounted) {
+      return;
+    }
+
     final validationError = _approvalPdfPrerequisiteError(quote, resolvedProject);
     if (validationError != null) {
       showRemaMessage(context, validationError);
@@ -365,7 +368,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
           .from('quote-approvals')
           .download(quote.approvalPdfPath!);
 
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       await Printing.layoutPdf(
         onLayout: (_) async => bytes,
@@ -373,7 +376,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
         name: 'confirmacion_pedido_${quote.quoteNumber}.pdf',
       );
     } catch (error) {
-      if (mounted) {
+      if (context.mounted) {
         showRemaMessage(context, 'No se pudo cargar el PDF: $error');
       }
     }
@@ -385,10 +388,9 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
 
   Future<void> _previewFinalActa(BuildContext context, QuoteRecord quote) async {
     final document = await _loadFinalActaDocument(quote);
+    if (!context.mounted) return;
     if (document == null) {
-      if (mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
-      }
+      showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
       return;
     }
     await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
@@ -396,28 +398,26 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
 
   Future<void> _downloadFinalActa(BuildContext context, QuoteRecord quote) async {
     final document = await _loadFinalActaDocument(quote);
+    if (!context.mounted) return;
     if (document == null) {
-      if (mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
-      }
+      showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
       return;
     }
     await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
-    if (mounted) {
+    if (context.mounted) {
       showRemaMessage(context, 'Acta final lista para descarga.');
     }
   }
 
   Future<void> _shareFinalActa(BuildContext context, QuoteRecord quote) async {
     final document = await _loadFinalActaDocument(quote);
+    if (!context.mounted) return;
     if (document == null) {
-      if (mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
-      }
+      showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
       return;
     }
     await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
-    if (mounted) {
+    if (context.mounted) {
       showRemaMessage(context, 'Acta final lista para compartir.');
     }
   }
@@ -450,17 +450,19 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
         }
       }
 
+      if (!context.mounted) return;
+
       if (clientId == null || clientId.isEmpty) {
         showRemaMessage(context, 'Este proyecto no tiene cliente asignado.');
         return;
       }
 
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       // Navegar a ACTAS con el clientId
       context.push('/actas?clientId=$clientId&quoteId=${quote.id}');
     } catch (error) {
-      if (mounted) {
+      if (context.mounted) {
         showRemaMessage(context, 'Error al cargar datos del cliente: $error');
       }
     }
