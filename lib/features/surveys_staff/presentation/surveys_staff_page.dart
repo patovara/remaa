@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../data/surveys_staff_provider.dart';
 import '../data/surveys_staff_repository.dart';
 
@@ -51,7 +52,7 @@ class SurveysStaffPage extends ConsumerWidget {
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      context.go('/levantamiento');
                     },
                     icon: const Icon(Icons.arrow_back),
                     label: const Text('Ir a Levantamiento'),
