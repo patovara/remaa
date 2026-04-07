@@ -316,8 +316,6 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
           ) ??
           '${_selectedCountry.dialCode}$phoneDigits';
 
-      await _metadataRepository.ensureSectorLabel(normalizedSector);
-
       final basePayload = <String, Object?>{
         'business_name': businessName,
         'contact_name': contactName,

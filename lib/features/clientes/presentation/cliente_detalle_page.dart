@@ -738,7 +738,6 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         isHidden: widget.client.isHidden,
       );
       if (_uuidRe.hasMatch(widget.client.id) && SupabaseBootstrap.client != null) {
-        await widget.metadataRepository.ensureSectorLabel(sector);
         await widget.metadataRepository.updateClientMetadata(
           clientId: updated.id,
           businessName: updated.name,
