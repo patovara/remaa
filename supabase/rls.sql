@@ -104,29 +104,63 @@ create policy attribute_options_read_all on public.attribute_options for select 
 drop policy if exists concept_closures_read_all on public.concept_closures;
 create policy concept_closures_read_all on public.concept_closures for select to anon, authenticated using (true);
 
--- Read: authenticated users can see surveys they captured, or historical orphaned surveys (NULL owner) for admin use
+-- Read: authenticated users can read own surveys, orphan surveys, and admin can read all
+drop policy if exists project_survey_entries_read_auth on public.project_survey_entries;
 drop policy if exists project_survey_entries_read_own on public.project_survey_entries;
-create policy project_survey_entries_read_own on public.project_survey_entries
-for select to authenticated using (captured_by_user_id = auth.uid());
-
 drop policy if exists project_survey_entries_read_null on public.project_survey_entries;
-create policy project_survey_entries_read_null on public.project_survey_entries
-for select to authenticated using (captured_by_user_id is null);
+create policy project_survey_entries_read_auth on public.project_survey_entries
+for select to authenticated
+using (
+	captured_by_user_id = auth.uid()
+	or captured_by_user_id is null
+	or public.is_admin()
+);
 
--- Insert: authenticated users can insert, must set captured_by_user_id to their own user id
+-- Read fallback for MVP flows without login
+drop policy if exists project_survey_entries_read_anon on public.project_survey_entries;
+create policy project_survey_entries_read_anon on public.project_survey_entries
+for select to anon using (captured_by_user_id is null);
+
+-- Insert: authenticated users keep ownership; anon can insert only orphan rows
+drop policy if exists project_survey_entries_insert_auth on public.project_survey_entries;
 drop policy if exists project_survey_entries_insert_own on public.project_survey_entries;
-create policy project_survey_entries_insert_own on public.project_survey_entries
-for insert to authenticated with check (captured_by_user_id = auth.uid());
+create policy project_survey_entries_insert_auth on public.project_survey_entries
+for insert to authenticated
+with check (
+	captured_by_user_id = auth.uid()
+	or (captured_by_user_id is null and public.is_admin())
+);
 
--- Update: authenticated users can update only their own surveys
+drop policy if exists project_survey_entries_insert_anon on public.project_survey_entries;
+create policy project_survey_entries_insert_anon on public.project_survey_entries
+for insert to anon
+with check (captured_by_user_id is null);
+
+-- Update: authenticated users can update own rows; admin can update all
+drop policy if exists project_survey_entries_update_auth on public.project_survey_entries;
 drop policy if exists project_survey_entries_update_own on public.project_survey_entries;
-create policy project_survey_entries_update_own on public.project_survey_entries
-for update to authenticated using (captured_by_user_id = auth.uid()) with check (captured_by_user_id = auth.uid());
+create policy project_survey_entries_update_auth on public.project_survey_entries
+for update to authenticated
+using (captured_by_user_id = auth.uid() or public.is_admin())
+with check (captured_by_user_id = auth.uid() or public.is_admin());
 
--- Delete: authenticated users can delete only their own surveys
+drop policy if exists project_survey_entries_update_anon on public.project_survey_entries;
+create policy project_survey_entries_update_anon on public.project_survey_entries
+for update to anon
+using (captured_by_user_id is null)
+with check (captured_by_user_id is null);
+
+-- Delete: authenticated users can delete own rows; admin can delete all
+drop policy if exists project_survey_entries_delete_auth on public.project_survey_entries;
 drop policy if exists project_survey_entries_delete_own on public.project_survey_entries;
-create policy project_survey_entries_delete_own on public.project_survey_entries
-for delete to authenticated using (captured_by_user_id = auth.uid());
+create policy project_survey_entries_delete_auth on public.project_survey_entries
+for delete to authenticated
+using (captured_by_user_id = auth.uid() or public.is_admin());
+
+drop policy if exists project_survey_entries_delete_anon on public.project_survey_entries;
+create policy project_survey_entries_delete_anon on public.project_survey_entries
+for delete to anon
+using (captured_by_user_id is null);
 
 drop policy if exists clients_read_all on public.clients;
 create policy clients_read_all on public.clients

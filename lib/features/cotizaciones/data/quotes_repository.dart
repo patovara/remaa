@@ -1030,7 +1030,7 @@ class QuotesRepository {
         'description': _asNullable(trimmed),
         'evidence_paths': evidencePaths,
         'evidence_meta': evidenceMetaMaps,
-        'captured_by_user_id': ?currentUserId,
+        if (currentUserId != null) 'captured_by_user_id': currentUserId,
       };
       if (_isUuid(quoteId ?? '')) {
         payload['quote_id'] = quoteId;
