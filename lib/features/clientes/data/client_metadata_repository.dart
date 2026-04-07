@@ -91,7 +91,11 @@ class ClientMetadataRepository {
     }
     try {
       await client.from('client_sector_tags').upsert({'name': normalized});
-    } catch (_) {
+    } catch (error) {
+      final message = error.toString().toLowerCase();
+      if (message.contains('23505') || message.contains('duplicate key value')) {
+        return;
+      }
       // No bloquear guardado de cliente por fallo del catalogo.
     }
   }
