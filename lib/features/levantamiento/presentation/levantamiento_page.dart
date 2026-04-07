@@ -176,8 +176,40 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       _clientErrorText = null;
       _photos.clear();
     });
+  }
 
-    _ensureProjectKey();
+  bool _hasStructuredKeyContext() {
+    return (_selectedClientId ?? '').trim().isNotEmpty &&
+        (_selectedProjectTypeId ?? '').trim().isNotEmpty;
+  }
+
+  Future<void> _refreshStructuredProjectKeyIfNeeded({
+    bool announce = false,
+  }) async {
+    final active = ref.read(activeLevantamientoProvider);
+    if (_selectedProjectId != null || (active != null && active.isActive)) {
+      return;
+    }
+
+    final current = _projectKeyController.text.trim().toUpperCase();
+    if (current.startsWith('RM-')) {
+      return;
+    }
+
+    if (!_hasStructuredKeyContext()) {
+      if (current.startsWith('PRJ')) {
+        _projectKeyController.clear();
+        _persistDraftSnapshot();
+      }
+      return;
+    }
+
+    final generated = await _ensureProjectKey();
+    if (!mounted || generated.trim().isEmpty || !announce) {
+      return;
+    }
+
+    showRemaMessage(context, 'Folio de proyecto generado: ${generated.trim()}');
   }
 
   Future<void> _pickPhotos() async {
@@ -867,13 +899,8 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     final sessionKey = active?.projectKey?.trim() ?? '';
     if (existingKey.isEmpty && sessionKey.isNotEmpty) {
       _projectKeyController.text = sessionKey;
-    } else if (existingKey.isEmpty) {
-      _ensureProjectKey().then((generated) {
-        if (!mounted || generated.trim().isEmpty) {
-          return;
-        }
-        showRemaMessage(context, 'Folio de proyecto generado: ${generated.trim()}');
-      });
+    } else {
+      _refreshStructuredProjectKeyIfNeeded(announce: existingKey.isEmpty);
     }
 
     if (active != null && active.isActive) {
@@ -895,8 +922,10 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     if (current != null && current.name != value) {
       setState(() {
         _selectedClientId = null;
+        _selectedProjectId = null;
         _clientErrorText = null;
       });
+      _refreshStructuredProjectKeyIfNeeded();
       return;
     }
 
@@ -1294,6 +1323,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
               : (value) {
                 setState(() => _selectedProjectTypeId = value);
                 _persistDraftSnapshot();
+                _refreshStructuredProjectKeyIfNeeded();
                 },
             showCatalogWarning: catalogState.hasError,
             universeLocked: universeLocked,

@@ -519,7 +519,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
 
     ProjectLookup project;
     try {
-      final projectKey = await ref.read(quotesProvider.notifier).reserveProjectKey();
+      final projectKey = await ref.read(quotesProvider.notifier).reserveProjectKey(
+        clientId: result.clientId,
+        projectTypeId: result.projectTypeId,
+          );
       project = await ref.read(quotesProvider.notifier).createProject(
             input: NewProjectInput(
               code: projectKey,
