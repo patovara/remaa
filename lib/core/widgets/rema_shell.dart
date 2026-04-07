@@ -17,6 +17,7 @@ class _NavItem {
 
 const _navItems = <_NavItem>[
   _NavItem('Levantamiento', Icons.architecture, '/levantamiento'),
+  _NavItem('Mis Levantamientos', Icons.assignment_turned_in, '/surveys-staff'),
   _NavItem('Cotizacion', Icons.request_quote, '/cotizaciones'),
   _NavItem('Actas', Icons.description, '/actas'),
   _NavItem('Clientes', Icons.group, '/clientes'),
@@ -38,7 +39,7 @@ class RemaShell extends ConsumerWidget {
         ? _navItems
         : [
             for (final item in _navItems)
-              if (item.route == '/levantamiento' || item.route == '/ajustes') item,
+              if (item.route == '/levantamiento' || item.route == '/surveys-staff' || item.route == '/ajustes') item,
           ];
 
     if (isDesktop) {

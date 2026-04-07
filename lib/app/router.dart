@@ -17,11 +17,13 @@ import '../features/cotizaciones/presentation/cotizaciones_page.dart';
 import '../features/levantamiento/presentation/levantamiento_page.dart';
 import '../features/nuevo_cliente/presentation/nuevo_cliente_page.dart';
 import '../features/presupuesto/presentation/presupuesto_page.dart';
+import '../features/surveys_staff/presentation/surveys_staff_page.dart';
 
 final _authRefresh = _AuthRefreshListenable();
 
 const _staffAllowedRoutes = <String>{
   '/levantamiento',
+  '/surveys-staff',
   '/ajustes',
 };
 
@@ -80,6 +82,12 @@ final appRouter = GoRouter(
             child: LevantamientoPage(
               initialClientId: state.uri.queryParameters['clientId'],
             ),
+          ),
+        ),
+        GoRoute(
+          path: '/surveys-staff',
+          pageBuilder: (context, state) => const NoTransitionPage(
+            child: SurveysStaffPage(),
           ),
         ),
         GoRoute(
