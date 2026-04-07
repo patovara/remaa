@@ -291,6 +291,223 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     showRemaMessage(context, 'Se elimino ${photo.name}.');
   }
 
+  void _prepareForNextCapture() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _notesController.clear();
+      _photos.clear();
+      _clientErrorText = null;
+    });
+    _persistDraftSnapshot();
+  }
+
+  Future<List<_PickedMedia>> _pickEvidenceForEdit({required int maxPhotos}) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
+      withData: true,
+    );
+
+    if (!mounted || result == null || result.files.isEmpty) {
+      return const <_PickedMedia>[];
+    }
+
+    final selectedFiles = result.files.take(maxPhotos).toList();
+    final normalizedMedia = <_PickedMedia>[];
+    for (final file in selectedFiles) {
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        continue;
+      }
+      try {
+        final optimized = await optimizeImageForDocument(
+          inputBytes: bytes,
+          fileName: file.name,
+          profile: ImageOptimizationProfile.gridDocument,
+        );
+        normalizedMedia.add(
+          _PickedMedia(
+            name: optimized.fileName,
+            bytes: optimized.bytes,
+            size: optimized.bytes.length,
+            mimeType: optimized.mimeType,
+          ),
+        );
+      } on ImageOptimizationException catch (error) {
+        if (mounted) {
+          showRemaMessage(context, '${file.name}: ${error.message}');
+        }
+      }
+    }
+    return normalizedMedia;
+  }
+
+  List<String> _existingEvidencePaths(SurveyEntryRecord entry) {
+    if (entry.evidencePaths.isNotEmpty) {
+      return entry.evidencePaths;
+    }
+    return [
+      for (final meta in entry.evidenceMetadata)
+        if (meta.objectPath.trim().isNotEmpty) meta.objectPath.trim(),
+    ];
+  }
+
+  Future<void> _editCapturedEntry({
+    required String projectId,
+    required String? quoteId,
+    required SurveyEntryRecord entry,
+  }) async {
+    final entryId = entry.id;
+    if (entryId == null || entryId.trim().isEmpty) {
+      showRemaMessage(context, 'Esta entrada aun no tiene identificador para editarse.');
+      return;
+    }
+
+    final descriptionController = TextEditingController(text: entry.description);
+    final replacementPhotos = <_PickedMedia>[];
+    var clearEvidence = false;
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Editar anotacion'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: descriptionController,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'Descripcion',
+                        hintText: 'Actualiza la descripcion del levantamiento',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Evidencias actuales: ${entry.evidencePreviewList.length}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final bytes in entry.evidencePreviewList)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: Image.memory(bytes, fit: BoxFit.cover),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      value: clearEvidence,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Eliminar evidencias actuales'),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          clearEvidence = value ?? false;
+                          if (clearEvidence) {
+                            replacementPhotos.clear();
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      onPressed: clearEvidence
+                          ? null
+                          : () async {
+                              final selected = await _pickEvidenceForEdit(maxPhotos: 2);
+                              if (selected.isEmpty) {
+                                return;
+                              }
+                              setDialogState(() {
+                                replacementPhotos
+                                  ..clear()
+                                  ..addAll(selected.take(2));
+                              });
+                            },
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: Text(
+                        replacementPhotos.isEmpty
+                            ? 'Reemplazar evidencias (opcional)'
+                            : 'Reemplazar evidencias (${replacementPhotos.length})',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Guardar cambios'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (accepted != true) {
+      descriptionController.dispose();
+      return;
+    }
+
+    final replacementInputs = replacementPhotos
+        .where((photo) => photo.bytes != null && photo.bytes!.isNotEmpty)
+        .map(
+          (photo) => SurveyEvidenceInput(
+            bytes: photo.bytes!,
+            originalName: photo.name,
+            fileSizeBytes: photo.size,
+            mimeType: photo.mimeType ?? _guessMimeType(photo.name),
+          ),
+        )
+        .toList();
+
+    final updated = await ref.read(quotesProvider.notifier).updateSurveyEntry(
+          projectId: projectId,
+          entryId: entryId,
+          quoteId: quoteId,
+          description: descriptionController.text.trim(),
+          replacementEvidenceInputs:
+              replacementInputs.isEmpty && !clearEvidence ? null : replacementInputs,
+          clearEvidence: clearEvidence,
+          existingEvidencePaths: _existingEvidencePaths(entry),
+        );
+
+    descriptionController.dispose();
+
+    if (!mounted) {
+      return;
+    }
+
+    ref.invalidate(projectSurveyEntriesProvider(projectId));
+    if (updated == null) {
+      showRemaMessage(context, 'No se pudo actualizar la anotacion.');
+      return;
+    }
+    showRemaMessage(context, 'Anotacion actualizada correctamente.');
+  }
+
   Future<void> _copyCoordinates() async {
     await Clipboard.setData(
       const ClipboardData(text: '19.4326 N, 99.1332 W - CDMX, MX'),
@@ -302,6 +519,23 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   }
 
   Future<void> _goToQuote() async {
+    final active = ref.read(activeLevantamientoProvider);
+
+    if (active != null && active.isActive && active.quoteId != null) {
+      await _syncActiveQuoteContextAndEntries(active);
+      _prepareForNextCapture();
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(
+        context,
+        'Entrada agregada a la cotizacion activa. Captura la siguiente descripcion y evidencia.',
+        label: 'Abrir presupuesto',
+        onAction: () => context.go('/presupuesto/${active.quoteId}'),
+      );
+      return;
+    }
+
     final resolvedClient = _resolveValidatedClientSelection();
     if (resolvedClient == null) {
       showRemaMessage(
@@ -311,7 +545,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       return;
     }
 
-    final active = ref.read(activeLevantamientoProvider);
     final selectedUniverseId = _selectedUniverseId;
     final selectedProjectTypeId = _selectedProjectTypeId;
 
@@ -325,12 +558,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         context,
         'Ya hay un levantamiento activo en otro universo. Finalizalo antes de cambiar.',
       );
-      return;
-    }
-
-    if (active != null && active.isActive && active.quoteId != null) {
-      await _syncActiveQuoteContextAndEntries(active);
-      context.go('/presupuesto/${active.quoteId}');
       return;
     }
 
@@ -399,10 +626,15 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
             evidencePreviewList: _previewPhotos(),
             entries: entry == null ? const <SurveyEntryRecord>[] : <SurveyEntryRecord>[entry],
           );
-          ref.read(levantamientoDraftProvider.notifier).clear();
+      ref.read(levantamientoDraftProvider.notifier).clear();
+      _prepareForNextCapture();
 
-      showRemaMessage(context, 'Levantamiento asociado a ${quote.quoteNumber}.');
-      context.go('/presupuesto/${quote.id}');
+      showRemaMessage(
+        context,
+        'Levantamiento asociado a ${quote.quoteNumber}. Clave bloqueada y formulario listo para la siguiente entrada.',
+        label: 'Abrir presupuesto',
+        onAction: () => context.go('/presupuesto/${quote.id}'),
+      );
     } finally {
       if (mounted) {
         setState(() => _isCreatingQuote = false);
@@ -466,7 +698,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       _projectKeyController.text = key;
       return key;
     } catch (_) {
-      const fallback = 'PRJ001';
+      final fallback = 'PRJ${DateTime.now().millisecondsSinceEpoch}';
       if (mounted && _projectKeyController.text.trim().isEmpty) {
         _projectKeyController.text = fallback;
       }
@@ -750,11 +982,11 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       return;
     }
 
-    ref.read(activeLevantamientoProvider.notifier).finish();
+    ref.read(activeLevantamientoProvider.notifier).clear();
     ref.read(levantamientoDraftProvider.notifier).clear();
     showRemaMessage(
       context,
-      'Levantamiento finalizado. Fotos cargadas: ${_photos.length}. Ya puedes iniciar otro universo.',
+      'Levantamiento finalizado. Se reinicio el formulario y se genero una nueva clave de proyecto.',
       label: active.quoteId != null ? 'Presupuesto' : null,
       onAction: active.quoteId != null
           ? () => context.go('/presupuesto/${active.quoteId}')
@@ -971,6 +1203,13 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     final catalogState = ref.watch(conceptsCatalogProvider);
     final activeLevantamiento = ref.watch(activeLevantamientoProvider);
     final catalogSnapshot = catalogState.valueOrNull;
+    final activeProjectId = activeLevantamiento?.projectId.trim() ?? '';
+    final projectIdForEntries = activeProjectId.isNotEmpty
+      ? activeProjectId
+      : ((_selectedProjectId ?? '').trim().isNotEmpty ? _selectedProjectId!.trim() : null);
+    final surveyEntriesAsync = projectIdForEntries == null
+      ? const AsyncData<List<SurveyEntryRecord>>(<SurveyEntryRecord>[])
+      : ref.watch(projectSurveyEntriesProvider(projectIdForEntries));
 
     final universes = catalogSnapshot?.universes ?? const <UniverseCatalogItem>[];
     final projectTypes = _allowedProjectTypes(
@@ -1111,6 +1350,17 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
                 onQuote: _isCreatingQuote ? null : _goToQuote,
                 onFinish: _finishSurvey,
               ),
+              if (projectIdForEntries != null) ...[
+                const SizedBox(height: 24),
+                _CapturedEntriesPanel(
+                  entriesAsync: surveyEntriesAsync,
+                  onEdit: (entry) => _editCapturedEntry(
+                    projectId: projectIdForEntries,
+                    quoteId: activeLevantamiento?.quoteId,
+                    entry: entry,
+                  ),
+                ),
+              ],
             ],
           );
         },
@@ -1400,6 +1650,131 @@ class _DescriptionPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CapturedEntriesPanel extends StatelessWidget {
+  const _CapturedEntriesPanel({
+    required this.entriesAsync,
+    required this.onEdit,
+  });
+
+  final AsyncValue<List<SurveyEntryRecord>> entriesAsync;
+  final ValueChanged<SurveyEntryRecord> onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return RemaPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const RemaSectionHeader(title: 'Anotaciones capturadas'),
+          const SizedBox(height: 16),
+          entriesAsync.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              ),
+            ),
+            error: (error, _) => Text(
+              'No se pudieron cargar las anotaciones: $error',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            data: (entries) {
+              if (entries.isEmpty) {
+                return Text(
+                  'Todavia no hay anotaciones registradas para este levantamiento.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                );
+              }
+
+              return Column(
+                children: [
+                  for (var index = 0; index < entries.length; index++) ...[
+                    _CapturedEntryTile(
+                      index: index + 1,
+                      entry: entries[index],
+                      onEdit: () => onEdit(entries[index]),
+                    ),
+                    if (index < entries.length - 1) const Divider(height: 24),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CapturedEntryTile extends StatelessWidget {
+  const _CapturedEntryTile({
+    required this.index,
+    required this.entry,
+    required this.onEdit,
+  });
+
+  final int index;
+  final SurveyEntryRecord entry;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = 'Entrada $index';
+    final createdAt = entry.createdAt;
+    final caption = createdAt == null
+        ? title
+        : '$title · ${createdAt.day.toString().padLeft(2, '0')}/${createdAt.month.toString().padLeft(2, '0')}/${createdAt.year}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                caption,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Editar'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          entry.description.trim().isEmpty
+              ? 'Sin descripcion.'
+              : entry.description.trim(),
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        if (entry.evidencePreviewList.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final bytes in entry.evidencePreviewList)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: Image.memory(bytes, fit: BoxFit.cover),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

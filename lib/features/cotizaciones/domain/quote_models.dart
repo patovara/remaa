@@ -192,14 +192,20 @@ class QuoteContextInfo {
 class SurveyEntryRecord {
   const SurveyEntryRecord({
     this.id,
+    this.projectId,
+    this.quoteId,
     required this.description,
+    this.evidencePaths = const <String>[],
     this.evidencePreviewList = const <Uint8List>[],
     this.evidenceMetadata = const <SurveyEvidenceMeta>[],
     this.createdAt,
   });
 
   final String? id;
+  final String? projectId;
+  final String? quoteId;
   final String description;
+  final List<String> evidencePaths;
   final List<Uint8List> evidencePreviewList;
   final List<SurveyEvidenceMeta> evidenceMetadata;
   final DateTime? createdAt;

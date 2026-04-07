@@ -117,6 +117,27 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
     );
   }
 
+  Future<SurveyEntryRecord?> updateSurveyEntry({
+    required String projectId,
+    required String entryId,
+    String? quoteId,
+    required String description,
+    List<SurveyEvidenceInput>? replacementEvidenceInputs,
+    bool clearEvidence = false,
+    List<String> existingEvidencePaths = const <String>[],
+  }) {
+    ref.invalidate(projectSurveyEntriesProvider(projectId));
+    return _repository.updateSurveyEntry(
+      projectId: projectId,
+      entryId: entryId,
+      quoteId: quoteId,
+      description: description,
+      replacementEvidenceInputs: replacementEvidenceInputs,
+      clearEvidence: clearEvidence,
+      existingEvidencePaths: existingEvidencePaths,
+    );
+  }
+
   Future<void> setTotals({
     required String quoteId,
     required double subtotal,

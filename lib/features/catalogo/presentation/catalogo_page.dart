@@ -34,6 +34,25 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     super.dispose();
   }
 
+  String _formatCatalogError(dynamic error) {
+    final errorStr = error.toString();
+    
+    if (errorStr.contains('42501') || errorStr.contains('insufficient_privilege')) {
+      return 'Permiso insuficiente: RLS bloqueó la operación. '
+          'Verifica tu rol de admin en Supabase y que las políticas de catálogo estén habilitadas.';
+    }
+    
+    if (errorStr.contains('duplicate')) {
+      return 'Registro duplicado: esta entidad ya existe en el catálogo.';
+    }
+    
+    if (errorStr.contains('not_found') || errorStr.contains('no rows')) {
+      return 'Registro no encontrado: verifica que exista en el catálogo.';
+    }
+    
+    return errorStr;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
@@ -515,7 +534,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       );
     } catch (error) {
       if (mounted) {
-        showRemaMessage(context, 'No se pudo importar el CSV: $error');
+        showRemaMessage(context, 'No se pudo importar el CSV: ${_formatCatalogError(error)}');
       }
     } finally {
       ref.read(catalogUiControllerProvider.notifier).setImporting(false);
@@ -641,7 +660,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       }
     } catch (error) {
       if (mounted) {
-        showRemaMessage(context, '$error');
+        showRemaMessage(context, _formatCatalogError(error));
       }
     }
   }

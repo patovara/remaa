@@ -200,9 +200,14 @@ class CatalogRowProcessor {
         optionCreated = true;
       }
     } catch (error) {
+      final errorStr = error.toString();
+      final isPermissionDenied = errorStr.contains('42501') || 
+          errorStr.contains('insufficient_privilege');
+      
       AppLogger.error('catalog_row_processor.row_failed', data: {
         'line': row.lineNumber,
-        'error': error.toString(),
+        'error': errorStr,
+        'is_permission_denied': isPermissionDenied,
       });
       return CatalogRowResult(
         universeCreated: universeCreated,
@@ -211,7 +216,9 @@ class CatalogRowProcessor {
         optionCreated: optionCreated,
         issue: CatalogImportIssue(
           lineNumber: row.lineNumber,
-          message: error.toString(),
+          message: isPermissionDenied
+              ? 'Permiso insuficiente (RLS 42501): Verifica tu rol de admin y políticas de catálogo.'
+              : errorStr,
         ),
       );
     }
