@@ -106,7 +106,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                             _QuoteMobileCard(
                               quote: quote,
                               onViewProjectDescription: () =>
-                                  _showProjectDescription(context, quote, projectById[quote.projectId]),
+                                  _showProjectDescription(quote, projectById[quote.projectId]),
                               onEdit: () => context.go('/presupuesto/${quote.id}'),
                               onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
                               onAttachPdf: quote.isConcluded
@@ -172,7 +172,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                             _QuoteRow(
                               quote: quote,
                               onViewProjectDescription: () =>
-                                  _showProjectDescription(context, quote, projectById[quote.projectId]),
+                                  _showProjectDescription(quote, projectById[quote.projectId]),
                               onEdit: () => context.go('/presupuesto/${quote.id}'),
                               onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
                               onAttachPdf: quote.isConcluded
@@ -580,55 +580,98 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   Future<void> _showProjectDescription(
-    BuildContext context,
     QuoteRecord quote,
     ProjectLookup? project,
   ) async {
     final description = project?.description?.trim() ?? '';
     final hasDescription = description.isNotEmpty;
 
+    // Cargar entradas de levantamiento del proyecto (admin y staff ven lo que RLS permite)
+    List<SurveyEntryRecord> entries = const [];
+    if (project != null) {
+      try {
+        entries = await ref.read(projectSurveyEntriesProvider(project.id).future);
+      } catch (_) {
+        entries = const [];
+      }
+    }
+
+    if (!mounted) return;
+
+    final allImages = [
+      for (final entry in entries) ...entry.evidencePreviewList,
+    ];
+    final hasImages = allImages.isNotEmpty;
+
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Descripcion de levantamiento'),
-        content: SizedBox(
-          width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                project == null
-                    ? 'Proyecto no encontrado para ${quote.quoteNumber}.'
-                    : '${project.code} - ${project.name}',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 12),
-              if (project?.siteAddress != null && project!.siteAddress!.trim().isNotEmpty) ...[
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  project.siteAddress!,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: RemaColors.onSurfaceVariant),
+                  project == null
+                      ? 'Proyecto no encontrado para ${quote.quoteNumber}.'
+                      : '${project.code} - ${project.name}',
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 12),
+                if (project?.siteAddress != null && project!.siteAddress!.trim().isNotEmpty) ...[
+                  Text(
+                    project.siteAddress!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: RemaColors.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: RemaColors.surfaceLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    hasDescription
+                        ? description
+                        : 'Este proyecto no tiene descripcion capturada en levantamiento.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (hasImages) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final bytes in allImages)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            width: 88,
+                            height: 88,
+                            child: Image.memory(bytes, fit: BoxFit.cover),
+                          ),
+                        ),
+                    ],
+                  ),
+                ] else
+                  Text(
+                    'No hay evidencias fotograficas para este levantamiento.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: RemaColors.onSurfaceVariant),
+                  ),
               ],
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: RemaColors.surfaceLow,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  hasDescription
-                      ? description
-                      : 'Este proyecto no tiene descripcion capturada en levantamiento.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
         actions: [
