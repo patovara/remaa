@@ -1519,44 +1519,20 @@ class _ProjectDetailsPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: selectedUniverseId,
-            decoration: InputDecoration(
-              labelText: universeLocked ? 'Universo (bloqueado por levantamiento activo)' : 'Universo',
-            ),
-            items: [
-              for (final universe in universes)
-                DropdownMenuItem<String>(
-                  value: universe.id,
-                  child: Text(universe.name),
-                ),
-            ],
-            onChanged: onUniverseChanged == null
-                ? null
-                : (value) {
-                    if (value != null) {
-                      onUniverseChanged!(value);
-                    }
-                  },
+          _DropdownField<UniverseCatalogItem>(
+            label: universeLocked ? 'Universo (bloqueado por levantamiento activo)' : 'Universo',
+            items: universes,
+            selectedId: selectedUniverseId,
+            getLabel: (item) => item.name,
+            onChanged: onUniverseChanged,
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: selectedProjectTypeId,
-            decoration: const InputDecoration(labelText: 'Tipo de proyecto'),
-            items: [
-              for (final projectType in projectTypes)
-                DropdownMenuItem<String>(
-                  value: projectType.id,
-                  child: Text(projectType.name),
-                ),
-            ],
-            onChanged: onProjectTypeChanged == null
-                ? null
-                : (value) {
-                    if (value != null) {
-                      onProjectTypeChanged!(value);
-                    }
-                  },
+          _DropdownField<ProjectTypeCatalogItem>(
+            label: 'Tipo de proyecto',
+            items: projectTypes,
+            selectedId: selectedProjectTypeId,
+            getLabel: (item) => item.name,
+            onChanged: onProjectTypeChanged,
           ),
           if (showCatalogWarning) ...[
             const SizedBox(height: 12),
@@ -2008,6 +1984,62 @@ class _UnderlinedField extends StatelessWidget {
   }
 }
 
+/// Generic dropdown widget that validates initialValue is in items list
+class _DropdownField<T> extends StatelessWidget {
+  const _DropdownField({
+    required this.label,
+    required this.items,
+    required this.selectedId,
+    required this.getLabel,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<T> items;
+  final String? selectedId;
+  final String Function(T item) getLabel;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // Calculate safe initial value: must exist in items or be null
+    String? safeInitialValue;
+    if (selectedId != null && items.any((item) => _getId(item) == selectedId)) {
+      safeInitialValue = selectedId;
+    } else if (items.isNotEmpty) {
+      safeInitialValue = _getId(items.first);
+    }
+
+    return DropdownButtonFormField<String>(
+      initialValue: safeInitialValue,
+      decoration: InputDecoration(labelText: label),
+      items: [
+        for (final item in items)
+          DropdownMenuItem<String>(
+            value: _getId(item),
+            child: Text(getLabel(item)),
+          ),
+      ],
+      onChanged: onChanged == null
+          ? null
+          : (value) {
+              if (value != null) {
+                onChanged!(value);
+              }
+            },
+    );
+  }
+
+  String _getId(T item) {
+    if (item is UniverseCatalogItem) {
+      return item.id;
+    } else if (item is ProjectTypeCatalogItem) {
+      return item.id;
+    }
+    throw UnsupportedError('Unknown item type: ${item.runtimeType}');
+  }
+}
+
 class _ClientAutocompleteField extends StatelessWidget {
   const _ClientAutocompleteField({
     required this.label,
@@ -2177,47 +2209,6 @@ class _ClientAutocompleteField extends StatelessWidget {
                 ),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class _DropdownField extends StatelessWidget {
-  const _DropdownField({
-    required this.label,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String value;
-  final List<String> items;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveItems = items.contains(value) ? items : [value, ...items];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _FieldLabel(label: label),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: value,
-          items: [
-            for (final item in effectiveItems)
-              DropdownMenuItem<String>(
-                value: item,
-                child: Text(item),
-              ),
-          ],
-          onChanged: (selected) {
-            if (selected != null) {
-              onChanged(selected);
-            }
-          },
-        ),
       ],
     );
   }
