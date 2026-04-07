@@ -961,8 +961,12 @@ class _LevantamientoEntryCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final imageBytes in entry.evidencePreviewList)
-                  _EvidenceThumb(imageBytes: imageBytes),
+                for (var index = 0; index < entry.evidencePreviewList.length; index++)
+                  _EvidenceThumb(
+                    imageBytes: entry.evidencePreviewList[index],
+                    allImages: entry.evidencePreviewList,
+                    initialIndex: index,
+                  ),
               ],
             ),
           ],
@@ -973,14 +977,24 @@ class _LevantamientoEntryCard extends StatelessWidget {
 }
 
 class _EvidenceThumb extends StatelessWidget {
-  const _EvidenceThumb({required this.imageBytes});
+  const _EvidenceThumb({
+    required this.imageBytes,
+    required this.allImages,
+    required this.initialIndex,
+  });
 
   final Uint8List imageBytes;
+  final List<Uint8List> allImages;
+  final int initialIndex;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => _openImagePreview(context, imageBytes),
+      onTap: () => _openImagePreview(
+        context,
+        images: allImages,
+        initialIndex: initialIndex,
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: SizedBox(
@@ -993,27 +1007,141 @@ class _EvidenceThumb extends StatelessWidget {
   }
 }
 
-Future<void> _openImagePreview(BuildContext context, Uint8List imageBytes) {
+Future<void> _openImagePreview(
+  BuildContext context, {
+  required List<Uint8List> images,
+  required int initialIndex,
+}) {
+  final safeInitialIndex = images.isEmpty
+      ? 0
+      : initialIndex.clamp(0, images.length - 1);
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black87,
-    builder: (context) => GestureDetector(
-      onTap: () => Navigator.of(context).pop(),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(
-          child: GestureDetector(
-            onTap: () {},
-            child: InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
-              child: Image.memory(imageBytes, fit: BoxFit.contain),
-            ),
-          ),
-        ),
-      ),
+    builder: (context) => _EvidencePreviewDialog(
+      images: images,
+      initialIndex: safeInitialIndex,
     ),
   );
+}
+
+class _EvidencePreviewDialog extends StatefulWidget {
+  const _EvidencePreviewDialog({
+    required this.images,
+    required this.initialIndex,
+  });
+
+  final List<Uint8List> images;
+  final int initialIndex;
+
+  @override
+  State<_EvidencePreviewDialog> createState() => _EvidencePreviewDialogState();
+}
+
+class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _goTo(int index) {
+    if (index < 0 || index >= widget.images.length) {
+      return;
+    }
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.shortestSide < 700;
+    final hasMultiple = widget.images.length > 1;
+
+    return Scaffold(
+      backgroundColor: Colors.black87,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(color: Colors.transparent),
+            ),
+            Center(
+              child: GestureDetector(
+                onTap: () {},
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: widget.images.length,
+                  onPageChanged: (index) {
+                    setState(() => _currentIndex = index);
+                  },
+                  itemBuilder: (_, index) {
+                    return InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4.0,
+                      child: Image.memory(widget.images[index], fit: BoxFit.contain),
+                    );
+                  },
+                ),
+              ),
+            ),
+            if (isMobile)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  tooltip: 'Cerrar',
+                ),
+              ),
+            if (!isMobile && hasMultiple) ...[
+              Positioned(
+                left: 12,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    onPressed: _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
+                    icon: const Icon(Icons.chevron_left, size: 42, color: Colors.white),
+                    tooltip: 'Anterior',
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 12,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    onPressed: _currentIndex < widget.images.length - 1
+                        ? () => _goTo(_currentIndex + 1)
+                        : null,
+                    icon: const Icon(Icons.chevron_right, size: 42, color: Colors.white),
+                    tooltip: 'Siguiente',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 String _money(double value) {
