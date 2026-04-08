@@ -49,26 +49,32 @@ class PresupuestoPage extends ConsumerWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (currentQuote != null && currentQuote.isDraft)
-            FilledButton.icon(
-              onPressed: () => _changeQuoteStatus(
-                context,
-                ref,
-                currentQuote,
-                QuoteStatus.concluded,
+            Tooltip(
+              message: 'Marcar cotización como concluida',
+              child: FilledButton.icon(
+                onPressed: () => _changeQuoteStatus(
+                  context,
+                  ref,
+                  currentQuote,
+                  QuoteStatus.concluded,
+                ),
+                icon: const Icon(Icons.task_alt_outlined),
+                label: const Text('Concluir'),
               ),
-              icon: const Icon(Icons.task_alt_outlined),
-              label: const Text('Concluir'),
             ),
           if (currentQuote != null && currentQuote.isConcluded)
-            OutlinedButton.icon(
-              onPressed: () => _changeQuoteStatus(
-                context,
-                ref,
-                currentQuote,
-                QuoteStatus.draft,
+            Tooltip(
+              message: 'Reabrir cotización como borrador',
+              child: OutlinedButton.icon(
+                onPressed: () => _changeQuoteStatus(
+                  context,
+                  ref,
+                  currentQuote,
+                  QuoteStatus.draft,
+                ),
+                icon: const Icon(Icons.undo),
+                label: const Text('Reabrir'),
               ),
-              icon: const Icon(Icons.undo),
-              label: const Text('Reabrir'),
             ),
           IconButton(
             onPressed: currentQuote != null
@@ -89,24 +95,28 @@ class PresupuestoPage extends ConsumerWidget {
                   }
                 : null,
             icon: const Icon(Icons.description_outlined, color: Colors.black),
+            tooltip: 'Detalles del proyecto',
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
                 ? () => _printQuote(context, ref: ref, quote: currentQuote, items: currentItems)
                 : null,
             icon: const Icon(Icons.print_outlined),
+            tooltip: 'Imprimir cotización',
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
                 ? () => _downloadQuote(context, ref: ref, quote: currentQuote, items: currentItems)
                 : null,
             icon: const Icon(Icons.download_outlined),
+            tooltip: 'Descargar cotización',
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
                 ? () => _shareQuote(context, ref: ref, quote: currentQuote, items: currentItems)
                 : null,
             icon: const Icon(Icons.share_outlined),
+            tooltip: 'Compartir cotización',
           ),
         ],
       ),
