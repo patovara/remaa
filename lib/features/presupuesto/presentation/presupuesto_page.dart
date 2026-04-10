@@ -147,7 +147,7 @@ class PresupuestoPage extends ConsumerWidget {
               ),
               onAddItem: () => _openItemDialog(context, ref, quote, null, catalogState),
               onEditItem: (item) => _openItemDialog(context, ref, quote, item, catalogState),
-              onDeleteItem: (item) => ref.read(quoteItemsProvider(quote.id).notifier).remove(item.id),
+              onDeleteItem: (item) => _confirmDeleteItem(context, ref, quote, item),
             ),
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stack) => RemaPanel(
@@ -246,6 +246,42 @@ class PresupuestoPage extends ConsumerWidget {
     await ref.read(quoteItemsProvider(quote.id).notifier).save(result.item);
     if (context.mounted) {
       showRemaMessage(context, 'Concepto guardado en cotizacion.');
+    }
+  }
+
+  Future<void> _confirmDeleteItem(
+    BuildContext context,
+    WidgetRef ref,
+    QuoteRecord quote,
+    QuoteItemRecord item,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar concepto'),
+        content: Text(
+          'Se eliminara este concepto de la cotizacion:\n\n${item.concept}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    await ref.read(quoteItemsProvider(quote.id).notifier).remove(item.id);
+    if (context.mounted) {
+      showRemaMessage(context, 'Concepto eliminado de la cotizacion.');
     }
   }
 

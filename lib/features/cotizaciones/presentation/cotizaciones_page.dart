@@ -996,7 +996,18 @@ class _QuoteRow extends StatelessWidget {
                   tooltip: 'Ver descripcion del levantamiento',
                   color: RemaColors.primaryDark,
                 ),
-                IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar'),
+                if (quote.isDraft)
+                  OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_note_outlined, size: 18),
+                    label: const Text('Conceptos'),
+                  )
+                else
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Ver presupuesto',
+                  ),
                 IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
                 if (onAttachPdf != null)
                   IconButton(
@@ -1155,7 +1166,18 @@ class _QuoteMobileCard extends StatelessWidget {
                       tooltip: 'Ver descripcion del levantamiento',
                       color: RemaColors.primaryDark,
                     ),
-                    IconButton(onPressed: onEdit, icon: const Icon(Icons.edit_outlined), tooltip: 'Editar'),
+                    if (quote.isDraft)
+                      OutlinedButton.icon(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_note_outlined, size: 18),
+                        label: const Text('Conceptos'),
+                      )
+                    else
+                      IconButton(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: 'Ver presupuesto',
+                      ),
                     IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
                     if (onAttachPdf != null)
                       IconButton(
