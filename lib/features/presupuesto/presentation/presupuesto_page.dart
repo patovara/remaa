@@ -903,11 +903,16 @@ class _BudgetViewState extends State<_BudgetView> {
                     onExit: (_) => setState(() => _showHorizontalScrollbar = false),
                     child: RawScrollbar(
                       controller: _tableScrollController,
+                      scrollbarOrientation: ScrollbarOrientation.bottom,
                       thumbVisibility: _showHorizontalScrollbar,
                       trackVisibility: _showHorizontalScrollbar,
                       notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
+                      thumbColor: RemaColors.primary,
+                      trackColor: RemaColors.surfaceLow,
+                      mainAxisMargin: 2,
+                      crossAxisMargin: 2,
                       radius: const Radius.circular(10),
-                      thickness: 10,
+                      thickness: 20,
                       child: table,
                     ),
                   );
