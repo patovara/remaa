@@ -692,7 +692,7 @@ pw.Widget _pdfEvidenceBlocks({
   );
 }
 
-class _BudgetView extends StatelessWidget {
+class _BudgetView extends StatefulWidget {
   const _BudgetView({
     required this.quote,
     required this.items,
@@ -714,6 +714,26 @@ class _BudgetView extends StatelessWidget {
   final VoidCallback onAddItem;
   final ValueChanged<QuoteItemRecord> onEditItem;
   final ValueChanged<QuoteItemRecord> onDeleteItem;
+
+  @override
+  State<_BudgetView> createState() => _BudgetViewState();
+}
+
+class _BudgetViewState extends State<_BudgetView> {
+  late final ScrollController _tableScrollController;
+  bool _showHorizontalScrollbar = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tableScrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _tableScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -787,8 +807,8 @@ class _BudgetView extends StatelessWidget {
                       _ContextField(label: 'Cliente', value: context.clientName),
                       _ContextField(label: 'Direccion', value: context.address),
                       _ContextField(label: 'Ubicacion', value: context.location),
-                      _ContextField(label: 'Universo', value: universeLabel),
-                      _ContextField(label: 'Tipo de remodelacion', value: projectTypeLabel),
+                      _ContextField(label: 'Universo', value: widget.universeLabel),
+                      _ContextField(label: 'Tipo de remodelacion', value: widget.projectTypeLabel),
                     ],
                   ),
                 ),
@@ -808,11 +828,11 @@ class _BudgetView extends StatelessWidget {
               Row(
                 children: [
                   FilledButton.icon(
-                    onPressed: canEditItems ? onAddItem : null,
+                    onPressed: widget.canEditItems ? widget.onAddItem : null,
                     icon: const Icon(Icons.add),
                     label: const Text('Agregar concepto'),
                   ),
-                  if (!canEditItems) ...[
+                  if (!widget.canEditItems) ...[
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -824,50 +844,74 @@ class _BudgetView extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Concepto / Descripcion')),
-                    DataColumn(label: Text('Unidad')),
-                    DataColumn(label: Text('Cant.')),
-                    DataColumn(label: Text('P.U.')),
-                    DataColumn(label: Text('Importe')),
-                    DataColumn(label: Text('Acciones')),
-                  ],
-                  rows: [
-                    for (final item in items)
-                      DataRow(cells: [
-                        DataCell(
-                          SizedBox(
-                            width: 520,
-                            child: Text(
-                              item.concept,
-                              softWrap: true,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isMobile = constraints.maxWidth < 600;
+                  final table = SingleChildScrollView(
+                    controller: _tableScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Concepto / Descripcion')),
+                        DataColumn(label: Text('Unidad')),
+                        DataColumn(label: Text('Cant.')),
+                        DataColumn(label: Text('P.U.')),
+                        DataColumn(label: Text('Importe')),
+                        DataColumn(label: Text('Acciones')),
+                      ],
+                      rows: [
+                        for (final item in widget.items)
+                          DataRow(cells: [
+                            DataCell(
+                              SizedBox(
+                                width: 520,
+                                child: Text(
+                                  item.concept,
+                                  softWrap: true,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        DataCell(Text(item.unit)),
-                        DataCell(Text(item.quantity.toStringAsFixed(2))),
-                        DataCell(Text(_money(item.unitPrice))),
-                        DataCell(Text(_money(item.lineTotal))),
-                        DataCell(
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                onPressed: canEditItems ? () => onEditItem(item) : null,
+                            DataCell(Text(item.unit)),
+                            DataCell(Text(item.quantity.toStringAsFixed(2))),
+                            DataCell(Text(_money(item.unitPrice))),
+                            DataCell(Text(_money(item.lineTotal))),
+                            DataCell(
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined),
+                                    onPressed: widget.canEditItems ? () => widget.onEditItem(item) : null,
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: widget.canEditItems ? () => widget.onDeleteItem(item) : null,
+                                  ),
+                                ],
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                onPressed: canEditItems ? () => onDeleteItem(item) : null,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ]),
-                  ],
-                ),
+                            ),
+                          ]),
+                      ],
+                    ),
+                  );
+
+                  if (isMobile) {
+                    return table;
+                  }
+
+                  return MouseRegion(
+                    onEnter: (_) => setState(() => _showHorizontalScrollbar = true),
+                    onExit: (_) => setState(() => _showHorizontalScrollbar = false),
+                    child: RawScrollbar(
+                      controller: _tableScrollController,
+                      thumbVisibility: _showHorizontalScrollbar,
+                      trackVisibility: _showHorizontalScrollbar,
+                      notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
+                      radius: const Radius.circular(10),
+                      thickness: 10,
+                      child: table,
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 24),
               LayoutBuilder(
@@ -884,17 +928,17 @@ class _BudgetView extends StatelessWidget {
                       children: [
                         const Text('IMPORTE CON LETRA'),
                         const SizedBox(height: 8),
-                        Text(_amountInText(quote.total)),
+                        Text(_amountInText(widget.quote.total)),
                       ],
                     ),
                   );
                   final totalsCol = Column(
                     children: [
-                      _TotalRow(label: 'Subtotal', value: _money(quote.subtotal)),
+                      _TotalRow(label: 'Subtotal', value: _money(widget.quote.subtotal)),
                       const SizedBox(height: 8),
-                      _TotalRow(label: 'IVA (16%)', value: _money(quote.tax)),
+                      _TotalRow(label: 'IVA (16%)', value: _money(widget.quote.tax)),
                       const Divider(height: 24),
-                      _TotalRow(label: 'Total M.N.', value: _money(quote.total), isStrong: true),
+                      _TotalRow(label: 'Total M.N.', value: _money(widget.quote.total), isStrong: true),
                     ],
                   );
                   if (isMobile) {
