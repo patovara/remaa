@@ -55,6 +55,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - .env.staging
     - .env.production
     - .env.example
     - assets/images/logo_remaa.png
