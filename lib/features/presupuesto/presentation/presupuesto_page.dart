@@ -490,6 +490,26 @@ class PresupuestoPage extends ConsumerWidget {
       }
     }
 
+    final parsedItems = [
+      for (final item in items)
+        (item: item, concept: _splitConceptForPdf(item.concept)),
+    ];
+    final includeClauses = <String>[];
+    for (final parsed in parsedItems) {
+      final include = parsed.concept.includeText;
+      if (include == null) {
+        continue;
+      }
+      if (!includeClauses.contains(include)) {
+        includeClauses.add(include);
+      }
+    }
+    final includeSummary = includeClauses.isEmpty
+        ? null
+        : includeClauses.length == 1
+            ? 'INCLUYE: ${includeClauses.first}'
+            : 'INCLUYE:\n${includeClauses.map((entry) => '• $entry').join('\n')}';
+
     pdf.addPage(
       pw.MultiPage(
         pageTheme: pw.PageTheme(
@@ -595,11 +615,27 @@ class PresupuestoPage extends ConsumerWidget {
               for (final item in items)
                 pw.TableRow(
                   children: [
-                    _pdfCell(item.concept),
+                    _pdfCell(
+                      parsedItems
+                          .firstWhere((parsed) => parsed.item.id == item.id)
+                          .concept
+                          .mainText,
+                    ),
                     _pdfCell(item.unit),
                     _pdfCell(item.quantity.toStringAsFixed(2)),
                     _pdfCell(money.format(item.unitPrice)),
                     _pdfCell(money.format(item.lineTotal)),
+                  ],
+                ),
+              if (includeSummary != null)
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  children: [
+                    _pdfCell(includeSummary),
+                    _pdfCell(''),
+                    _pdfCell(''),
+                    _pdfCell(''),
+                    _pdfCell(''),
                   ],
                 ),
             ],
@@ -608,13 +644,11 @@ class PresupuestoPage extends ConsumerWidget {
           pw.Align(
             alignment: pw.Alignment.centerRight,
             child: pw.SizedBox(
-              width: 220,
-              child: pw.Column(
-                children: [
-                  _pdfTotalRow('Subtotal', money.format(quote.subtotal)),
-                  _pdfTotalRow('IVA (16%)', money.format(quote.tax)),
-                  _pdfTotalRow('Total', money.format(quote.total), strong: true),
-                ],
+              width: 240,
+              child: _pdfTotalsTable(
+                subtotal: money.format(quote.subtotal),
+                tax: money.format(quote.tax),
+                total: money.format(quote.total),
               ),
             ),
           ),
@@ -1288,6 +1322,88 @@ pw.Widget _pdfTotalRow(String label, String value, {bool strong = false}) {
         pw.Text(value, style: pw.TextStyle(fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
     ),
+  );
+}
+
+pw.Widget _pdfTotalsTable({
+  required String subtotal,
+  required String tax,
+  required String total,
+}) {
+  return pw.Table(
+    border: pw.TableBorder.all(width: 0.6, color: PdfColors.black),
+    columnWidths: {
+      0: const pw.FlexColumnWidth(1.25),
+      1: const pw.FlexColumnWidth(1),
+    },
+    children: [
+      _pdfTotalsTableRow(label: 'Subtotal', value: subtotal),
+      _pdfTotalsTableRow(label: 'IVA (16%)', value: tax),
+      _pdfTotalsTableRow(label: 'Total', value: total, strong: true),
+    ],
+  );
+}
+
+pw.TableRow _pdfTotalsTableRow({
+  required String label,
+  required String value,
+  bool strong = false,
+}) {
+  final textStyle = pw.TextStyle(
+    fontSize: 9,
+    fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
+  );
+  final rowDecoration = strong
+      ? const pw.BoxDecoration(color: PdfColors.grey300)
+      : const pw.BoxDecoration();
+  return pw.TableRow(
+    decoration: rowDecoration,
+    children: [
+      pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: pw.Text(label, style: textStyle),
+      ),
+      pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(value, style: textStyle),
+        ),
+      ),
+    ],
+  );
+}
+
+class _PdfConceptSplit {
+  const _PdfConceptSplit({required this.mainText, this.includeText});
+
+  final String mainText;
+  final String? includeText;
+}
+
+_PdfConceptSplit _splitConceptForPdf(String rawConcept) {
+  final normalized = rawConcept.replaceAll('\r\n', '\n').trim();
+  if (normalized.isEmpty) {
+    return const _PdfConceptSplit(mainText: '-');
+  }
+
+  final upper = normalized.toUpperCase();
+  final includeIndex = upper.indexOf('INCLUYE');
+  if (includeIndex < 0) {
+    return _PdfConceptSplit(mainText: normalized);
+  }
+
+  final mainPart = normalized.substring(0, includeIndex).trim();
+  var includePart = normalized.substring(includeIndex).trim();
+  includePart = includePart.replaceFirst(
+    RegExp(r'^INCLUYE\s*:?\s*', caseSensitive: false),
+    '',
+  );
+  includePart = includePart.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  return _PdfConceptSplit(
+    mainText: mainPart.isEmpty ? '-' : mainPart,
+    includeText: includePart.isEmpty ? null : includePart,
   );
 }
 
