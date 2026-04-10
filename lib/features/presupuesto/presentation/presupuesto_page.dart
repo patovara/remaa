@@ -803,9 +803,9 @@ class _BudgetViewState extends State<_BudgetView> {
                         style: Theme.of(context).textTheme.headlineLarge?.copyWith(color: RemaColors.primaryDark),
                       ),
                       const SizedBox(height: 6),
-                      Text('FOLIO: ${quote.quoteNumber}'),
-                      Text('FECHA: ${_date(quote.validUntil ?? DateTime.now())}'),
-                      Text('ESTADO: ${quote.status.toUpperCase()}'),
+                      Text('FOLIO: ${widget.quote.quoteNumber}'),
+                      Text('FECHA: ${_date(widget.quote.validUntil ?? DateTime.now())}'),
+                      Text('ESTADO: ${widget.quote.status.toUpperCase()}'),
                     ],
                   );
                   if (isMobile) {
@@ -824,7 +824,7 @@ class _BudgetViewState extends State<_BudgetView> {
                 },
               ),
               const SizedBox(height: 24),
-              contextState.when(
+              widget.contextState.when(
                 data: (context) => Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
