@@ -84,6 +84,8 @@ class ClientRecord {
     required this.contactEmail,
     required this.phone,
     required this.address,
+    this.city,
+    this.state,
     required this.responsibles,
     this.logoPath,
     this.logoBytes,
@@ -102,6 +104,8 @@ class ClientRecord {
   final String contactEmail;
   final String phone;
   final String address;
+  final String? city;
+  final String? state;
   final List<ClientResponsibleRecord> responsibles;
   final String? logoPath;
   final Uint8List? logoBytes;
@@ -133,6 +137,8 @@ class ClientRecord {
     String? contactEmail,
     String? phone,
     String? address,
+    String? city,
+    String? state,
     List<ClientResponsibleRecord>? responsibles,
     String? logoPath,
     Uint8List? logoBytes,
@@ -151,6 +157,8 @@ class ClientRecord {
       contactEmail: contactEmail ?? this.contactEmail,
       phone: phone ?? this.phone,
       address: address ?? this.address,
+      city: city ?? this.city,
+      state: state ?? this.state,
       responsibles: responsibles ?? this.responsibles,
       logoPath: logoPath ?? this.logoPath,
       logoBytes: logoBytes ?? this.logoBytes,

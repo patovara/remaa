@@ -72,7 +72,7 @@ class _ClientesPageState extends State<ClientesPage> {
     try {
       final rows = await client
         .from('clients')
-        .select('id, business_name, contact_name, notes, email, phone, address_line, city, created_at, sector_label, logo_path, is_hidden')
+        .select('id, business_name, contact_name, notes, email, phone, address_line, city, state, created_at, sector_label, logo_path, is_hidden')
         .order('created_at', ascending: false);
 
       final remoteClients = await Future.wait(
@@ -83,11 +83,15 @@ class _ClientesPageState extends State<ClientesPage> {
           }
 
           final addressLine = (row['address_line'] as String? ?? '').trim();
-          final city = (row['city'] as String? ?? '').trim();
-          final fullAddress = [
-            if (addressLine.isNotEmpty) addressLine,
-            if (city.isNotEmpty) city,
-          ].join(', ');
+          final normalizedLocation = _normalizeLocationParts(
+            city: row['city'] as String?,
+            state: row['state'] as String?,
+          );
+          final fullAddress = _composeAddressForDisplay(
+            addressLine: addressLine,
+            city: normalizedLocation.city,
+            state: normalizedLocation.state,
+          );
           final rawSector = (row['sector_label'] as String? ?? '').trim();
           final contactName = _metadataRepository.resolveContactName(
             contactName: row['contact_name'] as String?,
@@ -108,6 +112,8 @@ class _ClientesPageState extends State<ClientesPage> {
             contactEmail: (row['email'] as String? ?? 'sin-correo@cliente.com').trim(),
             phone: (row['phone'] as String? ?? 'Sin telefono').trim(),
             address: fullAddress.isEmpty ? 'Sin direccion registrada' : fullAddress,
+            city: normalizedLocation.city,
+            state: normalizedLocation.state,
             responsibles: const [],
             logoPath: logoPath.isEmpty ? null : logoPath,
             logoBytes: logoBytes,
@@ -170,6 +176,61 @@ class _ClientesPageState extends State<ClientesPage> {
       r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
     );
     return uuidPattern.hasMatch(value);
+  }
+
+  ({String city, String state}) _normalizeLocationParts({
+    String? city,
+    String? state,
+  }) {
+    final rawCity = (city ?? '').trim();
+    final rawState = (state ?? '').trim();
+    if (rawState.isNotEmpty) {
+      return (city: rawCity, state: rawState);
+    }
+
+    if (!rawCity.contains(',')) {
+      return (city: rawCity, state: rawState);
+    }
+
+    final parts = rawCity
+        .split(',')
+        .map((entry) => entry.trim())
+        .where((entry) => entry.isNotEmpty)
+        .toList();
+    if (parts.length < 2) {
+      return (city: rawCity, state: rawState);
+    }
+
+    return (
+      city: parts.sublist(1).join(', '),
+      state: parts.first,
+    );
+  }
+
+  String _composeAddressForDisplay({
+    required String addressLine,
+    required String city,
+    required String state,
+  }) {
+    final location = [
+      if (state.trim().isNotEmpty) state.trim(),
+      if (city.trim().isNotEmpty) city.trim(),
+    ].join(', ');
+
+    final cleanAddress = addressLine.trim();
+    if (cleanAddress.isEmpty) {
+      return location;
+    }
+    if (location.isEmpty) {
+      return cleanAddress;
+    }
+
+    final normalizedAddress = cleanAddress.toLowerCase();
+    final normalizedLocation = location.toLowerCase();
+    if (normalizedAddress.endsWith(normalizedLocation)) {
+      return cleanAddress;
+    }
+    return '$cleanAddress, $location';
   }
 
   @override

@@ -946,7 +946,7 @@ class _BudgetViewState extends State<_BudgetView> {
                       mainAxisMargin: 2,
                       crossAxisMargin: 2,
                       radius: const Radius.circular(10),
-                      thickness: 20,
+                      thickness: 10,
                       child: table,
                     ),
                   );

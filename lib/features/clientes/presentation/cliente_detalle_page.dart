@@ -58,7 +58,7 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     try {
       final row = await SupabaseBootstrap.client!
           .from('clients')
-          .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city, sector_label, logo_path, is_hidden')
+          .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city, state, sector_label, logo_path, is_hidden')
           .eq('id', widget.clientId)
           .maybeSingle();
 
@@ -72,11 +72,15 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       }
 
       final addressLine = (row['address_line'] as String? ?? '').trim();
-      final city = (row['city'] as String? ?? '').trim();
-      final fullAddress = [
-        if (addressLine.isNotEmpty) addressLine,
-        if (city.isNotEmpty) city,
-      ].join(', ');
+      final normalizedLocation = _normalizeLocationParts(
+        city: row['city'] as String?,
+        state: row['state'] as String?,
+      );
+      final fullAddress = _composeAddressForDisplay(
+        addressLine: addressLine,
+        city: normalizedLocation.city,
+        state: normalizedLocation.state,
+      );
       final contactName = _metadataRepository.resolveContactName(
         contactName: row['contact_name'] as String?,
         notes: row['notes'] as String?,
@@ -98,6 +102,8 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
         contactEmail: (row['email'] as String? ?? 'sin-correo@cliente.com').trim(),
         phone: (row['phone'] as String? ?? 'Sin telefono').trim(),
         address: fullAddress.isEmpty ? 'Sin direccion registrada' : fullAddress,
+        city: normalizedLocation.city,
+        state: normalizedLocation.state,
         responsibles: const [],
         logoPath: logoPath.isEmpty ? null : logoPath,
         logoBytes: logoBytes,
@@ -108,6 +114,61 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     } catch (_) {
       return null;
     }
+  }
+
+  ({String city, String state}) _normalizeLocationParts({
+    String? city,
+    String? state,
+  }) {
+    final rawCity = (city ?? '').trim();
+    final rawState = (state ?? '').trim();
+    if (rawState.isNotEmpty) {
+      return (city: rawCity, state: rawState);
+    }
+
+    if (!rawCity.contains(',')) {
+      return (city: rawCity, state: rawState);
+    }
+
+    final parts = rawCity
+        .split(',')
+        .map((entry) => entry.trim())
+        .where((entry) => entry.isNotEmpty)
+        .toList();
+    if (parts.length < 2) {
+      return (city: rawCity, state: rawState);
+    }
+
+    return (
+      city: parts.sublist(1).join(', '),
+      state: parts.first,
+    );
+  }
+
+  String _composeAddressForDisplay({
+    required String addressLine,
+    required String city,
+    required String state,
+  }) {
+    final location = [
+      if (state.trim().isNotEmpty) state.trim(),
+      if (city.trim().isNotEmpty) city.trim(),
+    ].join(', ');
+
+    final cleanAddress = addressLine.trim();
+    if (cleanAddress.isEmpty) {
+      return location;
+    }
+    if (location.isEmpty) {
+      return cleanAddress;
+    }
+
+    final normalizedAddress = cleanAddress.toLowerCase();
+    final normalizedLocation = location.toLowerCase();
+    if (normalizedAddress.endsWith(normalizedLocation)) {
+      return cleanAddress;
+    }
+    return '$cleanAddress, $location';
   }
 
   List<ClientResponsibleRecord> _sorted(List<ClientResponsibleRecord> input) {
@@ -434,6 +495,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   String? _emailError;
   String? _phoneError;
   String? _addressError;
+  String? _stateError;
+  String? _cityError;
   String? _sectorError;
   List<String> _sectorLabels = ClientMetadataRepository.defaultSectorLabels;
   String? _selectedSector;
@@ -445,6 +508,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   late final TextEditingController _emailCtrl;
   late final TextEditingController _phoneCtrl;
   late final TextEditingController _addressCtrl;
+  late final TextEditingController _stateCtrl;
+  late final TextEditingController _cityCtrl;
 
   String? _normalizeSectorSelection(String? value) {
     final normalized = widget.metadataRepository.normalizeSectorLabel(value ?? '');
@@ -480,6 +545,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       text: ClientInputRules.editableMxPhoneDigits(widget.client.phone),
     );
     _addressCtrl = TextEditingController(text: widget.client.address);
+    _stateCtrl = TextEditingController(text: widget.client.state ?? '');
+    _cityCtrl = TextEditingController(text: widget.client.city ?? '');
     _selectedSector = _normalizeSectorSelection(widget.client.sector);
     _logoBytes = widget.client.logoBytes;
     _loadSectorLabels();
@@ -500,6 +567,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       _emailCtrl.text = widget.client.contactEmail;
       _phoneCtrl.text = ClientInputRules.editableMxPhoneDigits(widget.client.phone);
       _addressCtrl.text = widget.client.address;
+      _stateCtrl.text = widget.client.state ?? '';
+      _cityCtrl.text = widget.client.city ?? '';
       _selectedSector = _normalizeSectorSelection(widget.client.sector);
       _sectorLabels = _buildSectorLabels(_sectorLabels, _selectedSector);
       _logoBytes = widget.client.logoBytes;
@@ -515,6 +584,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
+    _stateCtrl.dispose();
+    _cityCtrl.dispose();
     super.dispose();
   }
 
@@ -623,6 +694,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     final phoneDigits = ClientInputRules.digitsOnly(_phoneCtrl.text);
     final email = ClientInputRules.normalizeEmail(_emailCtrl.text);
     final address = _addressCtrl.text.trim();
+    final state = _stateCtrl.text.trim();
+    final city = _cityCtrl.text.trim();
     final rfc = _rfcCtrl.text.trim().toUpperCase();
     final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
 
@@ -632,6 +705,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     String? emailError;
     String? phoneError;
     String? addressError;
+    String? stateError;
+    String? cityError;
     String? sectorError;
 
     if (businessName.length < ClientInputRules.minTextLength) {
@@ -662,6 +737,14 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       addressError = 'Ingresa la direccion del cliente.';
     }
 
+    if (state.isNotEmpty && city.isEmpty) {
+      cityError = 'Ingresa la ciudad o limpia el estado.';
+    }
+
+    if (city.isNotEmpty && state.isEmpty) {
+      stateError = 'Ingresa el estado o limpia la ciudad.';
+    }
+
     if (sector.isEmpty) {
       sectorError = 'Selecciona un sector para el cliente.';
     }
@@ -673,6 +756,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       _emailError = emailError;
       _phoneError = phoneError;
       _addressError = addressError;
+      _stateError = stateError;
+      _cityError = cityError;
       _sectorError = sectorError;
     });
 
@@ -682,6 +767,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       emailError == null &&
       phoneError == null &&
       addressError == null &&
+        stateError == null &&
+        cityError == null &&
       sectorError == null;
   }
 
@@ -697,6 +784,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     final phoneE164 = ClientInputRules.toE164Mx(phoneDigits) ?? phoneDigits;
     final email = ClientInputRules.normalizeEmail(_emailCtrl.text);
     final address = _addressCtrl.text.trim();
+    final state = _stateCtrl.text.trim();
+    final city = _cityCtrl.text.trim();
     final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
 
     setState(() => _isSaving = true);
@@ -731,6 +820,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         contactEmail: email,
         phone: phoneE164,
         address: address,
+        city: city.isEmpty ? null : city,
+        state: state.isEmpty ? null : state,
         responsibles: widget.client.responsibles,
         logoPath: logoPath,
         logoBytes: logoUploadFailed ? widget.client.logoBytes : _logoBytes,
@@ -744,6 +835,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
           email: updated.contactEmail,
           phone: updated.phone,
           address: updated.address,
+          city: updated.city,
+          state: updated.state,
           sectorLabel: updated.sector,
           rfc: updated.rfc,
           logoPath: logoUploadFailed ? null : updated.logoPath,
@@ -1056,6 +1149,40 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                   ),
                   maxLines: 2,
                 ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _stateCtrl,
+                        onChanged: (_) {
+                          if (_stateError != null) {
+                            setState(() => _stateError = null);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Estado',
+                          errorText: _stateError,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _cityCtrl,
+                        onChanged: (_) {
+                          if (_cityError != null) {
+                            setState(() => _cityError = null);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Ciudad',
+                          errorText: _cityError,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -1070,6 +1197,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                               _emailCtrl.text = widget.client.contactEmail;
                               _phoneCtrl.text = ClientInputRules.editableMxPhoneDigits(widget.client.phone);
                               _addressCtrl.text = widget.client.address;
+                              _stateCtrl.text = widget.client.state ?? '';
+                              _cityCtrl.text = widget.client.city ?? '';
                               setState(() {
                                 _selectedSector = _normalizeSectorSelection(widget.client.sector);
                                 _sectorLabels = _buildSectorLabels(_sectorLabels, _selectedSector);
@@ -1080,6 +1209,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                                 _emailError = null;
                                 _phoneError = null;
                                 _addressError = null;
+                                _stateError = null;
+                                _cityError = null;
                                 _sectorError = null;
                                 _isEditing = false;
                               });
@@ -1116,13 +1247,26 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 const SizedBox(height: 16),
                 _SummaryRow(label: 'Sector', value: client.sector),
                 const SizedBox(height: 16),
-                _SummaryRow(label: 'Estado', value: client.isHidden ? 'Oculto' : 'Visible'),
+                _SummaryRow(label: 'Visibilidad', value: client.isHidden ? 'Oculto' : 'Visible'),
                 const SizedBox(height: 16),
                 _SummaryRow(label: 'Correo principal', value: client.contactEmail),
                 const SizedBox(height: 16),
                 _SummaryRow(label: 'Telefono', value: client.phone),
                 const SizedBox(height: 16),
                 _SummaryRow(label: 'Direccion', value: client.address),
+                const SizedBox(height: 16),
+                _SummaryRow(
+                  label: 'Ubicacion',
+                  value: [
+                    if ((client.state ?? '').trim().isNotEmpty) client.state!.trim(),
+                    if ((client.city ?? '').trim().isNotEmpty) client.city!.trim(),
+                  ].join(', ').isEmpty
+                      ? 'Sin ubicacion registrada'
+                      : [
+                          if ((client.state ?? '').trim().isNotEmpty) client.state!.trim(),
+                          if ((client.city ?? '').trim().isNotEmpty) client.city!.trim(),
+                        ].join(', '),
+                ),
                 const SizedBox(height: 16),
               ],
               Row(

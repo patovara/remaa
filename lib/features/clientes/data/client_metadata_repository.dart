@@ -156,6 +156,8 @@ class ClientMetadataRepository {
     required String email,
     required String phone,
     required String address,
+    String? city,
+    String? state,
     required String sectorLabel,
     String? rfc,
     String? logoPath,
@@ -178,6 +180,8 @@ class ClientMetadataRepository {
       'email': email.trim().toLowerCase(),
       'phone': phoneE164.isEmpty ? null : phoneE164,
       'address_line': address.trim().isEmpty ? null : address.trim(),
+      'city': (city == null || city.trim().isEmpty) ? null : city.trim(),
+      'state': (state == null || state.trim().isEmpty) ? null : state.trim(),
       'sector_label': normalizeSectorLabel(sectorLabel),
     };
     if (logoPath != null) {

@@ -834,14 +834,21 @@ class QuotesRepository {
       final localClientId = project.clientId?.trim() ?? '';
       final localClient = localClientId.isEmpty ? null : findClientById(localClientId);
       if (localClient != null) {
+        final location = _composeLocation(
+          city: localClient.city,
+          state: localClient.state,
+        );
         return QuoteContextInfo(
           projectName: project.name,
           clientName: localClient.name,
-          address: _firstNonEmpty([
-            project.siteAddress,
-            localClient.address,
-          ]),
-          location: localClient.address,
+          address: _normalizeAddressForQuote(
+            address: _firstNonEmpty([
+              project.siteAddress,
+              localClient.address,
+            ]),
+            location: location,
+          ),
+          location: location,
           description: project.description ?? '',
         );
       }
@@ -855,16 +862,24 @@ class QuotesRepository {
               .single();
           final clientName = clientRow['business_name'] as String? ?? '';
           final addressLine = clientRow['address_line'] as String? ?? '';
-          final city = clientRow['city'] as String? ?? '';
-          final state = clientRow['state'] as String? ?? '';
-          final location = [city, state].where((value) => value.trim().isNotEmpty).join(', ');
+          final normalizedLocation = _normalizeLocationParts(
+            city: clientRow['city'] as String?,
+            state: clientRow['state'] as String?,
+          );
+          final location = _composeLocation(
+            city: normalizedLocation.city,
+            state: normalizedLocation.state,
+          );
           return QuoteContextInfo(
             projectName: project.name,
             clientName: clientName.isEmpty ? 'Cliente no disponible' : clientName,
-            address: _firstNonEmpty([
-              project.siteAddress,
-              addressLine,
-            ]),
+            address: _normalizeAddressForQuote(
+              address: _firstNonEmpty([
+                project.siteAddress,
+                addressLine,
+              ]),
+              location: location,
+            ),
             location: location,
             description: project.description ?? '',
           );
@@ -910,14 +925,22 @@ class QuotesRepository {
 
       final clientName = clientRow['business_name'] as String? ?? '';
       final addressLine = clientRow['address_line'] as String? ?? '';
-      final city = clientRow['city'] as String? ?? '';
-      final state = clientRow['state'] as String? ?? '';
-      final location = [city, state].where((value) => value.trim().isNotEmpty).join(', ');
+      final normalizedLocation = _normalizeLocationParts(
+        city: clientRow['city'] as String?,
+        state: clientRow['state'] as String?,
+      );
+      final location = _composeLocation(
+        city: normalizedLocation.city,
+        state: normalizedLocation.state,
+      );
 
       return QuoteContextInfo(
         projectName: projectName,
         clientName: clientName,
-        address: _firstNonEmpty([address, addressLine]),
+        address: _normalizeAddressForQuote(
+          address: _firstNonEmpty([address, addressLine]),
+          location: location,
+        ),
         location: location,
         description: description,
       );
@@ -941,6 +964,60 @@ class QuotesRepository {
       }
     }
     return '';
+  }
+
+  ({String city, String state}) _normalizeLocationParts({
+    String? city,
+    String? state,
+  }) {
+    final rawCity = (city ?? '').trim();
+    final rawState = (state ?? '').trim();
+    if (rawState.isNotEmpty) {
+      return (city: rawCity, state: rawState);
+    }
+
+    if (!rawCity.contains(',')) {
+      return (city: rawCity, state: rawState);
+    }
+
+    final parts = rawCity
+        .split(',')
+        .map((entry) => entry.trim())
+        .where((entry) => entry.isNotEmpty)
+        .toList();
+    if (parts.length < 2) {
+      return (city: rawCity, state: rawState);
+    }
+
+    return (
+      city: parts.sublist(1).join(', '),
+      state: parts.first,
+    );
+  }
+
+  String _composeLocation({String? city, String? state}) {
+    return [
+      if ((state ?? '').trim().isNotEmpty) state!.trim(),
+      if ((city ?? '').trim().isNotEmpty) city!.trim(),
+    ].join(', ');
+  }
+
+  String _normalizeAddressForQuote({
+    required String address,
+    required String location,
+  }) {
+    var normalized = address.trim();
+    final locationNormalized = location.trim();
+    if (normalized.isEmpty || locationNormalized.isEmpty) {
+      return normalized;
+    }
+
+    final suffix = ', $locationNormalized';
+    while (normalized.toLowerCase().endsWith(suffix.toLowerCase())) {
+      normalized = normalized.substring(0, normalized.length - suffix.length).trimRight();
+      normalized = normalized.replaceAll(RegExp(r'[\s,]+$'), '');
+    }
+    return normalized;
   }
 
   Future<SurveyEntryRecord?> appendSurveyEntry({

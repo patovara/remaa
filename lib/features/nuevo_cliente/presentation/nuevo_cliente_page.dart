@@ -172,21 +172,6 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
     });
   }
 
-  String _composedLocation() {
-    final state = _stateController.text.trim();
-    final city = _cityController.text.trim();
-    if (state.isEmpty && city.isEmpty) {
-      return '';
-    }
-    if (state.isEmpty) {
-      return city;
-    }
-    if (city.isEmpty) {
-      return state;
-    }
-    return '$state, $city';
-  }
-
   bool _validateClientInput() {
     final businessName = _businessNameController.text.trim();
     final contactName = _nameController.text.trim();
@@ -322,7 +307,8 @@ class _NuevoClientePageState extends State<NuevoClientePage> {
         'phone': phone,
         'email': email,
         'address_line': _addressController.text.trim(),
-        'city': _composedLocation(),
+        'city': _cityController.text.trim(),
+        'state': _stateController.text.trim(),
         'sector_label': normalizedSector,
       };
       AppLogger.info('client_create_started', data: {
