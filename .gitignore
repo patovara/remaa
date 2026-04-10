@@ -41,6 +41,7 @@ migrate_working_dir/
 !build/web/assets/.env.production
 supabase/.env.*
 !supabase/.env.example
+supabase/.temp/
 .rema_functions.*
 start_rema.sh
 stop_rema.sh

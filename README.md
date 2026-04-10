@@ -49,6 +49,29 @@ flutter build web --dart-define=ENV_FILE=.env.alpha
 - Supabase local solo para desarrollo.
 - Secrets reales en Vercel y Supabase Secrets; nunca en archivos versionados.
 
+## Staging operativo
+
+Runbook principal: `docs/STAGING_RUNBOOK.md`
+
+Checklist de validacion: `docs/STAGING_VALIDATION_CHECKLIST.md`
+
+Plantillas nuevas:
+
+- `/.env.staging.example`
+- `/supabase/.env.staging.example`
+
+Scripts de staging:
+
+- `scripts/staging/01_dump_prod_schema.sh`
+- `scripts/staging/02_apply_schema_to_staging.sh`
+- `scripts/staging/03_set_supabase_staging_secrets.sh`
+
+Flujo de ramas:
+
+- `main` -> produccion
+- `develop` -> staging
+- `feature/*` -> nuevas funcionalidades
+
 ## Tests y analisis
 
 ```bash

@@ -1,5 +1,7 @@
 # Supabase setup (REMA)
 
+Runbook de staging completo: `docs/STAGING_RUNBOOK.md`
+
 1. Crear proyecto en Supabase.
 2. Ejecutar schema.sql en SQL Editor.
 3. Ejecutar rls.sql en SQL Editor.
