@@ -1589,7 +1589,7 @@ class QuotesRepository {
 
   bool _isStructuredProjectKey(String value) {
     final normalized = value.trim().toUpperCase();
-    return RegExp(r'^RM-[A-Z]{3}-[0-9]{3,}-[A-Z]{4}-PRJ[0-9]{3,}$').hasMatch(normalized);
+    return RegExp(r'^RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}$').hasMatch(normalized);
   }
 
   String _nextLocalProjectKey() {
@@ -1706,6 +1706,9 @@ class QuotesRepository {
 
   String _normalizeProjectCode(String? code, String projectId) {
     final source = (code ?? '').toUpperCase().trim();
+    if (_isStructuredProjectKey(source)) {
+      return source;
+    }
     final digits = RegExp(r'\d+').allMatches(source).map((m) => m.group(0)!).join();
     if (digits.isNotEmpty) {
       return 'PRJ${digits.padLeft(3, '0').substring(digits.length > 3 ? digits.length - 3 : 0)}';
