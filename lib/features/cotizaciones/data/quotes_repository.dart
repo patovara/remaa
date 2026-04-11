@@ -197,7 +197,7 @@ class QuotesRepository {
           QuoteRecord(
             id: row['id'] as String,
             projectId: row['project_id'] as String? ?? '',
-            quoteNumber: row['quote_number'] as String? ?? '',
+            quoteNumber: _normalizeQuoteNumber(row['quote_number'] as String?),
             status: row['status'] as String? ?? 'draft',
             universeId: row['universe_id'] as String? ?? '',
             projectTypeId: row['project_type_id'] as String? ?? '',
@@ -274,7 +274,7 @@ class QuotesRepository {
       return QuoteRecord(
         id: inserted['id'] as String,
         projectId: inserted['project_id'] as String? ?? '',
-        quoteNumber: inserted['quote_number'] as String? ?? quoteNumber,
+        quoteNumber: _normalizeQuoteNumber(inserted['quote_number'] as String? ?? quoteNumber),
         status: inserted['status'] as String? ?? 'draft',
         universeId: inserted['universe_id'] as String? ?? universeId,
         projectTypeId: inserted['project_type_id'] as String? ?? projectTypeId,
@@ -1602,6 +1602,15 @@ class QuotesRepository {
       lastMatch = match.group(0);
     }
     return lastMatch;
+  }
+
+  String _normalizeQuoteNumber(String? raw) {
+    final source = (raw ?? '').trim();
+    if (source.isEmpty) {
+      return '';
+    }
+    final structured = _extractStructuredProjectKey(source);
+    return structured ?? source;
   }
 
   String _nextLocalProjectKey() {

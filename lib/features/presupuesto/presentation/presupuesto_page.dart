@@ -42,7 +42,7 @@ class PresupuestoPage extends ConsumerWidget {
 
     return PageFrame(
       title: 'Presupuesto',
-      subtitle: 'Vista formal de cotizacion ajustada para revision y envio.',
+      subtitle: 'Vista formal de cotización ajustada para revisión y envío.',
       trailing: Wrap(
         spacing: 4,
         runSpacing: 4,
@@ -124,7 +124,7 @@ class PresupuestoPage extends ConsumerWidget {
         data: (quotes) {
           final quote = _findQuote(quotes, quoteId);
           if (quote == null) {
-            return const RemaPanel(child: Text('No se encontro la cotizacion solicitada.'));
+            return const RemaPanel(child: Text('No se encontró la cotización solicitada.'));
           }
 
           return itemsState.when(
@@ -153,7 +153,7 @@ class PresupuestoPage extends ConsumerWidget {
             error: (error, stack) => RemaPanel(
               child: Column(
                 children: [
-                  const Text('No se pudieron cargar los conceptos de la cotizacion.'),
+                  const Text('No se pudieron cargar los conceptos de la cotización.'),
                   const SizedBox(height: 8),
                   Text(error.toString()),
                 ],
@@ -163,7 +163,7 @@ class PresupuestoPage extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => RemaPanel(
-          child: Text('No se pudo cargar la cotizacion: $error'),
+          child: Text('No se pudo cargar la cotización: $error'),
         ),
       ),
     );
@@ -184,8 +184,8 @@ class PresupuestoPage extends ConsumerWidget {
         return;
       }
       final message = switch (nextStatus) {
-        QuoteStatus.concluded => 'Cotizacion concluida. Ya puedes adjuntar el PDF de aprobacion.',
-        QuoteStatus.draft => 'Cotizacion reabierta para edicion.',
+        QuoteStatus.concluded => 'Cotización concluida. Ya puedes adjuntar el PDF de aprobación.',
+        QuoteStatus.draft => 'Cotización reabierta para edición.',
         _ => 'Estado actualizado.',
       };
       showRemaMessage(context, message);
@@ -226,7 +226,7 @@ class PresupuestoPage extends ConsumerWidget {
   ) async {
     final catalog = catalogState.valueOrNull;
     if (catalog == null) {
-      showRemaMessage(context, 'Catalogo no disponible aun.');
+      showRemaMessage(context, 'Catálogo no disponible aún.');
       return;
     }
 
@@ -245,7 +245,7 @@ class PresupuestoPage extends ConsumerWidget {
 
     await ref.read(quoteItemsProvider(quote.id).notifier).save(result.item);
     if (context.mounted) {
-      showRemaMessage(context, 'Concepto guardado en cotizacion.');
+      showRemaMessage(context, 'Concepto guardado en cotización.');
     }
   }
 
@@ -260,7 +260,7 @@ class PresupuestoPage extends ConsumerWidget {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Eliminar concepto'),
         content: Text(
-          'Se eliminara este concepto de la cotizacion:\n\n${item.concept}',
+          'Se eliminará este concepto de la cotización:\n\n${item.concept}',
         ),
         actions: [
           TextButton(
@@ -281,7 +281,7 @@ class PresupuestoPage extends ConsumerWidget {
 
     await ref.read(quoteItemsProvider(quote.id).notifier).remove(item.id);
     if (context.mounted) {
-      showRemaMessage(context, 'Concepto eliminado de la cotizacion.');
+      showRemaMessage(context, 'Concepto eliminado de la cotización.');
     }
   }
 
@@ -292,10 +292,11 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
       format: PdfPageFormat.letter,
-      name: 'cotizacion_${quote.quoteNumber}.pdf',
+      name: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
     );
   }
 
@@ -306,12 +307,13 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'cotizacion_${quote.quoteNumber}.pdf',
+      filename: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
     );
     if (context.mounted) {
-      showRemaMessage(context, 'Cotizacion lista para descarga.');
+      showRemaMessage(context, 'Cotización lista para descarga.');
     }
   }
 
@@ -322,12 +324,13 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'cotizacion_${quote.quoteNumber}.pdf',
+      filename: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
     );
     if (context.mounted) {
-      showRemaMessage(context, 'Cotizacion lista para compartir.');
+      showRemaMessage(context, 'Cotización lista para compartir.');
     }
   }
 
@@ -545,8 +548,8 @@ class PresupuestoPage extends ConsumerWidget {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('COTIZACION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  pw.Text('Folio: ${quote.quoteNumber}'),
+                  pw.Text('COTIZACIÓN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  pw.Text('Folio: ${_displayQuoteFolio(quote.quoteNumber)}'),
                   pw.Text('Fecha: $dateLabel'),
                   pw.Text('Estado: ${quote.status.toUpperCase()}'),
                 ],
@@ -571,9 +574,9 @@ class PresupuestoPage extends ConsumerWidget {
                 pw.SizedBox(height: 6),
                 pw.Row(
                   children: [
-                    pw.Expanded(child: _pdfHeaderField('Direccion', quoteContext.address)),
+                    pw.Expanded(child: _pdfHeaderField('Dirección', quoteContext.address)),
                     pw.SizedBox(width: 8),
-                    pw.Expanded(child: _pdfHeaderField('Ubicacion', quoteContext.location)),
+                    pw.Expanded(child: _pdfHeaderField('Ubicación', quoteContext.location)),
                   ],
                 ),
                 pw.SizedBox(height: 6),
@@ -581,7 +584,7 @@ class PresupuestoPage extends ConsumerWidget {
                   children: [
                     pw.Expanded(child: _pdfHeaderField('Universo', universeLabel)),
                     pw.SizedBox(width: 8),
-                    pw.Expanded(child: _pdfHeaderField('Tipo de remodelacion', projectTypeLabel)),
+                    pw.Expanded(child: _pdfHeaderField('Tipo de remodelación', projectTypeLabel)),
                   ],
                 ),
               ],
@@ -701,7 +704,7 @@ pw.Widget _pdfEvidenceBlocks({
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Registro fotografico',
+          'Registro fotográfico',
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5),
         ),
         pw.SizedBox(height: 6),
@@ -799,11 +802,11 @@ class _BudgetViewState extends State<_BudgetView> {
                         : CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'COTIZACION',
+                        'COTIZACIÓN',
                         style: Theme.of(context).textTheme.headlineLarge?.copyWith(color: RemaColors.primaryDark),
                       ),
                       const SizedBox(height: 6),
-                      Text('FOLIO: ${widget.quote.quoteNumber}'),
+                      Text('FOLIO: ${_displayQuoteFolio(widget.quote.quoteNumber)}'),
                       Text('FECHA: ${_date(widget.quote.validUntil ?? DateTime.now())}'),
                       Text('ESTADO: ${widget.quote.status.toUpperCase()}'),
                     ],
@@ -839,10 +842,10 @@ class _BudgetViewState extends State<_BudgetView> {
                     children: [
                       _ContextField(label: 'Proyecto', value: context.projectName),
                       _ContextField(label: 'Cliente', value: context.clientName),
-                      _ContextField(label: 'Direccion', value: context.address),
-                      _ContextField(label: 'Ubicacion', value: context.location),
+                      _ContextField(label: 'Dirección', value: context.address),
+                      _ContextField(label: 'Ubicación', value: context.location),
                       _ContextField(label: 'Universo', value: widget.universeLabel),
-                      _ContextField(label: 'Tipo de remodelacion', value: widget.projectTypeLabel),
+                      _ContextField(label: 'Tipo de remodelación', value: widget.projectTypeLabel),
                     ],
                   ),
                 ),
@@ -1072,7 +1075,7 @@ class _LevantamientoEntryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            hasDescription ? entry.description : 'Sin descripcion de texto en este registro.',
+            hasDescription ? entry.description : 'Sin descripción de texto en este registro.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           if (hasEvidence) ...[
@@ -1094,6 +1097,23 @@ class _LevantamientoEntryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _displayQuoteFolio(String value) {
+  final normalized = value.trim().toUpperCase();
+  if (normalized.isEmpty) {
+    return value.trim();
+  }
+  String? structured;
+  for (final match in RegExp(r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}').allMatches(normalized)) {
+    structured = match.group(0);
+  }
+  return structured ?? value.trim();
+}
+
+String _sanitizeFolioForFileName(String folio) {
+  final cleaned = folio.trim().replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
+  return cleaned.isEmpty ? 'sin_folio' : cleaned;
 }
 
 class _EvidenceThumb extends StatelessWidget {

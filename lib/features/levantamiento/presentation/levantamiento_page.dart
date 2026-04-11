@@ -58,7 +58,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
     if (active != null && active.isActive) {
       if (active.projectKey?.isNotEmpty == true) {
-        _projectKeyController.text = active.projectKey!;
+        _projectKeyController.text = _normalizeIncomingProjectKey(active.projectKey!);
       }
       if (active.projectName?.isNotEmpty == true) {
         _projectNameController.text = active.projectName!;
@@ -86,7 +86,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       }
     } else if (draft != null) {
       if (draft.projectKey?.isNotEmpty == true) {
-        _projectKeyController.text = draft.projectKey!;
+        _projectKeyController.text = _normalizeIncomingProjectKey(draft.projectKey!);
       }
       if (draft.projectName?.isNotEmpty == true) {
         _projectNameController.text = draft.projectName!;
@@ -181,6 +181,15 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   bool _hasStructuredKeyContext() {
     return (_selectedClientId ?? '').trim().isNotEmpty &&
         (_selectedProjectTypeId ?? '').trim().isNotEmpty;
+  }
+
+  String _normalizeIncomingProjectKey(String value) {
+    final normalized = value.trim().toUpperCase();
+    String? structured;
+    for (final match in RegExp(r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}').allMatches(normalized)) {
+      structured = match.group(0);
+    }
+    return structured ?? normalized;
   }
 
   bool _isStructuredProjectKey(String value) {
@@ -570,7 +579,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       }
       showRemaMessage(
         context,
-        'Entrada agregada a la cotizacion activa. Captura la siguiente descripcion y evidencia.',
+        'Entrada agregada a la cotización activa. Captura la siguiente descripción y evidencia.',
         label: 'Abrir presupuesto',
         onAction: () => context.go('/presupuesto/${active.quoteId}'),
       );
@@ -607,7 +616,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       final projectName = _projectNameController.text.trim();
       if (projectName.isEmpty) {
         if (mounted) {
-          showRemaMessage(context, 'El proyecto debe tener nombre antes de crear la cotizacion.');
+          showRemaMessage(context, 'El proyecto debe tener nombre antes de crear la cotización.');
         }
         return;
       }
@@ -616,7 +625,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           await _resolveProjectIdForQuote() ?? _selectedProjectId;
       if (selectedProjectId == null || selectedProjectId.isEmpty) {
         if (mounted) {
-          showRemaMessage(context, 'No se pudo preparar el proyecto para la cotizacion.');
+          showRemaMessage(context, 'No se pudo preparar el proyecto para la cotización.');
         }
         return;
       }
