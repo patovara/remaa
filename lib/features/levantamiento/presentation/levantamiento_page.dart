@@ -183,6 +183,11 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         (_selectedProjectTypeId ?? '').trim().isNotEmpty;
   }
 
+  bool _isStructuredProjectKey(String value) {
+    final normalized = value.trim().toUpperCase();
+    return RegExp(r'^RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}$').hasMatch(normalized);
+  }
+
   Future<void> _refreshStructuredProjectKeyIfNeeded({
     bool announce = false,
   }) async {
@@ -192,7 +197,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     }
 
     final current = _projectKeyController.text.trim().toUpperCase();
-    if (current.startsWith('RM-')) {
+    if (_isStructuredProjectKey(current)) {
       return;
     }
 
@@ -735,7 +740,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
   Future<String> _ensureProjectKey() async {
     final current = _projectKeyController.text.trim().toUpperCase();
-    if (current.startsWith('RM-')) {
+    if (_isStructuredProjectKey(current)) {
       return current;
     }
 

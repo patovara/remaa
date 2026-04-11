@@ -1518,8 +1518,9 @@ class QuotesRepository {
       client: client,
       projectKey: projectKey,
     );
-    if (_isStructuredProjectKey(projectCode)) {
-      return projectCode;
+    final extractedStructured = _extractStructuredProjectKey(projectCode);
+    if (extractedStructured != null) {
+      return extractedStructured;
     }
 
     final clientCode = await _resolveClientCode(projectId: projectId, client: client);
@@ -1539,6 +1540,10 @@ class QuotesRepository {
   }) async {
     final manual = (projectKey ?? '').trim().toUpperCase();
     if (manual.isNotEmpty) {
+      final extractedStructured = _extractStructuredProjectKey(manual);
+      if (extractedStructured != null) {
+        return extractedStructured;
+      }
       return manual;
     }
 
@@ -1587,9 +1592,16 @@ class QuotesRepository {
     return _nextLocalProjectKey();
   }
 
-  bool _isStructuredProjectKey(String value) {
+  String? _extractStructuredProjectKey(String value) {
     final normalized = value.trim().toUpperCase();
-    return RegExp(r'^RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}$').hasMatch(normalized);
+    if (normalized.isEmpty) {
+      return null;
+    }
+    String? lastMatch;
+    for (final match in RegExp(r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}').allMatches(normalized)) {
+      lastMatch = match.group(0);
+    }
+    return lastMatch;
   }
 
   String _nextLocalProjectKey() {
@@ -1706,8 +1718,9 @@ class QuotesRepository {
 
   String _normalizeProjectCode(String? code, String projectId) {
     final source = (code ?? '').toUpperCase().trim();
-    if (_isStructuredProjectKey(source)) {
-      return source;
+    final extractedStructured = _extractStructuredProjectKey(source);
+    if (extractedStructured != null) {
+      return extractedStructured;
     }
     final digits = RegExp(r'\d+').allMatches(source).map((m) => m.group(0)!).join();
     if (digits.isNotEmpty) {
