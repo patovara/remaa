@@ -1120,28 +1120,57 @@ class QuotesRepository {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final quoteFolder = _isUuid(quoteId ?? '') ? quoteId! : 'no-quote';
       final evidencePaths = <String>[];
+      final failedUploads = <int>[];
 
       final evidenceMetaMaps = <Map<String, Object?>>[];
+      
+      // Upload with automatic retry for network resilience
       for (var index = 0; index < limitedInputs.length; index++) {
         final input = limitedInputs[index];
         final ext = _guessImageExtension(input.originalName);
         final objectPath = '$projectId/$quoteFolder/${timestamp}_$index.$ext';
-        await client.storage.from('survey-photos').uploadBinary(
+        
+        var uploadSucceeded = false;
+        var retryCount = 0;
+        const maxRetries = 2;
+        
+        while (retryCount <= maxRetries && !uploadSucceeded) {
+          try {
+            await client.storage.from('survey-photos').uploadBinary(
               objectPath,
               input.bytes,
               fileOptions: const FileOptions(upsert: true),
             );
-        evidencePaths.add(objectPath);
-        evidenceMetaMaps.add({
-          'object_path': objectPath,
-          'original_name': input.originalName,
-          'mime_type': input.mimeType,
-          'file_size_bytes': input.fileSizeBytes,
-          'sort_order': index,
-          'width_px': null,
-          'height_px': null,
-          'taken_at': null,
-        });
+            uploadSucceeded = true;
+            evidencePaths.add(objectPath);
+          } catch (e) {
+            retryCount++;
+            if (retryCount > maxRetries) {
+              AppLogger.error('evidence_upload_failed_after_retries', data: {
+                'objectPath': objectPath,
+                'retries': retryCount,
+                'error': e.toString(),
+              });
+              failedUploads.add(index);
+            } else {
+              // Brief delay before retry (exponential backoff)
+              await Future.delayed(Duration(milliseconds: 100 * retryCount));
+            }
+          }
+        }
+        
+        if (uploadSucceeded) {
+          evidenceMetaMaps.add({
+            'object_path': objectPath,
+            'original_name': input.originalName,
+            'mime_type': input.mimeType,
+            'file_size_bytes': input.fileSizeBytes,
+            'sort_order': index,
+            'width_px': null,
+            'height_px': null,
+            'taken_at': null,
+          });
+        }
       }
 
       // Get current user for ownership tracking
@@ -1175,7 +1204,7 @@ class QuotesRepository {
         evidenceMetadata: [
           for (var index = 0; index < limitedInputs.length; index++)
             SurveyEvidenceMeta(
-              objectPath: evidencePaths[index],
+              objectPath: index < evidencePaths.length ? evidencePaths[index] : '',
               originalName: limitedInputs[index].originalName,
               fileSizeBytes: limitedInputs[index].fileSizeBytes,
               sortOrder: index,
@@ -1278,9 +1307,27 @@ class QuotesRepository {
               }
             }),
           );
-          for (final bytes in downloads) {
+          for (var i = 0; i < downloads.length; i++) {
+            final bytes = downloads[i];
             if (bytes != null) {
               evidence.add(bytes);
+            } else if (i < sources.length && sources[i].startsWith('local://')) {
+              // Fallback: Si la imagen no se puede descargar pero está marcada como local,
+              // intenta recuperar desde _localSurveyEntries si existe
+              final entryId = row['id'] as String?;
+              if (entryId != null) {
+                final localItems = _localSurveyEntries[projectId] ?? const <SurveyEntryRecord>[];
+                final localEntry = localItems
+                    .where((item) => item.id == entryId)
+                    .cast<SurveyEntryRecord?>()
+                    .firstWhere(
+                      (item) => item != null,
+                      orElse: () => null,
+                    );
+                if (localEntry != null && i < localEntry.evidencePreviewList.length) {
+                  evidence.add(localEntry.evidencePreviewList[i]);
+                }
+              }
             }
           }
         }
