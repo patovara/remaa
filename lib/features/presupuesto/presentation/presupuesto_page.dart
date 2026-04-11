@@ -655,6 +655,8 @@ class PresupuestoPage extends ConsumerWidget {
               ),
             ),
           ),
+          pw.SizedBox(height: 12),
+          _pdfGeneralConceptsAndBankData(),
         ],
       ),
     );
@@ -726,6 +728,73 @@ pw.Widget _pdfEvidenceBlocks({
         ),
       ],
     ),
+  );
+}
+
+pw.Widget _pdfGeneralConceptsAndBankData() {
+  final leftStyle = pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800);
+  final rightStyle = pw.TextStyle(fontSize: 9, color: PdfColors.black);
+
+  return pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Expanded(
+        flex: 3,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'CONCEPTOS GENERALES:',
+              style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text('1.- ESTE ES UN PRESUPUESTO BASADO EN LA INFORMACIÓN QUE SE NOS PROPORCIONO.', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('2.- PRECIOS SUJETOS A CAMBIOS SIN PREVIO AVISO.', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('3.- CONDICIONES DE PAGO ( costos + iva )', style: leftStyle),
+            pw.Text('    ( DE ACUERDO A LOS ACUERDOS EN CONTRATO )', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('4.- TIEMPO DE ENTREGA', style: leftStyle),
+            pw.Text('    ( CALENDARIO DE OBRA POR DISPOSICIÓN DE ÁREAS )', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('5.- FORMAS DE PAGO', style: leftStyle),
+            pw.Text('    ( TRANSFERENCIA ELECTRONICA ) + ( EFECTIVO )', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('6.- VIGENCIA DE COSTOS', style: leftStyle),
+            pw.Text('    ( 5 DÍAS )', style: leftStyle),
+          ],
+        ),
+      ),
+      pw.SizedBox(width: 24),
+      pw.Expanded(
+        flex: 2,
+        child: pw.Align(
+          alignment: pw.Alignment.topRight,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text(
+                'DATOS BANCARIOS FACTURACION',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  decoration: pw.TextDecoration.underline,
+                ),
+                textAlign: pw.TextAlign.right,
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text('SOLUCIONES INTEGRALES SUSTENTABLES', style: rightStyle, textAlign: pw.TextAlign.right),
+              pw.Text('INTELIGENTES Y DINAMICAS REMA, S.A.S. DE C.V.', style: rightStyle, textAlign: pw.TextAlign.right),
+              pw.SizedBox(height: 10),
+              pw.Text('SANTANDER', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.Text('65-50868153-1', style: rightStyle),
+              pw.Text('014691 655086815 315', style: rightStyle),
+            ],
+          ),
+        ),
+      ),
+    ],
   );
 }
 
