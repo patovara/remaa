@@ -640,15 +640,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         fallbackDescription: notes,
       );
 
-      if (entry != null) {
-        final evidenceInputs = _currentEvidenceInputs();
-        await ref.read(quotesProvider.notifier).appendSurveyEntry(
-              projectId: selectedProjectId,
-              description: entry.description,
-          evidenceInputs: evidenceInputs,
-            );
-      }
-
       await ref.read(quotesProvider.notifier).updateProjectContext(
             projectId: selectedProjectId,
         name: projectName,
@@ -664,6 +655,16 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
             projectTypeId: selectedProjectTypeId,
             projectKey: projectKey,
           );
+
+      if (entry != null) {
+        final evidenceInputs = _currentEvidenceInputs();
+        await ref.read(quotesProvider.notifier).appendSurveyEntry(
+              projectId: selectedProjectId,
+              quoteId: quote.id,
+              description: entry.description,
+              evidenceInputs: evidenceInputs,
+            );
+      }
 
       if (!mounted) {
         return;
