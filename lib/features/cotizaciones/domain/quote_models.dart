@@ -20,6 +20,7 @@ class QuoteRecord {
     required this.subtotal,
     required this.tax,
     required this.total,
+    this.createdAt,
     this.validUntil,
     this.approvalPdfPath,
     this.approvalPdfUploadedAt,
@@ -34,6 +35,7 @@ class QuoteRecord {
   final double subtotal;
   final double tax;
   final double total;
+  final DateTime? createdAt;
   final DateTime? validUntil;
   final String? approvalPdfPath;
   final DateTime? approvalPdfUploadedAt;
@@ -57,6 +59,7 @@ class QuoteRecord {
     double? subtotal,
     double? tax,
     double? total,
+    DateTime? createdAt,
     DateTime? validUntil,
     String? approvalPdfPath,
     DateTime? approvalPdfUploadedAt,
@@ -71,6 +74,7 @@ class QuoteRecord {
       subtotal: subtotal ?? this.subtotal,
       tax: tax ?? this.tax,
       total: total ?? this.total,
+      createdAt: createdAt ?? this.createdAt,
       validUntil: validUntil ?? this.validUntil,
       approvalPdfPath: approvalPdfPath ?? this.approvalPdfPath,
       approvalPdfUploadedAt: approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,

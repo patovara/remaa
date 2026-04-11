@@ -204,6 +204,7 @@ class QuotesRepository {
             subtotal: _toDouble(row['subtotal']),
             tax: _toDouble(row['tax']),
             total: _toDouble(row['total']),
+            createdAt: _toDateTime(row['created_at']),
             validUntil: _toDate(row['valid_until']),
             approvalPdfPath: row['approval_pdf_path'] as String?,
             approvalPdfUploadedAt: _toDateTime(row['approval_pdf_uploaded_at']),
@@ -248,6 +249,7 @@ class QuotesRepository {
         subtotal: 0,
         tax: 0,
         total: 0,
+        createdAt: DateTime.now(),
         approvalPdfPath: null,
         approvalPdfUploadedAt: null,
       );
@@ -267,7 +269,7 @@ class QuotesRepository {
             'project_type_id': projectTypeId,
           })
           .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at',
+            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
           )
           .single();
 
@@ -281,6 +283,7 @@ class QuotesRepository {
         subtotal: _toDouble(inserted['subtotal']),
         tax: _toDouble(inserted['tax']),
         total: _toDouble(inserted['total']),
+        createdAt: _toDateTime(inserted['created_at']),
         validUntil: _toDate(inserted['valid_until']),
         approvalPdfPath: inserted['approval_pdf_path'] as String?,
         approvalPdfUploadedAt: _toDateTime(inserted['approval_pdf_uploaded_at']),
@@ -297,6 +300,7 @@ class QuotesRepository {
         subtotal: 0,
         tax: 0,
         total: 0,
+        createdAt: DateTime.now(),
         approvalPdfPath: null,
         approvalPdfUploadedAt: null,
       );
