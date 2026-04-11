@@ -855,6 +855,8 @@ class QuotesRepository {
               localClient.address,
             ]),
             location: location,
+            city: localClient.city,
+            state: localClient.state,
           ),
           location: location,
           description: project.description ?? '',
@@ -890,6 +892,8 @@ class QuotesRepository {
                 addressLine,
               ]),
               location: location,
+              city: normalizedLocation.city,
+              state: normalizedLocation.state,
             ),
             location: location,
             description: project.description ?? '',
@@ -954,6 +958,8 @@ class QuotesRepository {
         address: _normalizeAddressForQuote(
           address: _firstNonEmpty([address, addressLine]),
           location: location,
+          city: normalizedLocation.city,
+          state: normalizedLocation.state,
         ),
         location: location,
         description: description,
@@ -1030,17 +1036,32 @@ class QuotesRepository {
   String _normalizeAddressForQuote({
     required String address,
     required String location,
+    String? city,
+    String? state,
   }) {
     var normalized = address.trim();
     final locationNormalized = location.trim();
-    if (normalized.isEmpty || locationNormalized.isEmpty) {
+    if (normalized.isEmpty) {
       return normalized;
     }
 
-    final suffix = ', $locationNormalized';
-    while (normalized.toLowerCase().endsWith(suffix.toLowerCase())) {
-      normalized = normalized.substring(0, normalized.length - suffix.length).trimRight();
-      normalized = normalized.replaceAll(RegExp(r'[\s,]+$'), '');
+    final trailingTokens = <String>{
+      if (locationNormalized.isNotEmpty) locationNormalized,
+      if ((state ?? '').trim().isNotEmpty) state!.trim(),
+      if ((city ?? '').trim().isNotEmpty) city!.trim(),
+    };
+
+    var updated = true;
+    while (updated) {
+      updated = false;
+      for (final token in trailingTokens) {
+        final suffix = ', $token';
+        if (normalized.toLowerCase().endsWith(suffix.toLowerCase())) {
+          normalized = normalized.substring(0, normalized.length - suffix.length).trimRight();
+          normalized = normalized.replaceAll(RegExp(r'[\s,]+$'), '');
+          updated = true;
+        }
+      }
     }
     return normalized;
   }
