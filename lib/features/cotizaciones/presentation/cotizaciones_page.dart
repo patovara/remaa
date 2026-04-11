@@ -731,7 +731,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   Future<List<ClientOption>> _fetchClientOptions() async {
-    final mergedByName = <String, ClientOption>{};
+    final mergedById = <String, ClientOption>{};
 
     final client = SupabaseBootstrap.client;
     if (client == null) {
@@ -741,19 +741,21 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     try {
       final rows = await client
           .from('clients')
-          .select('id, business_name')
+          .select('id, business_name, contact_name')
           .order('business_name');
       for (final row in rows) {
         final id = (row['id'] as String? ?? '').trim();
-        final name = (row['business_name'] as String? ?? '').trim();
-        if (id.isEmpty || name.isEmpty) {
+        final contactName = (row['contact_name'] as String? ?? '').trim();
+        final businessName = (row['business_name'] as String? ?? '').trim();
+        final displayName = contactName.isNotEmpty ? contactName : businessName;
+        if (id.isEmpty || displayName.isEmpty) {
           continue;
         }
-        mergedByName[name.toLowerCase()] = ClientOption(id: id, name: name);
+        mergedById[id] = ClientOption(id: id, name: displayName);
       }
     } catch (_) {}
 
-    final result = mergedByName.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    final result = mergedById.values.toList()..sort((a, b) => a.name.compareTo(b.name));
     return result;
   }
 
