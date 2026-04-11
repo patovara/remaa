@@ -102,7 +102,8 @@ create table if not exists public.projects (
   status text not null default 'draft',
   description text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint projects_name_not_blank_check check (length(trim(name)) > 0)
 );
 
 create table if not exists public.project_surveys (

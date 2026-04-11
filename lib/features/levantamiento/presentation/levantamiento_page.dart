@@ -599,6 +599,14 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
     setState(() => _isCreatingQuote = true);
     try {
+      final projectName = _projectNameController.text.trim();
+      if (projectName.isEmpty) {
+        if (mounted) {
+          showRemaMessage(context, 'El proyecto debe tener nombre antes de crear la cotizacion.');
+        }
+        return;
+      }
+
       final selectedProjectId =
           await _resolveProjectIdForQuote() ?? _selectedProjectId;
       if (selectedProjectId == null || selectedProjectId.isEmpty) {
@@ -608,7 +616,6 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         return;
       }
 
-      final projectName = _projectNameController.text.trim();
       final manager = '';
       final address = _addressController.text.trim();
       final notes = _notesController.text.trim();
@@ -630,7 +637,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
       await ref.read(quotesProvider.notifier).updateProjectContext(
             projectId: selectedProjectId,
-            name: projectName.isEmpty ? 'Proyecto sin nombre' : projectName,
+        name: projectName,
             managerName: manager,
             address: address,
         description: composedDescription,
@@ -694,13 +701,19 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     }
 
     try {
+      final projectName = _projectNameController.text.trim();
+      if (projectName.isEmpty) {
+        if (mounted) {
+          showRemaMessage(context, 'El proyecto debe tener nombre.');
+        }
+        return null;
+      }
+
       final code = await _ensureProjectKey();
       final created = await ref.read(quotesProvider.notifier).createProject(
             input: NewProjectInput(
               code: code,
-              name: _projectNameController.text.trim().isEmpty
-                  ? 'Proyecto sin nombre'
-                  : _projectNameController.text.trim(),
+              name: projectName,
               clientId: _selectedClientId,
               siteAddress: _addressController.text.trim(),
               description: _notesController.text.trim(),
@@ -759,12 +772,12 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         try {
           rows = await supabase
               .from('clients')
-              .select('id, business_name, contact_name, notes, email, phone, address_line, city')
+            .select('id, business_name, contact_name, notes, email, phone, address_line, city, state')
               .order('business_name');
         } catch (_) {
           rows = await supabase
               .from('clients')
-              .select('id, business_name, notes, email, phone, address_line, city')
+            .select('id, business_name, notes, email, phone, address_line, city, state')
               .order('business_name');
         }
         final knownIds = <String>{};
@@ -774,10 +787,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
           if (id.isEmpty || name.isEmpty || knownIds.contains(id)) {
             continue;
           }
-          final addr = [
-            row['address_line'] as String? ?? '',
-            row['city'] as String? ?? '',
-          ].where((s) => s.isNotEmpty).join(', ');
+          final addr = (row['address_line'] as String? ?? '').trim();
           final contactName = _metadataRepository.resolveContactName(
             contactName: row['contact_name'] as String?,
             notes: row['notes'] as String?,
@@ -795,6 +805,12 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
               contactEmail: (row['email'] as String? ?? '').trim(),
               phone: (row['phone'] as String? ?? '').trim(),
               address: addr.isEmpty ? 'Sin direccion' : addr,
+              city: (row['city'] as String? ?? '').trim().isEmpty
+                  ? null
+                  : (row['city'] as String).trim(),
+              state: (row['state'] as String? ?? '').trim().isEmpty
+                  ? null
+                  : (row['state'] as String).trim(),
               responsibles: const [],
             ),
           );
@@ -835,13 +851,13 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       try {
         row = await supabase
             .from('clients')
-            .select('id, business_name, contact_name, notes, email, phone, address_line, city')
+        .select('id, business_name, contact_name, notes, email, phone, address_line, city, state')
             .eq('id', clientId)
             .maybeSingle();
       } catch (_) {
         row = await supabase
             .from('clients')
-            .select('id, business_name, notes, email, phone, address_line, city')
+        .select('id, business_name, notes, email, phone, address_line, city, state')
             .eq('id', clientId)
             .maybeSingle();
       }
@@ -863,15 +879,15 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         icon: Icons.apartment,
         contactEmail: (row['email'] as String? ?? '').trim(),
         phone: (row['phone'] as String? ?? '').trim(),
-        address: [
-          row['address_line'] as String? ?? '',
-          row['city'] as String? ?? '',
-        ].where((s) => s.isNotEmpty).join(', ').trim().isEmpty
+        address: (row['address_line'] as String? ?? '').trim().isEmpty
             ? 'Sin direccion'
-            : [
-                row['address_line'] as String? ?? '',
-                row['city'] as String? ?? '',
-              ].where((s) => s.isNotEmpty).join(', '),
+            : (row['address_line'] as String).trim(),
+        city: (row['city'] as String? ?? '').trim().isEmpty
+            ? null
+            : (row['city'] as String).trim(),
+        state: (row['state'] as String? ?? '').trim().isEmpty
+            ? null
+            : (row['state'] as String).trim(),
         responsibles: const [],
       );
       setState(() {
@@ -1141,10 +1157,13 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     }
 
     final projectName = (updated.projectName ?? _projectNameController.text).trim();
+        if (projectName.isEmpty) {
+      return;
+        }
     final address = (updated.address ?? _addressController.text).trim();
     await ref.read(quotesProvider.notifier).updateProjectContext(
           projectId: updated.projectId,
-          name: projectName.isEmpty ? 'Proyecto sin nombre' : projectName,
+          name: projectName,
           managerName: '',
           address: address,
           description: description,

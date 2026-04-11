@@ -534,6 +534,26 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     return result;
   }
 
+  String _addressLineOnly(ClientRecord client) {
+    var address = client.address.trim();
+    final location = [
+      if ((client.state ?? '').trim().isNotEmpty) client.state!.trim(),
+      if ((client.city ?? '').trim().isNotEmpty) client.city!.trim(),
+    ].join(', ');
+
+    if (address.isEmpty || location.isEmpty) {
+      return address;
+    }
+
+    final suffix = ', $location';
+    while (address.toLowerCase().endsWith(suffix.toLowerCase())) {
+      address = address.substring(0, address.length - suffix.length).trimRight();
+      address = address.replaceAll(RegExp(r'[\s,]+$'), '');
+    }
+
+    return address;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -544,7 +564,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     _phoneCtrl = TextEditingController(
       text: ClientInputRules.editableMxPhoneDigits(widget.client.phone),
     );
-    _addressCtrl = TextEditingController(text: widget.client.address);
+    _addressCtrl = TextEditingController(text: _addressLineOnly(widget.client));
     _stateCtrl = TextEditingController(text: widget.client.state ?? '');
     _cityCtrl = TextEditingController(text: widget.client.city ?? '');
     _selectedSector = _normalizeSectorSelection(widget.client.sector);
@@ -566,7 +586,7 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       _rfcCtrl.text = widget.client.rfc ?? '';
       _emailCtrl.text = widget.client.contactEmail;
       _phoneCtrl.text = ClientInputRules.editableMxPhoneDigits(widget.client.phone);
-      _addressCtrl.text = widget.client.address;
+      _addressCtrl.text = _addressLineOnly(widget.client);
       _stateCtrl.text = widget.client.state ?? '';
       _cityCtrl.text = widget.client.city ?? '';
       _selectedSector = _normalizeSectorSelection(widget.client.sector);

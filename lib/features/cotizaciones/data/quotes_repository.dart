@@ -139,10 +139,15 @@ class QuotesRepository {
     required String description,
     String? clientId,
   }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      throw StateError('El proyecto debe tener nombre.');
+    }
+
     final normalized = ProjectLookup(
       id: projectId,
       code: _projectCodeById(projectId),
-      name: name.trim().isEmpty ? 'Proyecto sin nombre' : name.trim(),
+      name: normalizedName,
       clientId: clientId,
       siteAddress: address.trim(),
       description: description.trim(),
@@ -840,7 +845,10 @@ class QuotesRepository {
         );
         return QuoteContextInfo(
           projectName: project.name,
-          clientName: localClient.name,
+          clientName: _resolveClientDisplayName(
+            contactName: localClient.contactName,
+            businessName: localClient.name,
+          ),
           address: _normalizeAddressForQuote(
             address: _firstNonEmpty([
               project.siteAddress,
@@ -857,10 +865,13 @@ class QuotesRepository {
         try {
           final clientRow = await client
               .from('clients')
-              .select('business_name, address_line, city, state')
+              .select('business_name, contact_name, address_line, city, state')
               .eq('id', localClientId)
               .single();
-          final clientName = clientRow['business_name'] as String? ?? '';
+          final clientName = _resolveClientDisplayName(
+            contactName: clientRow['contact_name'] as String?,
+            businessName: clientRow['business_name'] as String?,
+          );
           final addressLine = clientRow['address_line'] as String? ?? '';
           final normalizedLocation = _normalizeLocationParts(
             city: clientRow['city'] as String?,
@@ -919,11 +930,14 @@ class QuotesRepository {
 
       final clientRow = await client
           .from('clients')
-          .select('business_name, address_line, city, state')
+          .select('business_name, contact_name, address_line, city, state')
           .eq('id', clientId)
           .single();
 
-      final clientName = clientRow['business_name'] as String? ?? '';
+      final clientName = _resolveClientDisplayName(
+        contactName: clientRow['contact_name'] as String?,
+        businessName: clientRow['business_name'] as String?,
+      );
       final addressLine = clientRow['address_line'] as String? ?? '';
       final normalizedLocation = _normalizeLocationParts(
         city: clientRow['city'] as String?,
@@ -964,6 +978,17 @@ class QuotesRepository {
       }
     }
     return '';
+  }
+
+  String _resolveClientDisplayName({
+    String? contactName,
+    String? businessName,
+  }) {
+    final preferredContact = (contactName ?? '').trim();
+    if (preferredContact.isNotEmpty) {
+      return preferredContact;
+    }
+    return (businessName ?? '').trim();
   }
 
   ({String city, String state}) _normalizeLocationParts({
