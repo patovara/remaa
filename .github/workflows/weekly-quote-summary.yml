@@ -1,0 +1,30 @@
+name: Weekly Quote Summary
+
+on:
+  schedule:
+    # Lunes 08:00 America/Cancun (UTC-5) => 13:00 UTC
+    - cron: "0 13 * * 1"
+  workflow_dispatch:
+
+jobs:
+  send-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate secrets
+        env:
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
+          SCHEDULER_SECRET: ${{ secrets.WEEKLY_SUMMARY_SCHEDULER_SECRET }}
+        run: |
+          test -n "$PROJECT_REF" || (echo "Missing SUPABASE_PROJECT_REF_STAGING" && exit 1)
+          test -n "$SCHEDULER_SECRET" || (echo "Missing WEEKLY_SUMMARY_SCHEDULER_SECRET" && exit 1)
+
+      - name: Trigger weekly quote summary function
+        env:
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
+          SCHEDULER_SECRET: ${{ secrets.WEEKLY_SUMMARY_SCHEDULER_SECRET }}
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "https://${PROJECT_REF}.supabase.co/functions/v1/weekly-quote-summary" \
+            -H "Content-Type: application/json" \
+            -H "x-scheduler-secret: ${SCHEDULER_SECRET}" \
+            -d '{"action":"send_weekly"}'

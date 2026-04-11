@@ -872,35 +872,35 @@ class _QuotesMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = quotes.fold<double>(0, (sum, quote) => sum + quote.total);
     final pending = quotes.where((quote) => quote.isDraft).length;
     final concluded = quotes.where((quote) => quote.isConcluded).length;
-    final average = quotes.isEmpty ? 0.0 : total / quotes.length;
+    final approved = quotes.where((quote) => quote.isApproved).length;
+    final pendingPayment = quotes.where((quote) => quote.isActaFinalizada).length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final tiles = [
           RemaMetricTile(
-            label: 'Total Cotizado',
-            value: _money(total),
-            caption: '${quotes.length} cotizaciones',
-          ),
-          RemaMetricTile(
             label: 'Pendientes',
             value: '$pending',
             caption: 'Estado draft',
-            backgroundColor: RemaColors.surfaceWhite,
           ),
           RemaMetricTile(
             label: 'Concluidas',
             value: '$concluded',
             caption: 'Listas para aprobacion',
+            backgroundColor: RemaColors.surfaceWhite,
+          ),
+          RemaMetricTile(
+            label: 'Aprobadas',
+            value: '$approved',
+            caption: 'Con autorizacion',
             backgroundColor: RemaColors.surfaceLow,
           ),
           RemaMetricTile(
-            label: 'Valor Promedio',
-            value: _money(average),
-            caption: 'Por cotizacion',
+            label: 'Por cobrar',
+            value: '$pendingPayment',
+            caption: 'Acta finalizada',
             backgroundColor: const Color(0xFFFFDEA0),
           ),
         ];
