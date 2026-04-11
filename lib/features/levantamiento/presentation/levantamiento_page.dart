@@ -555,6 +555,23 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       showRemaMessage(context, 'No se pudo actualizar la anotacion.');
       return;
     }
+    final newPreviews = replacementPhotos
+        .where((p) => p.bytes != null && p.bytes!.isNotEmpty)
+        .map((p) => p.bytes!)
+        .toList();
+    final updatedWithPreviews = SurveyEntryRecord(
+      id: updated.id,
+      projectId: updated.projectId,
+      quoteId: updated.quoteId,
+      description: updated.description,
+      evidencePaths: updated.evidencePaths,
+      evidencePreviewList: clearEvidence
+          ? const []
+          : (newPreviews.isNotEmpty ? newPreviews : entry.evidencePreviewList),
+      evidenceMetadata: updated.evidenceMetadata,
+      createdAt: updated.createdAt,
+    );
+    ref.read(activeLevantamientoProvider.notifier).updateEntry(entryId, updatedWithPreviews);
     showRemaMessage(context, 'Anotacion actualizada correctamente.');
   }
 
@@ -658,32 +675,49 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
       if (entry != null) {
         final evidenceInputs = _currentEvidenceInputs();
-        await ref.read(quotesProvider.notifier).appendSurveyEntry(
+        final saved = await ref.read(quotesProvider.notifier).appendSurveyEntry(
               projectId: selectedProjectId,
               quoteId: quote.id,
               description: entry.description,
               evidenceInputs: evidenceInputs,
             );
+        final storedEntry = _mergeEntryWithPreviews(saved, entry);
+        if (!mounted) {
+          return;
+        }
+        ref.read(activeLevantamientoProvider.notifier).activate(
+              projectId: selectedProjectId,
+              universeId: selectedUniverseId,
+              projectTypeId: selectedProjectTypeId,
+              quoteId: quote.id,
+              projectKey: _projectKeyController.text.trim(),
+              projectName: _projectNameController.text.trim(),
+              clientId: _selectedClientId,
+              clientName: _clientController.text.trim(),
+              address: _addressController.text.trim(),
+              evidenceCount: _photos.length,
+              evidencePreviewList: _previewPhotos(),
+              entries: <SurveyEntryRecord>[storedEntry],
+            );
+      } else {
+        if (!mounted) {
+          return;
+        }
+        ref.read(activeLevantamientoProvider.notifier).activate(
+              projectId: selectedProjectId,
+              universeId: selectedUniverseId,
+              projectTypeId: selectedProjectTypeId,
+              quoteId: quote.id,
+              projectKey: _projectKeyController.text.trim(),
+              projectName: _projectNameController.text.trim(),
+              clientId: _selectedClientId,
+              clientName: _clientController.text.trim(),
+              address: _addressController.text.trim(),
+              evidenceCount: _photos.length,
+              evidencePreviewList: _previewPhotos(),
+              entries: const <SurveyEntryRecord>[],
+            );
       }
-
-      if (!mounted) {
-        return;
-      }
-
-      ref.read(activeLevantamientoProvider.notifier).activate(
-            projectId: selectedProjectId,
-            universeId: selectedUniverseId,
-            projectTypeId: selectedProjectTypeId,
-            quoteId: quote.id,
-            projectKey: _projectKeyController.text.trim(),
-            projectName: _projectNameController.text.trim(),
-            clientId: _selectedClientId,
-            clientName: _clientController.text.trim(),
-            address: _addressController.text.trim(),
-            evidenceCount: _photos.length,
-            evidencePreviewList: _previewPhotos(),
-            entries: entry == null ? const <SurveyEntryRecord>[] : <SurveyEntryRecord>[entry],
-          );
       ref.read(levantamientoDraftProvider.notifier).clear();
       _prepareForNextCapture();
 
@@ -1045,6 +1079,24 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     return uuidPattern.hasMatch(value);
   }
 
+  SurveyEntryRecord _mergeEntryWithPreviews(
+    SurveyEntryRecord? saved,
+    SurveyEntryRecord fallback,
+  ) {
+    if (saved == null) return fallback;
+    return SurveyEntryRecord(
+      id: saved.id,
+      projectId: saved.projectId,
+      quoteId: saved.quoteId,
+      description: saved.description,
+      evidencePaths: saved.evidencePaths,
+      evidencePreviewList: fallback.evidencePreviewList,
+      evidenceMetadata:
+          saved.evidenceMetadata.isNotEmpty ? saved.evidenceMetadata : fallback.evidenceMetadata,
+      createdAt: saved.createdAt,
+    );
+  }
+
   void _finishSurvey() {
     final active = ref.read(activeLevantamientoProvider);
     if (active == null || !active.isActive) {
@@ -1149,17 +1201,13 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     final entry = _buildCurrentEntry();
     if (entry != null) {
       final evidenceInputs = _currentEvidenceInputs();
-      await ref.read(quotesProvider.notifier).appendSurveyEntry(
+      final saved = await ref.read(quotesProvider.notifier).appendSurveyEntry(
             projectId: active.projectId,
             quoteId: active.quoteId,
             description: entry.description,
             evidenceInputs: evidenceInputs,
           );
-      notifier.addEntry(
-        description: entry.description,
-        evidencePreviewList: entry.evidencePreviewList,
-        evidenceMetadata: entry.evidenceMetadata,
-      );
+      notifier.addEntryRecord(_mergeEntryWithPreviews(saved, entry));
     }
 
     final updated = ref.read(activeLevantamientoProvider) ?? active;
@@ -1276,13 +1324,9 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
     final catalogState = ref.watch(conceptsCatalogProvider);
     final activeLevantamiento = ref.watch(activeLevantamientoProvider);
     final catalogSnapshot = catalogState.valueOrNull;
-    final activeProjectId = activeLevantamiento?.projectId.trim() ?? '';
-    final projectIdForEntries = activeProjectId.isNotEmpty
-      ? activeProjectId
-      : ((_selectedProjectId ?? '').trim().isNotEmpty ? _selectedProjectId!.trim() : null);
-    final surveyEntriesAsync = projectIdForEntries == null
-      ? const AsyncData<List<SurveyEntryRecord>>(<SurveyEntryRecord>[])
-      : ref.watch(projectSurveyEntriesProvider(projectIdForEntries));
+    final sessionEntries = activeLevantamiento?.isActive == true
+        ? activeLevantamiento!.entries
+        : const <SurveyEntryRecord>[];
 
     final universes = catalogSnapshot?.universes ?? const <UniverseCatalogItem>[];
     final projectTypes = _allowedProjectTypes(
@@ -1424,15 +1468,18 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
                 onQuote: _isCreatingQuote ? null : _goToQuote,
                 onFinish: _finishSurvey,
               ),
-              if (projectIdForEntries != null) ...[
+              if (activeLevantamiento?.isActive == true) ...[
                 const SizedBox(height: 24),
                 _CapturedEntriesPanel(
-                  entriesAsync: surveyEntriesAsync,
-                  onEdit: (entry) => _editCapturedEntry(
-                    projectId: projectIdForEntries,
-                    quoteId: activeLevantamiento?.quoteId,
-                    entry: entry,
-                  ),
+                  entries: sessionEntries,
+                  onEdit: (entry) {
+                    final pid = activeLevantamiento!.projectId;
+                    _editCapturedEntry(
+                      projectId: pid,
+                      quoteId: activeLevantamiento.quoteId,
+                      entry: entry,
+                    );
+                  },
                 ),
               ],
             ],
@@ -1706,11 +1753,11 @@ class _DescriptionPanel extends StatelessWidget {
 
 class _CapturedEntriesPanel extends StatelessWidget {
   const _CapturedEntriesPanel({
-    required this.entriesAsync,
+    required this.entries,
     required this.onEdit,
   });
 
-  final AsyncValue<List<SurveyEntryRecord>> entriesAsync;
+  final List<SurveyEntryRecord> entries;
   final ValueChanged<SurveyEntryRecord> onEdit;
 
   @override
@@ -1719,41 +1766,40 @@ class _CapturedEntriesPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RemaSectionHeader(title: 'Anotaciones capturadas'),
-          const SizedBox(height: 16),
-          entriesAsync.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: CircularProgressIndicator(strokeWidth: 2.2),
-              ),
+          RemaSectionHeader(
+            title: 'Conceptos registrados en esta sesion',
+            trailing: Text(
+              '${entries.length} ${entries.length == 1 ? 'ENTRADA' : 'ENTRADAS'}',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
-            error: (error, _) => Text(
-              'No se pudieron cargar las anotaciones: $error',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            data: (entries) {
-              if (entries.isEmpty) {
-                return Text(
-                  'Todavia no hay anotaciones registradas para este levantamiento.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                );
-              }
-
-              return Column(
-                children: [
-                  for (var index = 0; index < entries.length; index++) ...[
-                    _CapturedEntryTile(
-                      index: index + 1,
-                      entry: entries[index],
-                      onEdit: () => onEdit(entries[index]),
-                    ),
-                    if (index < entries.length - 1) const Divider(height: 24),
-                  ],
-                ],
-              );
-            },
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Revisa cada entrada antes de finalizar. Puedes editar descripcion e imagenes.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          if (entries.isEmpty)
+            Text(
+              'Agrega un concepto a la cotizacion para verlo aqui.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            Column(
+              children: [
+                for (var index = 0; index < entries.length; index++) ...[
+                  _CapturedEntryTile(
+                    index: index + 1,
+                    entry: entries[index],
+                    onEdit: () => onEdit(entries[index]),
+                  ),
+                  if (index < entries.length - 1) const Divider(height: 24),
+                ],
+              ],
+            ),
         ],
       ),
     );
