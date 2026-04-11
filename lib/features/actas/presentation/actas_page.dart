@@ -1708,13 +1708,13 @@ const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs 
   {descripcion_del_servicio}
 
   Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, 
-  Facturado a: {razon_social_del_cliente}
+  Facturado a: {nombre_del_cliente}
 
   Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.
 
   Se hace constar la Terminación del Proyecto de conformidad.
 
-  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un Año sin Costo Alguno para el {nombre_del_cliente}, con Razón Social a Nombre de: {razon_social_del_cliente}, 
+  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un Año sin Costo Alguno para: {nombre_del_cliente}, 
 
   Se Firma de Conformidad de Ambas partes:
 
