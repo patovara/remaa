@@ -1212,42 +1212,49 @@ class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
     final isMobile = MediaQuery.of(context).size.shortestSide < 700;
     final hasMultiple = widget.images.length > 1;
 
-    return Scaffold(
-      backgroundColor: Colors.black87,
-      body: SafeArea(
+    // Material(transparency) en lugar de Scaffold para que el barrier de showDialog
+    // sea visible y clicable. Scaffold llenaba la pantalla con color opaco bloqueando
+    // el dismiss-on-outside y los eventos del mouse para InteractiveViewer.
+    return Material(
+      type: MaterialType.transparency,
+      child: SafeArea(
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => Navigator.of(context).pop(),
           child: Stack(
             children: [
-              Center(
-                child: GestureDetector(
-                  onTap: () {}, // Consume taps on the image/PageView to prevent closing
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: widget.images.length,
-                    onPageChanged: (index) {
-                      setState(() => _currentIndex = index);
-                    },
-                    itemBuilder: (_, index) {
-                      return InteractiveViewer(
-                        minScale: 0.8,
-                        maxScale: 4.0,
+              Positioned.fill(
+                child: PageView.builder(
+                  controller: _pageController,
+                  itemCount: widget.images.length,
+                  onPageChanged: (index) {
+                    setState(() => _currentIndex = index);
+                  },
+                  itemBuilder: (_, index) {
+                    return InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4.0,
+                      child: Center(
                         child: Image.memory(widget.images[index], fit: BoxFit.contain),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ),
-              if (isMobile)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                    tooltip: 'Cerrar',
+              // Botón X siempre visible (mobile y desktop)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    shape: const CircleBorder(),
                   ),
+                  tooltip: 'Cerrar',
                 ),
+              ),
               if (!isMobile && hasMultiple) ...[
                 Positioned(
                   left: 12,
@@ -1257,6 +1264,10 @@ class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
                     child: IconButton(
                       onPressed: _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
                       icon: const Icon(Icons.chevron_left, size: 42, color: Colors.white),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black45,
+                        shape: const CircleBorder(),
+                      ),
                       tooltip: 'Anterior',
                     ),
                   ),
@@ -1271,6 +1282,10 @@ class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
                           ? () => _goTo(_currentIndex + 1)
                           : null,
                       icon: const Icon(Icons.chevron_right, size: 42, color: Colors.white),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black45,
+                        shape: const CircleBorder(),
+                      ),
                       tooltip: 'Siguiente',
                     ),
                   ),
