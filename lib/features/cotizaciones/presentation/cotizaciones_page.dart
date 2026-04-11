@@ -61,12 +61,12 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     };
 
     return PageFrame(
-      title: 'Gestion de Cotizaciones',
+      title: 'Gestión de Cotizaciones',
       subtitle: 'Resumen operativo y detalle de cotizaciones activas.',
       trailing: FilledButton.icon(
         onPressed: () => _openNewQuoteDialog(),
         icon: const Icon(Icons.add),
-        label: const Text('Nueva Cotizacion'),
+        label: const Text('Nueva Cotización'),
       ),
       child: quotesAsync.when(
         data: (quotes) {
@@ -76,7 +76,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
             children: [
               TextField(
                 decoration: const InputDecoration(
-                  hintText: 'Buscar cotizacion por folio...',
+                  hintText: 'Buscar cotización por folio...',
                   prefixIcon: Icon(Icons.search),
                 ),
                 onChanged: (value) => setState(() => _search = value.trim().toLowerCase()),
@@ -1342,7 +1342,7 @@ class _NewQuoteDialogState extends State<_NewQuoteDialog> {
     final compatibleProjectTypes = _compatibleProjectTypes(_universeId);
 
     return AlertDialog(
-      title: const Text('Nueva cotizacion'),
+      title: const Text('Nueva cotización'),
       content: SizedBox(
         width: 520,
         child: Column(

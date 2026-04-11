@@ -44,9 +44,9 @@ supabase db push
 
 En Supabase Dashboard -> Authentication -> URL Configuration:
 
-- Site URL: `https://staging-remaa.vercel.app`
+- Site URL: `https://remaa-staging.vercel.app`
 - Redirect URLs:
-  - `https://staging-remaa.vercel.app/*`
+   - `https://remaa-staging.vercel.app/*`
   - `http://localhost:3000/*`
 
 Verificar Email templates / links para que usen dominio staging.
@@ -59,7 +59,7 @@ Recomendado:
 
 Pasos:
 1. Crear proyecto Vercel para staging o usar Preview con alias fijo.
-2. Configurar dominio/alias: `staging-remaa.vercel.app`.
+2. Configurar dominio/alias: `remaa-staging.vercel.app`.
 3. Build Flutter web:
    - Build command: `flutter build web --dart-define=ENV_FILE=.env.staging`
    - Output: `build/web`
@@ -72,7 +72,7 @@ Pasos:
 Usar `.env.staging.example` como plantilla. Variables requeridas:
 
 - `APP_ENV=staging`
-- `APP_PUBLIC_URL=https://staging-remaa.vercel.app`
+- `APP_PUBLIC_URL=https://remaa-staging.vercel.app`
 - `SUPABASE_URL=<staging_url>`
 - `SUPABASE_ANON_KEY=<staging_anon_or_publishable_key>`
 - `ENABLE_BILLING=false`

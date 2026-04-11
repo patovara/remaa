@@ -283,7 +283,7 @@ class CatalogRowProcessor {
             'default_unit': defaultUnit,
             'base_price': basePrice,
           },
-          onConflict: 'universe_id,name',
+          onConflict: 'universe_id,project_type_id,name',
           ignoreDuplicates: true,
         )
         .select('id')
@@ -296,6 +296,7 @@ class CatalogRowProcessor {
         .from('concept_templates')
         .select('id')
         .eq('universe_id', universeId)
+        .eq('project_type_id', projectTypeId)
         .ilike('name', name)
         .single();
     return existing['id'] as String;

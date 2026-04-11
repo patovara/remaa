@@ -197,12 +197,20 @@ class ActiveLevantamientoController
     List<Uint8List> evidencePreviewList = const <Uint8List>[],
     List<SurveyEvidenceMeta> evidenceMetadata = const <SurveyEvidenceMeta>[],
   }) {
+    addEntryRecord(SurveyEntryRecord(
+      description: description,
+      evidencePreviewList: evidencePreviewList,
+      evidenceMetadata: evidenceMetadata,
+    ));
+  }
+
+  void addEntryRecord(SurveyEntryRecord record) {
     final current = state;
     if (current == null) return;
 
-    final trimmed = description.trim();
+    final trimmed = record.description.trim();
     final hasText = trimmed.isNotEmpty;
-    final hasEvidence = evidencePreviewList.isNotEmpty;
+    final hasEvidence = record.evidencePreviewList.isNotEmpty;
     if (!hasText && !hasEvidence) {
       return;
     }
@@ -210,7 +218,8 @@ class ActiveLevantamientoController
     final latest = current.entries.isNotEmpty ? current.entries.last : null;
     final isDuplicate = latest != null &&
         latest.description.trim() == trimmed &&
-        latest.evidencePreviewList.length == evidencePreviewList.length;
+        latest.evidencePreviewList.length == record.evidencePreviewList.length &&
+        (record.id != null ? latest.id == record.id : true);
     if (isDuplicate) {
       return;
     }
@@ -218,17 +227,32 @@ class ActiveLevantamientoController
     final nextEntries = <SurveyEntryRecord>[
       ...current.entries,
       SurveyEntryRecord(
+        id: record.id,
+        projectId: record.projectId,
+        quoteId: record.quoteId,
         description: trimmed,
-        evidencePreviewList: evidencePreviewList,
-        evidenceMetadata: evidenceMetadata,
+        evidencePaths: record.evidencePaths,
+        evidencePreviewList: record.evidencePreviewList,
+        evidenceMetadata: record.evidenceMetadata,
+        createdAt: record.createdAt,
       ),
     ];
 
     state = current.copyWith(
       entries: nextEntries,
-      evidenceCount: evidencePreviewList.length,
-      evidencePreviewList: evidencePreviewList,
+      evidenceCount: record.evidencePreviewList.length,
+      evidencePreviewList: record.evidencePreviewList,
     );
+  }
+
+  void updateEntry(String entryId, SurveyEntryRecord updated) {
+    final current = state;
+    if (current == null) return;
+    final nextEntries = [
+      for (final e in current.entries)
+        if (e.id == entryId) updated else e,
+    ];
+    state = current.copyWith(entries: nextEntries);
   }
 
   /// Actualiza solo el snapshot de campos del formulario sin cambiar el resto.

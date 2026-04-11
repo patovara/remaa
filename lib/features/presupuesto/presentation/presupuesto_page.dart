@@ -42,7 +42,7 @@ class PresupuestoPage extends ConsumerWidget {
 
     return PageFrame(
       title: 'Presupuesto',
-      subtitle: 'Vista formal de cotizacion ajustada para revision y envio.',
+      subtitle: 'Vista formal de cotización ajustada para revisión y envío.',
       trailing: Wrap(
         spacing: 4,
         runSpacing: 4,
@@ -124,7 +124,7 @@ class PresupuestoPage extends ConsumerWidget {
         data: (quotes) {
           final quote = _findQuote(quotes, quoteId);
           if (quote == null) {
-            return const RemaPanel(child: Text('No se encontro la cotizacion solicitada.'));
+            return const RemaPanel(child: Text('No se encontró la cotización solicitada.'));
           }
 
           return itemsState.when(
@@ -153,7 +153,7 @@ class PresupuestoPage extends ConsumerWidget {
             error: (error, stack) => RemaPanel(
               child: Column(
                 children: [
-                  const Text('No se pudieron cargar los conceptos de la cotizacion.'),
+                  const Text('No se pudieron cargar los conceptos de la cotización.'),
                   const SizedBox(height: 8),
                   Text(error.toString()),
                 ],
@@ -163,7 +163,7 @@ class PresupuestoPage extends ConsumerWidget {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => RemaPanel(
-          child: Text('No se pudo cargar la cotizacion: $error'),
+          child: Text('No se pudo cargar la cotización: $error'),
         ),
       ),
     );
@@ -184,8 +184,8 @@ class PresupuestoPage extends ConsumerWidget {
         return;
       }
       final message = switch (nextStatus) {
-        QuoteStatus.concluded => 'Cotizacion concluida. Ya puedes adjuntar el PDF de aprobacion.',
-        QuoteStatus.draft => 'Cotizacion reabierta para edicion.',
+        QuoteStatus.concluded => 'Cotización concluida. Ya puedes adjuntar el PDF de aprobación.',
+        QuoteStatus.draft => 'Cotización reabierta para edición.',
         _ => 'Estado actualizado.',
       };
       showRemaMessage(context, message);
@@ -226,7 +226,7 @@ class PresupuestoPage extends ConsumerWidget {
   ) async {
     final catalog = catalogState.valueOrNull;
     if (catalog == null) {
-      showRemaMessage(context, 'Catalogo no disponible aun.');
+      showRemaMessage(context, 'Catálogo no disponible aún.');
       return;
     }
 
@@ -245,7 +245,7 @@ class PresupuestoPage extends ConsumerWidget {
 
     await ref.read(quoteItemsProvider(quote.id).notifier).save(result.item);
     if (context.mounted) {
-      showRemaMessage(context, 'Concepto guardado en cotizacion.');
+      showRemaMessage(context, 'Concepto guardado en cotización.');
     }
   }
 
@@ -260,7 +260,7 @@ class PresupuestoPage extends ConsumerWidget {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Eliminar concepto'),
         content: Text(
-          'Se eliminara este concepto de la cotizacion:\n\n${item.concept}',
+          'Se eliminará este concepto de la cotización:\n\n${item.concept}',
         ),
         actions: [
           TextButton(
@@ -281,7 +281,7 @@ class PresupuestoPage extends ConsumerWidget {
 
     await ref.read(quoteItemsProvider(quote.id).notifier).remove(item.id);
     if (context.mounted) {
-      showRemaMessage(context, 'Concepto eliminado de la cotizacion.');
+      showRemaMessage(context, 'Concepto eliminado de la cotización.');
     }
   }
 
@@ -292,10 +292,11 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
       format: PdfPageFormat.letter,
-      name: 'cotizacion_${quote.quoteNumber}.pdf',
+      name: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
     );
   }
 
@@ -306,12 +307,13 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'cotizacion_${quote.quoteNumber}.pdf',
+      filename: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
     );
     if (context.mounted) {
-      showRemaMessage(context, 'Cotizacion lista para descarga.');
+      showRemaMessage(context, 'Cotización lista para descarga.');
     }
   }
 
@@ -322,12 +324,13 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
   }) async {
     final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'cotizacion_${quote.quoteNumber}.pdf',
+      filename: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
     );
     if (context.mounted) {
-      showRemaMessage(context, 'Cotizacion lista para compartir.');
+      showRemaMessage(context, 'Cotización lista para compartir.');
     }
   }
 
@@ -545,8 +548,8 @@ class PresupuestoPage extends ConsumerWidget {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('COTIZACION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  pw.Text('Folio: ${quote.quoteNumber}'),
+                  pw.Text('COTIZACIÓN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                  pw.Text('Folio: ${_displayQuoteFolio(quote.quoteNumber)}'),
                   pw.Text('Fecha: $dateLabel'),
                   pw.Text('Estado: ${quote.status.toUpperCase()}'),
                 ],
@@ -571,9 +574,9 @@ class PresupuestoPage extends ConsumerWidget {
                 pw.SizedBox(height: 6),
                 pw.Row(
                   children: [
-                    pw.Expanded(child: _pdfHeaderField('Direccion', quoteContext.address)),
+                    pw.Expanded(child: _pdfHeaderField('Dirección', quoteContext.address)),
                     pw.SizedBox(width: 8),
-                    pw.Expanded(child: _pdfHeaderField('Ubicacion', quoteContext.location)),
+                    pw.Expanded(child: _pdfHeaderField('Ubicación', quoteContext.location)),
                   ],
                 ),
                 pw.SizedBox(height: 6),
@@ -581,7 +584,7 @@ class PresupuestoPage extends ConsumerWidget {
                   children: [
                     pw.Expanded(child: _pdfHeaderField('Universo', universeLabel)),
                     pw.SizedBox(width: 8),
-                    pw.Expanded(child: _pdfHeaderField('Tipo de remodelacion', projectTypeLabel)),
+                    pw.Expanded(child: _pdfHeaderField('Tipo de remodelación', projectTypeLabel)),
                   ],
                 ),
               ],
@@ -652,6 +655,8 @@ class PresupuestoPage extends ConsumerWidget {
               ),
             ),
           ),
+          pw.SizedBox(height: 12),
+          _pdfGeneralConceptsAndBankData(),
         ],
       ),
     );
@@ -701,7 +706,7 @@ pw.Widget _pdfEvidenceBlocks({
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Registro fotografico',
+          'Registro fotográfico',
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5),
         ),
         pw.SizedBox(height: 6),
@@ -723,6 +728,73 @@ pw.Widget _pdfEvidenceBlocks({
         ),
       ],
     ),
+  );
+}
+
+pw.Widget _pdfGeneralConceptsAndBankData() {
+  final leftStyle = pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800);
+  final rightStyle = pw.TextStyle(fontSize: 9, color: PdfColors.black);
+
+  return pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Expanded(
+        flex: 3,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'CONCEPTOS GENERALES:',
+              style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text('1.- ESTE ES UN PRESUPUESTO BASADO EN LA INFORMACIÓN QUE SE NOS PROPORCIONO.', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('2.- PRECIOS SUJETOS A CAMBIOS SIN PREVIO AVISO.', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('3.- CONDICIONES DE PAGO ( costos + iva )', style: leftStyle),
+            pw.Text('    ( DE ACUERDO A LOS ACUERDOS EN CONTRATO )', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('4.- TIEMPO DE ENTREGA', style: leftStyle),
+            pw.Text('    ( CALENDARIO DE OBRA POR DISPOSICIÓN DE ÁREAS )', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('5.- FORMAS DE PAGO', style: leftStyle),
+            pw.Text('    ( TRANSFERENCIA ELECTRONICA ) + ( EFECTIVO )', style: leftStyle),
+            pw.SizedBox(height: 2),
+            pw.Text('6.- VIGENCIA DE COSTOS', style: leftStyle),
+            pw.Text('    ( 5 DÍAS )', style: leftStyle),
+          ],
+        ),
+      ),
+      pw.SizedBox(width: 24),
+      pw.Expanded(
+        flex: 2,
+        child: pw.Align(
+          alignment: pw.Alignment.topRight,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text(
+                'DATOS BANCARIOS FACTURACION',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  decoration: pw.TextDecoration.underline,
+                ),
+                textAlign: pw.TextAlign.right,
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text('SOLUCIONES INTEGRALES SUSTENTABLES', style: rightStyle, textAlign: pw.TextAlign.right),
+              pw.Text('INTELIGENTES Y DINAMICAS REMA, S.A.S. DE C.V.', style: rightStyle, textAlign: pw.TextAlign.right),
+              pw.SizedBox(height: 10),
+              pw.Text('SANTANDER', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.Text('65-50868153-1', style: rightStyle),
+              pw.Text('014691 655086815 315', style: rightStyle),
+            ],
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -799,11 +871,11 @@ class _BudgetViewState extends State<_BudgetView> {
                         : CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'COTIZACION',
+                        'COTIZACIÓN',
                         style: Theme.of(context).textTheme.headlineLarge?.copyWith(color: RemaColors.primaryDark),
                       ),
                       const SizedBox(height: 6),
-                      Text('FOLIO: ${widget.quote.quoteNumber}'),
+                      Text('FOLIO: ${_displayQuoteFolio(widget.quote.quoteNumber)}'),
                       Text('FECHA: ${_date(widget.quote.validUntil ?? DateTime.now())}'),
                       Text('ESTADO: ${widget.quote.status.toUpperCase()}'),
                     ],
@@ -839,10 +911,10 @@ class _BudgetViewState extends State<_BudgetView> {
                     children: [
                       _ContextField(label: 'Proyecto', value: context.projectName),
                       _ContextField(label: 'Cliente', value: context.clientName),
-                      _ContextField(label: 'Direccion', value: context.address),
-                      _ContextField(label: 'Ubicacion', value: context.location),
+                      _ContextField(label: 'Dirección', value: context.address),
+                      _ContextField(label: 'Ubicación', value: context.location),
                       _ContextField(label: 'Universo', value: widget.universeLabel),
-                      _ContextField(label: 'Tipo de remodelacion', value: widget.projectTypeLabel),
+                      _ContextField(label: 'Tipo de remodelación', value: widget.projectTypeLabel),
                     ],
                   ),
                 ),
@@ -881,75 +953,66 @@ class _BudgetViewState extends State<_BudgetView> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final isMobile = constraints.maxWidth < 600;
-                  final table = SingleChildScrollView(
-                    controller: _tableScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('Concepto / Descripcion')),
-                        DataColumn(label: Text('Unidad')),
-                        DataColumn(label: Text('Cant.')),
-                        DataColumn(label: Text('P.U.')),
-                        DataColumn(label: Text('Importe')),
-                        DataColumn(label: Text('Acciones')),
-                      ],
-                      rows: [
-                        for (final item in widget.items)
-                          DataRow(cells: [
-                            DataCell(
-                              SizedBox(
-                                width: 520,
-                                child: Text(
-                                  item.concept,
-                                  softWrap: true,
+                  final conceptColumnWidth = isMobile ? 520.0 : (constraints.maxWidth * 0.42).clamp(340.0, 520.0);
+                  final dataTable = DataTable(
+                    dataRowMinHeight: 56,
+                    dataRowMaxHeight: 220,
+                    columnSpacing: isMobile ? 20 : 12,
+                    columns: const [
+                      DataColumn(label: Text('Concepto / Descripcion')),
+                      DataColumn(label: Text('Unidad')),
+                      DataColumn(label: Text('Cant.')),
+                      DataColumn(label: Text('P.U.')),
+                      DataColumn(label: Text('Importe')),
+                      DataColumn(label: Text('Acciones')),
+                    ],
+                    rows: [
+                      for (final item in widget.items)
+                        DataRow(cells: [
+                          DataCell(
+                            SizedBox(
+                              width: conceptColumnWidth,
+                              child: Text(
+                                _cleanConceptText(item.concept),
+                                softWrap: true,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(item.unit)),
+                          DataCell(Text(item.quantity.toStringAsFixed(2))),
+                          DataCell(Text(_money(item.unitPrice))),
+                          DataCell(Text(_money(item.lineTotal))),
+                          DataCell(
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: widget.canEditItems ? () => widget.onEditItem(item) : null,
                                 ),
-                              ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: widget.canEditItems ? () => widget.onDeleteItem(item) : null,
+                                ),
+                              ],
                             ),
-                            DataCell(Text(item.unit)),
-                            DataCell(Text(item.quantity.toStringAsFixed(2))),
-                            DataCell(Text(_money(item.unitPrice))),
-                            DataCell(Text(_money(item.lineTotal))),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined),
-                                    onPressed: widget.canEditItems ? () => widget.onEditItem(item) : null,
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: widget.canEditItems ? () => widget.onDeleteItem(item) : null,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ]),
-                      ],
-                    ),
+                          ),
+                        ]),
+                    ],
                   );
+
+                  final table = isMobile
+                      ? SingleChildScrollView(
+                          controller: _tableScrollController,
+                          scrollDirection: Axis.horizontal,
+                          child: dataTable,
+                        )
+                      : SizedBox(width: double.infinity, child: dataTable);
 
                   if (isMobile) {
                     return table;
                   }
 
-                  return MouseRegion(
-                    onEnter: (_) => setState(() => _showHorizontalScrollbar = true),
-                    onExit: (_) => setState(() => _showHorizontalScrollbar = false),
-                    child: RawScrollbar(
-                      controller: _tableScrollController,
-                      scrollbarOrientation: ScrollbarOrientation.bottom,
-                      thumbVisibility: _showHorizontalScrollbar,
-                      trackVisibility: _showHorizontalScrollbar,
-                      notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
-                      thumbColor: RemaColors.primary,
-                      trackColor: RemaColors.surfaceLow,
-                      mainAxisMargin: 2,
-                      crossAxisMargin: 2,
-                      radius: const Radius.circular(10),
-                      thickness: 5,
-                      child: table,
-                    ),
-                  );
+                  return table;
                 },
               ),
               const SizedBox(height: 24),
@@ -1000,6 +1063,8 @@ class _BudgetViewState extends State<_BudgetView> {
                   );
                 },
               ),
+              const SizedBox(height: 20),
+              const _GeneralConceptsAndBankDataSection(),
             ],
           ),
         ),
@@ -1033,6 +1098,101 @@ class _TotalRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _GeneralConceptsAndBankDataSection extends StatelessWidget {
+  const _GeneralConceptsAndBankDataSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 800;
+
+        final concepts = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'CONCEPTOS GENERALES:',
+              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text('1.- ESTE ES UN PRESUPUESTO BASADO EN LA INFORMACIÓN QUE SE NOS PROPORCIONO.', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('2.- PRECIOS SUJETOS A CAMBIOS SIN PREVIO AVISO.', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('3.- CONDICIONES DE PAGO ( costos + iva )', style: textTheme.bodyMedium),
+            Text('( DE ACUERDO A LOS ACUERDOS EN CONTRATO )', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('4.- TIEMPO DE ENTREGA', style: textTheme.bodyMedium),
+            Text('( CALENDARIO DE OBRA POR DISPOSICIÓN DE ÁREAS )', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('5.- FORMAS DE PAGO', style: textTheme.bodyMedium),
+            Text('( TRANSFERENCIA ELECTRONICA ) + ( EFECTIVO )', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('6.- VIGENCIA DE COSTOS', style: textTheme.bodyMedium),
+            Text('( 5 DÍAS )', style: textTheme.bodyMedium),
+          ],
+        );
+
+        final bank = Column(
+          crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          children: [
+            Text(
+              'DATOS BANCARIOS FACTURACION',
+              style: textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                decoration: TextDecoration.underline,
+              ),
+              textAlign: isMobile ? TextAlign.left : TextAlign.right,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'SOLUCIONES INTEGRALES SUSTENTABLES\nINTELIGENTES Y DINAMICAS REMA, S.A.S. DE C.V.',
+              style: textTheme.bodyMedium,
+              textAlign: isMobile ? TextAlign.left : TextAlign.right,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'SANTANDER',
+              style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              textAlign: isMobile ? TextAlign.left : TextAlign.right,
+            ),
+            Text('65-50868153-1', style: textTheme.bodyMedium),
+            Text('014691 655086815 315', style: textTheme.bodyMedium),
+          ],
+        );
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: RemaColors.surfaceLow,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: RemaColors.outlineVariant.withValues(alpha: 0.35)),
+          ),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    concepts,
+                    const SizedBox(height: 18),
+                    bank,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: concepts),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 2, child: bank),
+                  ],
+                ),
+        );
+      },
     );
   }
 }
@@ -1081,7 +1241,7 @@ class _LevantamientoEntryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            hasDescription ? entry.description : 'Sin descripcion de texto en este registro.',
+            hasDescription ? entry.description : 'Sin descripción de texto en este registro.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           if (hasEvidence) ...[
@@ -1103,6 +1263,23 @@ class _LevantamientoEntryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _displayQuoteFolio(String value) {
+  final normalized = value.trim().toUpperCase();
+  if (normalized.isEmpty) {
+    return value.trim();
+  }
+  String? structured;
+  for (final match in RegExp(r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}').allMatches(normalized)) {
+    structured = match.group(0);
+  }
+  return structured ?? value.trim();
+}
+
+String _sanitizeFolioForFileName(String folio) {
+  final cleaned = folio.trim().replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
+  return cleaned.isEmpty ? 'sin_folio' : cleaned;
 }
 
 class _EvidenceThumb extends StatelessWidget {
@@ -1147,6 +1324,7 @@ Future<void> _openImagePreview(
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black87,
+    barrierDismissible: true,
     builder: (context) => _EvidencePreviewDialog(
       images: images,
       initialIndex: safeInitialIndex,
@@ -1200,18 +1378,18 @@ class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
     final isMobile = MediaQuery.of(context).size.shortestSide < 700;
     final hasMultiple = widget.images.length > 1;
 
-    return Scaffold(
-      backgroundColor: Colors.black87,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(color: Colors.transparent),
-            ),
-            Center(
-              child: GestureDetector(
-                onTap: () {},
+    // Material(transparency) en lugar de Scaffold para que el barrier de showDialog
+    // sea visible y clicable. Scaffold llenaba la pantalla con color opaco bloqueando
+    // el dismiss-on-outside y los eventos del mouse para InteractiveViewer.
+    return Material(
+      type: MaterialType.transparency,
+      child: SafeArea(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).pop(),
+          child: Stack(
+            children: [
+              Positioned.fill(
                 child: PageView.builder(
                   controller: _pageController,
                   itemCount: widget.images.length,
@@ -1222,51 +1400,65 @@ class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
                     return InteractiveViewer(
                       minScale: 0.8,
                       maxScale: 4.0,
-                      child: Image.memory(widget.images[index], fit: BoxFit.contain),
+                      child: Center(
+                        child: Image.memory(widget.images[index], fit: BoxFit.contain),
+                      ),
                     );
                   },
                 ),
               ),
-            ),
-            if (isMobile)
+              // Botón X siempre visible (mobile y desktop)
               Positioned(
                 top: 8,
                 right: 8,
                 child: IconButton(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    shape: const CircleBorder(),
+                  ),
                   tooltip: 'Cerrar',
                 ),
               ),
-            if (!isMobile && hasMultiple) ...[
-              Positioned(
-                left: 12,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    onPressed: _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
-                    icon: const Icon(Icons.chevron_left, size: 42, color: Colors.white),
-                    tooltip: 'Anterior',
+              if (!isMobile && hasMultiple) ...[
+                Positioned(
+                  left: 12,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: IconButton(
+                      onPressed: _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
+                      icon: const Icon(Icons.chevron_left, size: 42, color: Colors.white),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black45,
+                        shape: const CircleBorder(),
+                      ),
+                      tooltip: 'Anterior',
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                right: 12,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    onPressed: _currentIndex < widget.images.length - 1
-                        ? () => _goTo(_currentIndex + 1)
-                        : null,
-                    icon: const Icon(Icons.chevron_right, size: 42, color: Colors.white),
-                    tooltip: 'Siguiente',
+                Positioned(
+                  right: 12,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: IconButton(
+                      onPressed: _currentIndex < widget.images.length - 1
+                          ? () => _goTo(_currentIndex + 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_right, size: 42, color: Colors.white),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black45,
+                        shape: const CircleBorder(),
+                      ),
+                      tooltip: 'Siguiente',
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -1382,7 +1574,7 @@ class _PdfConceptSplit {
 }
 
 _PdfConceptSplit _splitConceptForPdf(String rawConcept) {
-  final normalized = rawConcept.replaceAll('\r\n', '\n').trim();
+  final normalized = _cleanConceptText(rawConcept);
   if (normalized.isEmpty) {
     return const _PdfConceptSplit(mainText: '-');
   }
@@ -1405,6 +1597,28 @@ _PdfConceptSplit _splitConceptForPdf(String rawConcept) {
     mainText: mainPart.isEmpty ? '-' : mainPart,
     includeText: includePart.isEmpty ? null : includePart,
   );
+}
+
+String _cleanConceptText(String rawConcept) {
+  var text = rawConcept.replaceAll('\r\n', '\n').trim();
+  if (text.isEmpty) {
+    return '-';
+  }
+
+  // Remove parenthetical fragments already represented in structured columns.
+  text = text.replaceAll(RegExp(r'\([^\)]*\)'), ' ');
+
+  // Remove explicit unit fragments because unit is shown in its own table column.
+  text = text.replaceAll(RegExp(r'\bunidad\s*:\s*[^\n\.,;]+[\.,;]?', caseSensitive: false), ' ');
+
+  // Normalize spacing while preserving line breaks.
+  text = text
+      .split('\n')
+      .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((line) => line.isNotEmpty)
+      .join('\n');
+
+  return text.isEmpty ? '-' : text;
 }
 
 String _amountInText(double value) {

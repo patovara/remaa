@@ -139,10 +139,15 @@ class QuotesRepository {
     required String description,
     String? clientId,
   }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      throw StateError('El proyecto debe tener nombre.');
+    }
+
     final normalized = ProjectLookup(
       id: projectId,
       code: _projectCodeById(projectId),
-      name: name.trim().isEmpty ? 'Proyecto sin nombre' : name.trim(),
+      name: normalizedName,
       clientId: clientId,
       siteAddress: address.trim(),
       description: description.trim(),
@@ -192,7 +197,7 @@ class QuotesRepository {
           QuoteRecord(
             id: row['id'] as String,
             projectId: row['project_id'] as String? ?? '',
-            quoteNumber: row['quote_number'] as String? ?? '',
+            quoteNumber: _normalizeQuoteNumber(row['quote_number'] as String?),
             status: row['status'] as String? ?? 'draft',
             universeId: row['universe_id'] as String? ?? '',
             projectTypeId: row['project_type_id'] as String? ?? '',
@@ -269,7 +274,7 @@ class QuotesRepository {
       return QuoteRecord(
         id: inserted['id'] as String,
         projectId: inserted['project_id'] as String? ?? '',
-        quoteNumber: inserted['quote_number'] as String? ?? quoteNumber,
+        quoteNumber: _normalizeQuoteNumber(inserted['quote_number'] as String? ?? quoteNumber),
         status: inserted['status'] as String? ?? 'draft',
         universeId: inserted['universe_id'] as String? ?? universeId,
         projectTypeId: inserted['project_type_id'] as String? ?? projectTypeId,
@@ -656,7 +661,7 @@ class QuotesRepository {
       return ProjectLookup(
         id: row['id'] as String? ?? projectId,
         code: _normalizeProjectCode(row['code'] as String?, row['id'] as String? ?? projectId),
-        name: row['name'] as String? ?? 'Proyecto sin nombre',
+        name: (row['name'] as String? ?? '').trim(),
         clientId: row['client_id'] as String?,
         siteAddress: row['site_address'] as String?,
         description: row['description'] as String?,
@@ -840,13 +845,18 @@ class QuotesRepository {
         );
         return QuoteContextInfo(
           projectName: project.name,
-          clientName: localClient.name,
+          clientName: _resolveClientDisplayName(
+            contactName: localClient.contactName,
+            businessName: localClient.name,
+          ),
           address: _normalizeAddressForQuote(
             address: _firstNonEmpty([
               project.siteAddress,
               localClient.address,
             ]),
             location: location,
+            city: localClient.city,
+            state: localClient.state,
           ),
           location: location,
           description: project.description ?? '',
@@ -857,10 +867,13 @@ class QuotesRepository {
         try {
           final clientRow = await client
               .from('clients')
-              .select('business_name, address_line, city, state')
+              .select('business_name, contact_name, address_line, city, state')
               .eq('id', localClientId)
               .single();
-          final clientName = clientRow['business_name'] as String? ?? '';
+          final clientName = _resolveClientDisplayName(
+            contactName: clientRow['contact_name'] as String?,
+            businessName: clientRow['business_name'] as String?,
+          );
           final addressLine = clientRow['address_line'] as String? ?? '';
           final normalizedLocation = _normalizeLocationParts(
             city: clientRow['city'] as String?,
@@ -879,6 +892,8 @@ class QuotesRepository {
                 addressLine,
               ]),
               location: location,
+              city: normalizedLocation.city,
+              state: normalizedLocation.state,
             ),
             location: location,
             description: project.description ?? '',
@@ -919,11 +934,14 @@ class QuotesRepository {
 
       final clientRow = await client
           .from('clients')
-          .select('business_name, address_line, city, state')
+          .select('business_name, contact_name, address_line, city, state')
           .eq('id', clientId)
           .single();
 
-      final clientName = clientRow['business_name'] as String? ?? '';
+      final clientName = _resolveClientDisplayName(
+        contactName: clientRow['contact_name'] as String?,
+        businessName: clientRow['business_name'] as String?,
+      );
       final addressLine = clientRow['address_line'] as String? ?? '';
       final normalizedLocation = _normalizeLocationParts(
         city: clientRow['city'] as String?,
@@ -940,6 +958,8 @@ class QuotesRepository {
         address: _normalizeAddressForQuote(
           address: _firstNonEmpty([address, addressLine]),
           location: location,
+          city: normalizedLocation.city,
+          state: normalizedLocation.state,
         ),
         location: location,
         description: description,
@@ -964,6 +984,17 @@ class QuotesRepository {
       }
     }
     return '';
+  }
+
+  String _resolveClientDisplayName({
+    String? contactName,
+    String? businessName,
+  }) {
+    final preferredContact = (contactName ?? '').trim();
+    if (preferredContact.isNotEmpty) {
+      return preferredContact;
+    }
+    return (businessName ?? '').trim();
   }
 
   ({String city, String state}) _normalizeLocationParts({
@@ -1005,17 +1036,32 @@ class QuotesRepository {
   String _normalizeAddressForQuote({
     required String address,
     required String location,
+    String? city,
+    String? state,
   }) {
     var normalized = address.trim();
     final locationNormalized = location.trim();
-    if (normalized.isEmpty || locationNormalized.isEmpty) {
+    if (normalized.isEmpty) {
       return normalized;
     }
 
-    final suffix = ', $locationNormalized';
-    while (normalized.toLowerCase().endsWith(suffix.toLowerCase())) {
-      normalized = normalized.substring(0, normalized.length - suffix.length).trimRight();
-      normalized = normalized.replaceAll(RegExp(r'[\s,]+$'), '');
+    final trailingTokens = <String>{
+      if (locationNormalized.isNotEmpty) locationNormalized,
+      if ((state ?? '').trim().isNotEmpty) state!.trim(),
+      if ((city ?? '').trim().isNotEmpty) city!.trim(),
+    };
+
+    var updated = true;
+    while (updated) {
+      updated = false;
+      for (final token in trailingTokens) {
+        final suffix = ', $token';
+        if (normalized.toLowerCase().endsWith(suffix.toLowerCase())) {
+          normalized = normalized.substring(0, normalized.length - suffix.length).trimRight();
+          normalized = normalized.replaceAll(RegExp(r'[\s,]+$'), '');
+          updated = true;
+        }
+      }
     }
     return normalized;
   }
@@ -1074,28 +1120,57 @@ class QuotesRepository {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final quoteFolder = _isUuid(quoteId ?? '') ? quoteId! : 'no-quote';
       final evidencePaths = <String>[];
+      final failedUploads = <int>[];
 
       final evidenceMetaMaps = <Map<String, Object?>>[];
+      
+      // Upload with automatic retry for network resilience
       for (var index = 0; index < limitedInputs.length; index++) {
         final input = limitedInputs[index];
         final ext = _guessImageExtension(input.originalName);
         final objectPath = '$projectId/$quoteFolder/${timestamp}_$index.$ext';
-        await client.storage.from('survey-photos').uploadBinary(
+        
+        var uploadSucceeded = false;
+        var retryCount = 0;
+        const maxRetries = 2;
+        
+        while (retryCount <= maxRetries && !uploadSucceeded) {
+          try {
+            await client.storage.from('survey-photos').uploadBinary(
               objectPath,
               input.bytes,
               fileOptions: const FileOptions(upsert: true),
             );
-        evidencePaths.add(objectPath);
-        evidenceMetaMaps.add({
-          'object_path': objectPath,
-          'original_name': input.originalName,
-          'mime_type': input.mimeType,
-          'file_size_bytes': input.fileSizeBytes,
-          'sort_order': index,
-          'width_px': null,
-          'height_px': null,
-          'taken_at': null,
-        });
+            uploadSucceeded = true;
+            evidencePaths.add(objectPath);
+          } catch (e) {
+            retryCount++;
+            if (retryCount > maxRetries) {
+              AppLogger.error('evidence_upload_failed_after_retries', data: {
+                'objectPath': objectPath,
+                'retries': retryCount,
+                'error': e.toString(),
+              });
+              failedUploads.add(index);
+            } else {
+              // Brief delay before retry (exponential backoff)
+              await Future.delayed(Duration(milliseconds: 100 * retryCount));
+            }
+          }
+        }
+        
+        if (uploadSucceeded) {
+          evidenceMetaMaps.add({
+            'object_path': objectPath,
+            'original_name': input.originalName,
+            'mime_type': input.mimeType,
+            'file_size_bytes': input.fileSizeBytes,
+            'sort_order': index,
+            'width_px': null,
+            'height_px': null,
+            'taken_at': null,
+          });
+        }
       }
 
       // Get current user for ownership tracking
@@ -1129,7 +1204,7 @@ class QuotesRepository {
         evidenceMetadata: [
           for (var index = 0; index < limitedInputs.length; index++)
             SurveyEvidenceMeta(
-              objectPath: evidencePaths[index],
+              objectPath: index < evidencePaths.length ? evidencePaths[index] : '',
               originalName: limitedInputs[index].originalName,
               fileSizeBytes: limitedInputs[index].fileSizeBytes,
               sortOrder: index,
@@ -1232,9 +1307,27 @@ class QuotesRepository {
               }
             }),
           );
-          for (final bytes in downloads) {
+          for (var i = 0; i < downloads.length; i++) {
+            final bytes = downloads[i];
             if (bytes != null) {
               evidence.add(bytes);
+            } else if (i < sources.length && sources[i].startsWith('local://')) {
+              // Fallback: Si la imagen no se puede descargar pero está marcada como local,
+              // intenta recuperar desde _localSurveyEntries si existe
+              final entryId = row['id'] as String?;
+              if (entryId != null) {
+                final localItems = _localSurveyEntries[projectId] ?? const <SurveyEntryRecord>[];
+                final localEntry = localItems
+                    .where((item) => item.id == entryId)
+                    .cast<SurveyEntryRecord?>()
+                    .firstWhere(
+                      (item) => item != null,
+                      orElse: () => null,
+                    );
+                if (localEntry != null && i < localEntry.evidencePreviewList.length) {
+                  evidence.add(localEntry.evidencePreviewList[i]);
+                }
+              }
             }
           }
         }
@@ -1472,8 +1565,9 @@ class QuotesRepository {
       client: client,
       projectKey: projectKey,
     );
-    if (_isStructuredProjectKey(projectCode)) {
-      return projectCode;
+    final extractedStructured = _extractStructuredProjectKey(projectCode);
+    if (extractedStructured != null) {
+      return extractedStructured;
     }
 
     final clientCode = await _resolveClientCode(projectId: projectId, client: client);
@@ -1493,6 +1587,10 @@ class QuotesRepository {
   }) async {
     final manual = (projectKey ?? '').trim().toUpperCase();
     if (manual.isNotEmpty) {
+      final extractedStructured = _extractStructuredProjectKey(manual);
+      if (extractedStructured != null) {
+        return extractedStructured;
+      }
       return manual;
     }
 
@@ -1541,9 +1639,25 @@ class QuotesRepository {
     return _nextLocalProjectKey();
   }
 
-  bool _isStructuredProjectKey(String value) {
+  String? _extractStructuredProjectKey(String value) {
     final normalized = value.trim().toUpperCase();
-    return RegExp(r'^RM-[A-Z]{3}-[0-9]{3,}-[A-Z]{4}-PRJ[0-9]{3,}$').hasMatch(normalized);
+    if (normalized.isEmpty) {
+      return null;
+    }
+    String? lastMatch;
+    for (final match in RegExp(r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}').allMatches(normalized)) {
+      lastMatch = match.group(0);
+    }
+    return lastMatch;
+  }
+
+  String _normalizeQuoteNumber(String? raw) {
+    final source = (raw ?? '').trim();
+    if (source.isEmpty) {
+      return '';
+    }
+    final structured = _extractStructuredProjectKey(source);
+    return structured ?? source;
   }
 
   String _nextLocalProjectKey() {
@@ -1660,6 +1774,10 @@ class QuotesRepository {
 
   String _normalizeProjectCode(String? code, String projectId) {
     final source = (code ?? '').toUpperCase().trim();
+    final extractedStructured = _extractStructuredProjectKey(source);
+    if (extractedStructured != null) {
+      return extractedStructured;
+    }
     final digits = RegExp(r'\d+').allMatches(source).map((m) => m.group(0)!).join();
     if (digits.isNotEmpty) {
       return 'PRJ${digits.padLeft(3, '0').substring(digits.length > 3 ? digits.length - 3 : 0)}';

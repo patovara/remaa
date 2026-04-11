@@ -38,9 +38,12 @@ migrate_working_dir/
 !.env.example
 !.env.production
 !.env.alpha.example
+!.env.staging.example
 !build/web/assets/.env.production
+!build/web/assets/.env.staging
 supabase/.env.*
 !supabase/.env.example
+!supabase/.env.staging.example
 supabase/.temp/
 .rema_functions.*
 start_rema.sh

@@ -15,11 +15,16 @@ Future<void> main() async {
     usePathUrlStrategy();
   }
   const envFileFromDefine = String.fromEnvironment('ENV_FILE', defaultValue: '');
+  final webHost = kIsWeb ? Uri.base.host.toLowerCase() : '';
+  final looksLikeStagingHost =
+      webHost.contains('staging') || webHost.contains('develop') || webHost.contains('preview');
 
   final candidates = <String>[
     if (envFileFromDefine.isNotEmpty) envFileFromDefine,
+    if (envFileFromDefine.isEmpty && kReleaseMode && looksLikeStagingHost) '.env.staging',
     if (envFileFromDefine.isEmpty && kReleaseMode) '.env.production',
     if (envFileFromDefine.isEmpty && !kReleaseMode) '.env',
+    '.env.staging',
     '.env.production',
     '.env',
     '.env.example',
