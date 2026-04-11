@@ -881,75 +881,66 @@ class _BudgetViewState extends State<_BudgetView> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final isMobile = constraints.maxWidth < 600;
-                  final table = SingleChildScrollView(
-                    controller: _tableScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('Concepto / Descripcion')),
-                        DataColumn(label: Text('Unidad')),
-                        DataColumn(label: Text('Cant.')),
-                        DataColumn(label: Text('P.U.')),
-                        DataColumn(label: Text('Importe')),
-                        DataColumn(label: Text('Acciones')),
-                      ],
-                      rows: [
-                        for (final item in widget.items)
-                          DataRow(cells: [
-                            DataCell(
-                              SizedBox(
-                                width: 520,
-                                child: Text(
-                                  item.concept,
-                                  softWrap: true,
+                  final conceptColumnWidth = isMobile ? 520.0 : (constraints.maxWidth * 0.42).clamp(340.0, 520.0);
+                  final dataTable = DataTable(
+                    dataRowMinHeight: 56,
+                    dataRowMaxHeight: 220,
+                    columnSpacing: isMobile ? 20 : 12,
+                    columns: const [
+                      DataColumn(label: Text('Concepto / Descripcion')),
+                      DataColumn(label: Text('Unidad')),
+                      DataColumn(label: Text('Cant.')),
+                      DataColumn(label: Text('P.U.')),
+                      DataColumn(label: Text('Importe')),
+                      DataColumn(label: Text('Acciones')),
+                    ],
+                    rows: [
+                      for (final item in widget.items)
+                        DataRow(cells: [
+                          DataCell(
+                            SizedBox(
+                              width: conceptColumnWidth,
+                              child: Text(
+                                _cleanConceptText(item.concept),
+                                softWrap: true,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(item.unit)),
+                          DataCell(Text(item.quantity.toStringAsFixed(2))),
+                          DataCell(Text(_money(item.unitPrice))),
+                          DataCell(Text(_money(item.lineTotal))),
+                          DataCell(
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: widget.canEditItems ? () => widget.onEditItem(item) : null,
                                 ),
-                              ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: widget.canEditItems ? () => widget.onDeleteItem(item) : null,
+                                ),
+                              ],
                             ),
-                            DataCell(Text(item.unit)),
-                            DataCell(Text(item.quantity.toStringAsFixed(2))),
-                            DataCell(Text(_money(item.unitPrice))),
-                            DataCell(Text(_money(item.lineTotal))),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined),
-                                    onPressed: widget.canEditItems ? () => widget.onEditItem(item) : null,
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: widget.canEditItems ? () => widget.onDeleteItem(item) : null,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ]),
-                      ],
-                    ),
+                          ),
+                        ]),
+                    ],
                   );
+
+                  final table = isMobile
+                      ? SingleChildScrollView(
+                          controller: _tableScrollController,
+                          scrollDirection: Axis.horizontal,
+                          child: dataTable,
+                        )
+                      : SizedBox(width: double.infinity, child: dataTable);
 
                   if (isMobile) {
                     return table;
                   }
 
-                  return MouseRegion(
-                    onEnter: (_) => setState(() => _showHorizontalScrollbar = true),
-                    onExit: (_) => setState(() => _showHorizontalScrollbar = false),
-                    child: RawScrollbar(
-                      controller: _tableScrollController,
-                      scrollbarOrientation: ScrollbarOrientation.bottom,
-                      thumbVisibility: _showHorizontalScrollbar,
-                      trackVisibility: _showHorizontalScrollbar,
-                      notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
-                      thumbColor: RemaColors.primary,
-                      trackColor: RemaColors.surfaceLow,
-                      mainAxisMargin: 2,
-                      crossAxisMargin: 2,
-                      radius: const Radius.circular(10),
-                      thickness: 5,
-                      child: table,
-                    ),
-                  );
+                  return table;
                 },
               ),
               const SizedBox(height: 24),
@@ -1382,7 +1373,7 @@ class _PdfConceptSplit {
 }
 
 _PdfConceptSplit _splitConceptForPdf(String rawConcept) {
-  final normalized = rawConcept.replaceAll('\r\n', '\n').trim();
+  final normalized = _cleanConceptText(rawConcept);
   if (normalized.isEmpty) {
     return const _PdfConceptSplit(mainText: '-');
   }
@@ -1405,6 +1396,28 @@ _PdfConceptSplit _splitConceptForPdf(String rawConcept) {
     mainText: mainPart.isEmpty ? '-' : mainPart,
     includeText: includePart.isEmpty ? null : includePart,
   );
+}
+
+String _cleanConceptText(String rawConcept) {
+  var text = rawConcept.replaceAll('\r\n', '\n').trim();
+  if (text.isEmpty) {
+    return '-';
+  }
+
+  // Remove parenthetical fragments already represented in structured columns.
+  text = text.replaceAll(RegExp(r'\([^\)]*\)'), ' ');
+
+  // Remove explicit unit fragments because unit is shown in its own table column.
+  text = text.replaceAll(RegExp(r'\bunidad\s*:\s*[^\n\.,;]+[\.,;]?', caseSensitive: false), ' ');
+
+  // Normalize spacing while preserving line breaks.
+  text = text
+      .split('\n')
+      .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
+      .where((line) => line.isNotEmpty)
+      .join('\n');
+
+  return text.isEmpty ? '-' : text;
 }
 
 String _amountInText(double value) {
