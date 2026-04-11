@@ -534,17 +534,35 @@ class PresupuestoPage extends ConsumerWidget {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
-                width: 92,
-                height: 46,
-                alignment: pw.Alignment.centerLeft,
-                child: logo != null
-                    ? pw.Image(logo, fit: pw.BoxFit.contain)
-                    : pw.Text(
-                        CompanyProfile.brandName,
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-                      ),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Container(
+                      width: 92,
+                      height: 46,
+                      alignment: pw.Alignment.centerLeft,
+                      child: logo != null
+                          ? pw.Image(logo, fit: pw.BoxFit.contain)
+                          : pw.Text(
+                              CompanyProfile.brandName,
+                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                            ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      CompanyProfile.legalName,
+                      style: const pw.TextStyle(fontSize: 8.6),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'TEL: ${CompanyProfile.phone}',
+                      style: const pw.TextStyle(fontSize: 8.6),
+                    ),
+                  ],
+                ),
               ),
+              pw.SizedBox(width: 12),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
@@ -1142,7 +1160,7 @@ class _GeneralConceptsAndBankDataSection extends StatelessWidget {
           crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.end,
           children: [
             Text(
-              'DATOS BANCARIOS FACTURACION',
+              'DATOS BANCARIOS FACTURACIÓN',
               style: textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
                 decoration: TextDecoration.underline,
