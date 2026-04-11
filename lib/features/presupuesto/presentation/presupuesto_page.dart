@@ -1063,6 +1063,8 @@ class _BudgetViewState extends State<_BudgetView> {
                   );
                 },
               ),
+              const SizedBox(height: 20),
+              const _GeneralConceptsAndBankDataSection(),
             ],
           ),
         ),
@@ -1096,6 +1098,101 @@ class _TotalRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _GeneralConceptsAndBankDataSection extends StatelessWidget {
+  const _GeneralConceptsAndBankDataSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 800;
+
+        final concepts = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'CONCEPTOS GENERALES:',
+              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text('1.- ESTE ES UN PRESUPUESTO BASADO EN LA INFORMACIÓN QUE SE NOS PROPORCIONO.', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('2.- PRECIOS SUJETOS A CAMBIOS SIN PREVIO AVISO.', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('3.- CONDICIONES DE PAGO ( costos + iva )', style: textTheme.bodyMedium),
+            Text('( DE ACUERDO A LOS ACUERDOS EN CONTRATO )', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('4.- TIEMPO DE ENTREGA', style: textTheme.bodyMedium),
+            Text('( CALENDARIO DE OBRA POR DISPOSICIÓN DE ÁREAS )', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('5.- FORMAS DE PAGO', style: textTheme.bodyMedium),
+            Text('( TRANSFERENCIA ELECTRONICA ) + ( EFECTIVO )', style: textTheme.bodyMedium),
+            const SizedBox(height: 2),
+            Text('6.- VIGENCIA DE COSTOS', style: textTheme.bodyMedium),
+            Text('( 5 DÍAS )', style: textTheme.bodyMedium),
+          ],
+        );
+
+        final bank = Column(
+          crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          children: [
+            Text(
+              'DATOS BANCARIOS FACTURACION',
+              style: textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                decoration: TextDecoration.underline,
+              ),
+              textAlign: isMobile ? TextAlign.left : TextAlign.right,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'SOLUCIONES INTEGRALES SUSTENTABLES\nINTELIGENTES Y DINAMICAS REMA, S.A.S. DE C.V.',
+              style: textTheme.bodyMedium,
+              textAlign: isMobile ? TextAlign.left : TextAlign.right,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'SANTANDER',
+              style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              textAlign: isMobile ? TextAlign.left : TextAlign.right,
+            ),
+            Text('65-50868153-1', style: textTheme.bodyMedium),
+            Text('014691 655086815 315', style: textTheme.bodyMedium),
+          ],
+        );
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: RemaColors.surfaceLow,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: RemaColors.outlineVariant.withValues(alpha: 0.35)),
+          ),
+          child: isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    concepts,
+                    const SizedBox(height: 18),
+                    bank,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: concepts),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 2, child: bank),
+                  ],
+                ),
+        );
+      },
     );
   }
 }
