@@ -661,7 +661,7 @@ class QuotesRepository {
       return ProjectLookup(
         id: row['id'] as String? ?? projectId,
         code: _normalizeProjectCode(row['code'] as String?, row['id'] as String? ?? projectId),
-        name: row['name'] as String? ?? 'Proyecto sin nombre',
+        name: (row['name'] as String? ?? '').trim(),
         clientId: row['client_id'] as String?,
         siteAddress: row['site_address'] as String?,
         description: row['description'] as String?,
