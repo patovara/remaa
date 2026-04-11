@@ -1158,6 +1158,7 @@ Future<void> _openImagePreview(
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black87,
+    barrierDismissible: true,
     builder: (context) => _EvidencePreviewDialog(
       images: images,
       initialIndex: safeInitialIndex,
@@ -1214,70 +1215,69 @@ class _EvidencePreviewDialogState extends State<_EvidencePreviewDialog> {
     return Scaffold(
       backgroundColor: Colors.black87,
       body: SafeArea(
-        child: Stack(
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(color: Colors.transparent),
-            ),
-            Center(
-              child: GestureDetector(
-                onTap: () {},
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: widget.images.length,
-                  onPageChanged: (index) {
-                    setState(() => _currentIndex = index);
-                  },
-                  itemBuilder: (_, index) {
-                    return InteractiveViewer(
-                      minScale: 0.8,
-                      maxScale: 4.0,
-                      child: Image.memory(widget.images[index], fit: BoxFit.contain),
-                    );
-                  },
-                ),
-              ),
-            ),
-            if (isMobile)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                  tooltip: 'Cerrar',
-                ),
-              ),
-            if (!isMobile && hasMultiple) ...[
-              Positioned(
-                left: 12,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    onPressed: _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
-                    icon: const Icon(Icons.chevron_left, size: 42, color: Colors.white),
-                    tooltip: 'Anterior',
+        child: GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: Stack(
+            children: [
+              Center(
+                child: GestureDetector(
+                  onTap: () {}, // Consume taps on the image/PageView to prevent closing
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: widget.images.length,
+                    onPageChanged: (index) {
+                      setState(() => _currentIndex = index);
+                    },
+                    itemBuilder: (_, index) {
+                      return InteractiveViewer(
+                        minScale: 0.8,
+                        maxScale: 4.0,
+                        child: Image.memory(widget.images[index], fit: BoxFit.contain),
+                      );
+                    },
                   ),
                 ),
               ),
-              Positioned(
-                right: 12,
-                top: 0,
-                bottom: 0,
-                child: Center(
+              if (isMobile)
+                Positioned(
+                  top: 8,
+                  right: 8,
                   child: IconButton(
-                    onPressed: _currentIndex < widget.images.length - 1
-                        ? () => _goTo(_currentIndex + 1)
-                        : null,
-                    icon: const Icon(Icons.chevron_right, size: 42, color: Colors.white),
-                    tooltip: 'Siguiente',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    tooltip: 'Cerrar',
                   ),
                 ),
-              ),
+              if (!isMobile && hasMultiple) ...[
+                Positioned(
+                  left: 12,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: IconButton(
+                      onPressed: _currentIndex > 0 ? () => _goTo(_currentIndex - 1) : null,
+                      icon: const Icon(Icons.chevron_left, size: 42, color: Colors.white),
+                      tooltip: 'Anterior',
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 12,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: IconButton(
+                      onPressed: _currentIndex < widget.images.length - 1
+                          ? () => _goTo(_currentIndex + 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_right, size: 42, color: Colors.white),
+                      tooltip: 'Siguiente',
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
