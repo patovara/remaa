@@ -74,4 +74,4 @@ jobs:
           supabase functions deploy user-admin
           supabase functions deploy mailer
           supabase functions deploy email-inbound
-          supabase functions deploy weekly-quote-summary
+          supabase functions deploy weekly-quote-summary --no-verify-jwt
