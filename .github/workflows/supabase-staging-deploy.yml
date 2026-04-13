@@ -7,7 +7,7 @@ on:
         description: "Aplicar migraciones a staging"
         required: true
         type: boolean
-        default: true
+        default: false
       deploy_functions:
         description: "Desplegar Edge Functions"
         required: true

@@ -188,7 +188,7 @@ class QuotesRepository {
       final rows = await client
           .from('quotes')
           .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, recipient_email, created_at',
+            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
           )
           .order('created_at', ascending: false);
 
@@ -208,7 +208,7 @@ class QuotesRepository {
             validUntil: _toDate(row['valid_until']),
             approvalPdfPath: row['approval_pdf_path'] as String?,
             approvalPdfUploadedAt: _toDateTime(row['approval_pdf_uploaded_at']),
-            recipientEmail: row['recipient_email'] as String?,
+            recipientEmail: null,
           ),
       ];
       if (quotes.isEmpty) {
@@ -271,7 +271,7 @@ class QuotesRepository {
             'project_type_id': projectTypeId,
           })
           .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, recipient_email, created_at',
+            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
           )
           .single();
 
@@ -289,7 +289,7 @@ class QuotesRepository {
         validUntil: _toDate(inserted['valid_until']),
         approvalPdfPath: inserted['approval_pdf_path'] as String?,
         approvalPdfUploadedAt: _toDateTime(inserted['approval_pdf_uploaded_at']),
-        recipientEmail: inserted['recipient_email'] as String?,
+        recipientEmail: null,
       );
     } catch (error) {
       AppLogger.error('quotes_create_failed', data: {'error': error.toString()});
@@ -428,14 +428,9 @@ class QuotesRepository {
     try {
       final row = await client
           .from('quotes')
-          .select('recipient_email, projects:projects(client_id, clients:clients(email))')
+          .select('projects:projects(client_id, clients:clients(email))')
           .eq('id', quoteId)
           .single();
-
-      final recipientEmail = (row['recipient_email'] as String? ?? '').trim();
-      if (recipientEmail.isNotEmpty) {
-        return recipientEmail;
-      }
 
       final project = row['projects'] as Map<String, dynamic>?;
       final clientRow = project?['clients'] as Map<String, dynamic>?;
@@ -484,7 +479,11 @@ class QuotesRepository {
       throw StateError(message);
     }
 
-    await client.from('quotes').update({'recipient_email': email}).eq('id', quoteId);
+    try {
+      await client.from('quotes').update({'recipient_email': email}).eq('id', quoteId);
+    } catch (_) {
+      // Staging can run without recipient_email migration applied yet.
+    }
 
     final current = _localQuotes.where((item) => item.id == quoteId).cast<QuoteRecord?>().firstWhere(
           (item) => item != null,
