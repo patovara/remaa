@@ -13,10 +13,11 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
+const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") ?? "";
 const appPublicUrl = (Deno.env.get("APP_PUBLIC_URL") ?? "").replace(/\/$/, "");
 const ownerEmail = (Deno.env.get("OWNER_EMAIL") ?? "mvazquez@gruporemaa.com").trim().toLowerCase();
 
-const FROM_EMAIL = "Cotizaciones REMA <cotizaciones@gruporemaa.com>";
+const REPLY_TO = "cotizaciones@gruporemaa.com";
 const INTERNAL_CC = "mvazquez@gruporemaa.com";
 
 const corsHeaders = {
@@ -34,7 +35,7 @@ Deno.serve(async (req: Request) => {
     return jsonError("Method not allowed.", 405);
   }
 
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !resendApiKey) {
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !resendApiKey || !resendFromEmail) {
     return jsonError("Missing environment variables.", 500);
   }
 
@@ -149,9 +150,10 @@ Deno.serve(async (req: Request) => {
   const text = buildQuoteEmailText({ recipientName, projectName, quoteNumber, note });
 
   const resendBody: Record<string, unknown> = {
-    from: FROM_EMAIL,
+    from: resendFromEmail,
     to: toEmails,
     cc: ccEmails.length > 0 ? ccEmails : undefined,
+    reply_to: REPLY_TO,
     subject,
     html,
     text,
