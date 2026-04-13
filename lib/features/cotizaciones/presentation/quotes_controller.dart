@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/supabase_bootstrap.dart';
 import '../../levantamiento/presentation/levantamiento_state.dart';
 import 'concepts_catalog_controller.dart';
+import 'quote_pdf_builder.dart';
 import '../data/quotes_repository.dart';
 import '../domain/quote_models.dart';
 
@@ -210,6 +211,11 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
     ]);
 
     _clearLinkedLevantamientoIfNeeded(quoteId: quoteId, status: status);
+
+    // Auto-generate and attach approval PDF when approved
+    if (status == QuoteStatus.approved && !updated.hasApprovalPdf) {
+      _generateApprovalPdfAsync(quoteId: quoteId, quote: updated);
+    }
   }
 
   void _clearLinkedLevantamientoIfNeeded({
@@ -229,6 +235,77 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
 
     ref.read(activeLevantamientoProvider.notifier).clear();
     ref.read(levantamientoDraftProvider.notifier).clear();
+  }
+
+  /// Genera el PDF de aprobación automáticamente cuando se aprueba la cotización.
+  /// Se ejecuta en paralelo sin bloquear la UI.
+  Future<void> _generateApprovalPdfAsync({
+    required String quoteId,
+    required QuoteRecord quote,
+  }) async {
+    try {
+      // Fetch all required data in parallel
+      final itemsAsync = ref.read(quoteItemsProvider(quoteId).future);
+      final contextAsync = ref.read(quoteContextProvider(quote.projectId).future);
+      final catalogAsync = ref.read(conceptsCatalogProvider.future);
+      final surveyAsync = ref.read(projectSurveyEntriesProvider(quote.projectId).future);
+
+      final items = await itemsAsync;
+      final context = await contextAsync;
+      final catalog = await catalogAsync;
+      final surveyEntries = await surveyAsync.catchError((_) => const <SurveyEntryRecord>[]);
+
+      // Get universe and project type labels
+      final universeLabel = _getLabelById(
+        quote.universeId,
+        [for (final item in catalog.universes) (item.id, item.name)],
+      );
+      final projectTypeLabel = _getLabelById(
+        quote.projectTypeId,
+        [for (final item in catalog.projectTypes) (item.id, item.name)],
+      );
+
+      // Generate PDF
+      final pdfBytes = await buildQuotePdfBytes(
+        quote: quote,
+        items: items,
+        context: context,
+        surveyEntries: surveyEntries,
+        universeLabel: universeLabel,
+        projectTypeLabel: projectTypeLabel,
+      );
+
+      if (pdfBytes == null || pdfBytes.isEmpty) {
+        throw StateError('No se pudo generar el PDF de la cotización');
+      }
+
+      // Attach the PDF to the quote
+      final pdfFileName = 'cotizacion_${quote.quoteNumber}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final updated = await _repository.attachApprovalPdf(
+        quote: quote,
+        bytes: pdfBytes,
+        fileName: pdfFileName,
+      );
+
+      // Update state with the new approval PDF path
+      final current = state.valueOrNull ?? const <QuoteRecord>[];
+      state = AsyncData([
+        for (final item in current)
+          if (item.id == quoteId) updated else item,
+      ]);
+    } catch (error) {
+      // Log error but don't block user flow
+      print('Error generando PDF de aprobación: $error');
+    }
+  }
+
+  String _getLabelById(String id, List<(String, String)> options) {
+    for (final option in options) {
+      if (option.$1 == id) {
+        return option.$2;
+      }
+    }
+    return id;
   }
 
   Future<void> attachApprovalPdf({

@@ -100,7 +100,7 @@ Deno.serve(async (req: Request) => {
   const { data: quoteRow, error: quoteError } = await adminClient
     .from("quotes")
     .select(
-      "id,quote_number,approval_pdf_path,projects:projects(name,code,clients:clients(contact_name,business_name,email))",
+      "id,quote_number,status,approval_pdf_path,projects:projects(name,code,clients:clients(contact_name,business_name,email))",
     )
     .eq("id", quoteId)
     .single();
@@ -112,6 +112,7 @@ Deno.serve(async (req: Request) => {
   const project = (quoteRow.projects as Record<string, unknown> | null) ?? {};
   const client = (project.clients as Record<string, unknown> | null) ?? {};
   const quoteNumber = `${quoteRow.quote_number ?? ""}`.trim();
+  const status = `${quoteRow.status ?? ""}`.trim();
   const projectName = `${project.name ?? ""}`.trim();
   const projectCode = `${project.code ?? ""}`.trim();
   const contactName = `${client.contact_name ?? ""}`.trim();
@@ -119,6 +120,14 @@ Deno.serve(async (req: Request) => {
   const recipientName = contactName || businessName || "Cliente";
   const pdfPath = `${quoteRow.approval_pdf_path ?? ""}`.trim();
   const allRecipients = [...toEmails, ...ccEmails].join(",");
+
+  // Validación: cotización aprobada DEBE tener PDF
+  if (status === "approved" && !pdfPath) {
+    return jsonError(
+      "Esta cotización aprobada aún no tiene PDF de validación generado. Adjunta el PDF antes de enviar.",
+      400,
+    );
+  }
 
   const subject = `Cotizacion REMA | ${projectName || "Proyecto"}${quoteNumber ? ` (${quoteNumber})` : ""}`;
 
