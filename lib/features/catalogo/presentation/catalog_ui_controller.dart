@@ -3,6 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../domain/catalog_admin_models.dart';
 
+class _UnsetValue {
+  const _UnsetValue();
+}
+
+const _unsetValue = _UnsetValue();
+
 class CatalogUiState {
   const CatalogUiState({
     this.selectedUniverseId,
@@ -25,30 +31,43 @@ class CatalogUiState {
   final bool isImporting;
 
   CatalogUiState copyWith({
-    String? selectedUniverseId,
-    String? selectedProjectTypeId,
-    String? selectedTemplateId,
-    String? selectedImportProjectTypeId,
+    Object? selectedUniverseId = _unsetValue,
+    Object? selectedProjectTypeId = _unsetValue,
+    Object? selectedTemplateId = _unsetValue,
+    Object? selectedImportProjectTypeId = _unsetValue,
     String? templateSearch,
-    CatalogImportSummary? lastImportSummary,
-    String? lastImportFileName,
+    Object? lastImportSummary = _unsetValue,
+    Object? lastImportFileName = _unsetValue,
     bool? isImporting,
     bool clearImportSummary = false,
   }) {
     return CatalogUiState(
-      selectedUniverseId: selectedUniverseId ?? this.selectedUniverseId,
-      selectedProjectTypeId:
-          selectedProjectTypeId ?? this.selectedProjectTypeId,
-      selectedTemplateId: selectedTemplateId ?? this.selectedTemplateId,
-      selectedImportProjectTypeId:
-          selectedImportProjectTypeId ?? this.selectedImportProjectTypeId,
+      selectedUniverseId: identical(selectedUniverseId, _unsetValue)
+          ? this.selectedUniverseId
+          : selectedUniverseId as String?,
+      selectedProjectTypeId: identical(selectedProjectTypeId, _unsetValue)
+          ? this.selectedProjectTypeId
+          : selectedProjectTypeId as String?,
+      selectedTemplateId: identical(selectedTemplateId, _unsetValue)
+          ? this.selectedTemplateId
+          : selectedTemplateId as String?,
+      selectedImportProjectTypeId: identical(
+            selectedImportProjectTypeId,
+            _unsetValue,
+          )
+          ? this.selectedImportProjectTypeId
+          : selectedImportProjectTypeId as String?,
       templateSearch: templateSearch ?? this.templateSearch,
       lastImportSummary: clearImportSummary
           ? null
-          : (lastImportSummary ?? this.lastImportSummary),
+          : (identical(lastImportSummary, _unsetValue)
+                ? this.lastImportSummary
+                : lastImportSummary as CatalogImportSummary?),
       lastImportFileName: clearImportSummary
           ? null
-          : (lastImportFileName ?? this.lastImportFileName),
+          : (identical(lastImportFileName, _unsetValue)
+                ? this.lastImportFileName
+                : lastImportFileName as String?),
       isImporting: isImporting ?? this.isImporting,
     );
   }
@@ -92,18 +111,24 @@ class CatalogUiController extends Notifier<CatalogUiState> {
 
     if (nextUniverseId == null ||
         !snapshot.universes.any((item) => item.id == nextUniverseId)) {
-      nextUniverseId = snapshot.universes.isEmpty
+      final resolvedUniverseId = snapshot.universes.isEmpty
           ? null
           : snapshot.universes.first.id;
-      changed = true;
+      if (resolvedUniverseId != nextUniverseId) {
+        nextUniverseId = resolvedUniverseId;
+        changed = true;
+      }
     }
 
     if (nextProjectTypeId == null ||
         !snapshot.projectTypes.any((item) => item.id == nextProjectTypeId)) {
-      nextProjectTypeId = snapshot.projectTypes.isEmpty
+      final resolvedProjectTypeId = snapshot.projectTypes.isEmpty
           ? null
           : snapshot.projectTypes.first.id;
-      changed = true;
+      if (resolvedProjectTypeId != nextProjectTypeId) {
+        nextProjectTypeId = resolvedProjectTypeId;
+        changed = true;
+      }
     }
 
     final templatesForUniverse = nextUniverseId == null
@@ -111,20 +136,26 @@ class CatalogUiController extends Notifier<CatalogUiState> {
         : snapshot.templatesForUniverse(nextUniverseId);
     if (nextTemplateId == null ||
         !templatesForUniverse.any((item) => item.id == nextTemplateId)) {
-      nextTemplateId = templatesForUniverse.isEmpty
+      final resolvedTemplateId = templatesForUniverse.isEmpty
           ? null
           : templatesForUniverse.first.id;
-      changed = true;
+      if (resolvedTemplateId != nextTemplateId) {
+        nextTemplateId = resolvedTemplateId;
+        changed = true;
+      }
     }
 
     if (nextImportProjectTypeId == null ||
         !snapshot.projectTypes.any(
           (item) => item.id == nextImportProjectTypeId,
         )) {
-      nextImportProjectTypeId = snapshot.projectTypes.isEmpty
+      final resolvedImportProjectTypeId = snapshot.projectTypes.isEmpty
           ? null
           : snapshot.projectTypes.first.id;
-      changed = true;
+      if (resolvedImportProjectTypeId != nextImportProjectTypeId) {
+        nextImportProjectTypeId = resolvedImportProjectTypeId;
+        changed = true;
+      }
     }
 
     if (!changed) {
