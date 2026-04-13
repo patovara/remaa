@@ -905,6 +905,17 @@ class _TemplatesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeSelectedUniverseId = snapshot.universes.any(
+      (item) => item.id == selectedUniverseId,
+    )
+        ? selectedUniverseId
+        : null;
+    final safeSelectedProjectTypeId = snapshot.projectTypes.any(
+      (item) => item.id == selectedProjectTypeId,
+    )
+        ? selectedProjectTypeId
+        : null;
+
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -923,7 +934,10 @@ class _TemplatesPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: selectedUniverseId,
+                  key: ValueKey(
+                    'templates-universe-${safeSelectedUniverseId ?? 'none'}-${snapshot.universes.length}',
+                  ),
+                  initialValue: safeSelectedUniverseId,
                   decoration: const InputDecoration(labelText: 'Universo'),
                   items: [
                     for (final item in snapshot.universes)
@@ -935,7 +949,10 @@ class _TemplatesPanel extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: selectedProjectTypeId,
+                  key: ValueKey(
+                    'templates-project-type-${safeSelectedProjectTypeId ?? 'none'}-${snapshot.projectTypes.length}',
+                  ),
+                  initialValue: safeSelectedProjectTypeId,
                   decoration: const InputDecoration(
                     labelText: 'Tipo de proyecto',
                   ),
@@ -1055,6 +1072,12 @@ class _AttributesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeSelectedTemplateId = visibleTemplates.any(
+      (item) => item.id == selectedTemplateId,
+    )
+        ? selectedTemplateId
+        : null;
+
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1063,14 +1086,17 @@ class _AttributesPanel extends StatelessWidget {
             title: 'Atributos y opciones',
             icon: Icons.tune,
             trailing: FilledButton.icon(
-              onPressed: selectedTemplateId == null ? null : onCreateAttribute,
+              onPressed: safeSelectedTemplateId == null ? null : onCreateAttribute,
               icon: const Icon(Icons.add),
               label: const Text('Nuevo atributo'),
             ),
           ),
           const SizedBox(height: 20),
           DropdownButtonFormField<String>(
-            initialValue: selectedTemplateId,
+            key: ValueKey(
+              'attributes-template-${safeSelectedTemplateId ?? 'none'}-${visibleTemplates.length}',
+            ),
+            initialValue: safeSelectedTemplateId,
             decoration: const InputDecoration(labelText: 'Concepto'),
             items: [
               for (final item in visibleTemplates)
@@ -1079,7 +1105,7 @@ class _AttributesPanel extends StatelessWidget {
             onChanged: onTemplateChanged,
           ),
           const SizedBox(height: 20),
-          if (selectedTemplateId == null)
+          if (safeSelectedTemplateId == null)
             const Text('Selecciona un concepto para administrar atributos.')
           else if (visibleAttributes.isEmpty)
             const Text('Este concepto aún no tiene atributos.')
