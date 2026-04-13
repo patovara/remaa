@@ -265,6 +265,7 @@ create table if not exists public.quotes (
   status text not null default 'draft',
   approval_pdf_path text,
   approval_pdf_uploaded_at timestamptz,
+  recipient_email text,
   subtotal numeric(14,2) not null default 0,
   tax numeric(14,2) not null default 0,
   total numeric(14,2) not null default 0,
@@ -329,6 +330,9 @@ alter table public.quotes
 
 alter table public.quotes
   add column if not exists approval_pdf_uploaded_at timestamptz;
+
+alter table public.quotes
+  add column if not exists recipient_email text;
 
 alter table public.clients
   add column if not exists contact_name text;

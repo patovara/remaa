@@ -9,6 +9,9 @@ abstract final class QuoteStatus {
   static const String paid = 'paid';
 }
 
+const String approveWithoutPdfConfirmationRequired =
+  'approve_without_pdf_confirmation_required';
+
 class QuoteRecord {
   const QuoteRecord({
     required this.id,
@@ -24,6 +27,7 @@ class QuoteRecord {
     this.validUntil,
     this.approvalPdfPath,
     this.approvalPdfUploadedAt,
+    this.recipientEmail,
   });
 
   final String id;
@@ -39,6 +43,7 @@ class QuoteRecord {
   final DateTime? validUntil;
   final String? approvalPdfPath;
   final DateTime? approvalPdfUploadedAt;
+  final String? recipientEmail;
 
   bool get isDraft => status == QuoteStatus.draft;
   bool get isConcluded => status == QuoteStatus.concluded;
@@ -63,6 +68,7 @@ class QuoteRecord {
     DateTime? validUntil,
     String? approvalPdfPath,
     DateTime? approvalPdfUploadedAt,
+    String? recipientEmail,
   }) {
     return QuoteRecord(
       id: id ?? this.id,
@@ -78,6 +84,7 @@ class QuoteRecord {
       validUntil: validUntil ?? this.validUntil,
       approvalPdfPath: approvalPdfPath ?? this.approvalPdfPath,
       approvalPdfUploadedAt: approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,
+      recipientEmail: recipientEmail ?? this.recipientEmail,
     );
   }
 }

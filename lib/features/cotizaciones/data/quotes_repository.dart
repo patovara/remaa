@@ -188,7 +188,7 @@ class QuotesRepository {
       final rows = await client
           .from('quotes')
           .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
+            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, recipient_email, created_at',
           )
           .order('created_at', ascending: false);
 
@@ -208,6 +208,7 @@ class QuotesRepository {
             validUntil: _toDate(row['valid_until']),
             approvalPdfPath: row['approval_pdf_path'] as String?,
             approvalPdfUploadedAt: _toDateTime(row['approval_pdf_uploaded_at']),
+            recipientEmail: row['recipient_email'] as String?,
           ),
       ];
       if (quotes.isEmpty) {
@@ -252,6 +253,7 @@ class QuotesRepository {
         createdAt: DateTime.now(),
         approvalPdfPath: null,
         approvalPdfUploadedAt: null,
+        recipientEmail: null,
       );
       _localQuotes.add(local);
       _localItems[local.id] = [];
@@ -269,7 +271,7 @@ class QuotesRepository {
             'project_type_id': projectTypeId,
           })
           .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
+            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, recipient_email, created_at',
           )
           .single();
 
@@ -287,6 +289,7 @@ class QuotesRepository {
         validUntil: _toDate(inserted['valid_until']),
         approvalPdfPath: inserted['approval_pdf_path'] as String?,
         approvalPdfUploadedAt: _toDateTime(inserted['approval_pdf_uploaded_at']),
+        recipientEmail: inserted['recipient_email'] as String?,
       );
     } catch (error) {
       AppLogger.error('quotes_create_failed', data: {'error': error.toString()});
@@ -303,6 +306,7 @@ class QuotesRepository {
         createdAt: DateTime.now(),
         approvalPdfPath: null,
         approvalPdfUploadedAt: null,
+        recipientEmail: null,
       );
       _localQuotes.add(local);
       _localItems[local.id] = [];
@@ -341,6 +345,7 @@ class QuotesRepository {
   Future<QuoteRecord> updateStatus({
     required QuoteRecord quote,
     required String status,
+    bool allowApproveWithoutPdf = false,
   }) async {
     if (quote.isPaid && status != QuoteStatus.paid) {
       throw StateError('No puedes modificar una cotizacion ya pagada.');
@@ -360,7 +365,15 @@ class QuotesRepository {
         throw StateError('La cotizacion debe estar concluida antes de aprobarse.');
       }
       if (!quote.hasApprovalPdf) {
-        throw StateError('Debes adjuntar el PDF del pedido antes de aprobar la cotizacion.');
+        final quoteClient = await _fetchClientSnapshotForQuote(quote.projectId);
+        if (_requiresApprovalPdfBySector(quoteClient?.sectorLabel)) {
+          throw StateError(
+            'En hoteleria debes adjuntar el PDF del pedido antes de aprobar la cotizacion.',
+          );
+        }
+        if (!allowApproveWithoutPdf) {
+          throw StateError(approveWithoutPdfConfirmationRequired);
+        }
       }
     }
     if (status == QuoteStatus.paid && !quote.isActaFinalizada) {
@@ -394,6 +407,91 @@ class QuotesRepository {
       AppLogger.error('quotes_update_status_failed', data: {'error': error.toString()});
       _replaceLocalQuote(updated);
       return updated;
+    }
+  }
+
+  Future<String?> fetchRecipientEmailForQuote({required String quoteId}) async {
+    final quote = _localQuotes.where((item) => item.id == quoteId).cast<QuoteRecord?>().firstWhere(
+          (item) => item != null,
+          orElse: () => null,
+        );
+    final localEmail = (quote?.recipientEmail ?? '').trim();
+    if (localEmail.isNotEmpty) {
+      return localEmail;
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) {
+      return null;
+    }
+
+    try {
+      final row = await client
+          .from('quotes')
+          .select('recipient_email, projects:projects(client_id, clients:clients(email))')
+          .eq('id', quoteId)
+          .single();
+
+      final recipientEmail = (row['recipient_email'] as String? ?? '').trim();
+      if (recipientEmail.isNotEmpty) {
+        return recipientEmail;
+      }
+
+      final project = row['projects'] as Map<String, dynamic>?;
+      final clientRow = project?['clients'] as Map<String, dynamic>?;
+      final clientEmail = (clientRow?['email'] as String? ?? '').trim();
+      return clientEmail.isEmpty ? null : clientEmail;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> sendQuoteEmail({
+    required String quoteId,
+    required String recipientEmail,
+    String? note,
+  }) async {
+    final email = recipientEmail.trim().toLowerCase();
+    if (!email.contains('@') || !email.contains('.')) {
+      throw StateError('Ingresa un correo valido para enviar la cotizacion.');
+    }
+
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) {
+      throw StateError('Supabase no esta disponible para enviar correos.');
+    }
+
+    final accessToken = client.auth.currentSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw StateError('Sesion expirada. Inicia sesion nuevamente.');
+    }
+
+    final response = await client.functions.invoke(
+      'send-quote-email',
+      headers: {'Authorization': 'Bearer $accessToken'},
+      body: {
+        'quote_id': quoteId,
+        'to_email': email,
+        'note': (note ?? '').trim(),
+      },
+    );
+
+    final data = response.data;
+    if (response.status >= 400) {
+      final message = data is Map<String, dynamic> && data['error'] != null
+          ? data['error'].toString()
+          : 'No se pudo enviar la cotizacion por correo.';
+      throw StateError(message);
+    }
+
+    await client.from('quotes').update({'recipient_email': email}).eq('id', quoteId);
+
+    final current = _localQuotes.where((item) => item.id == quoteId).cast<QuoteRecord?>().firstWhere(
+          (item) => item != null,
+          orElse: () => null,
+        );
+    if (current != null) {
+      _replaceLocalQuote(current.copyWith(recipientEmail: email));
     }
   }
 
@@ -673,6 +771,33 @@ class QuotesRepository {
       );
     } catch (error) {
       AppLogger.error('project_lookup_for_approval_failed', data: {'projectId': projectId, 'error': error.toString()});
+      return null;
+    }
+  }
+
+  bool _requiresApprovalPdfBySector(String? sectorLabel) {
+    final normalized = (sectorLabel ?? '').trim().toLowerCase();
+    return normalized.contains('hotel');
+  }
+
+  Future<({String? sectorLabel})?> _fetchClientSnapshotForQuote(String projectId) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(projectId)) {
+      return null;
+    }
+
+    try {
+      final row = await client
+          .from('projects')
+          .select('clients:clients(sector_label)')
+          .eq('id', projectId)
+          .maybeSingle();
+      if (row == null) {
+        return null;
+      }
+      final clientRow = row['clients'] as Map<String, dynamic>?;
+      return (sectorLabel: clientRow?['sector_label'] as String?);
+    } catch (_) {
       return null;
     }
   }
@@ -1186,7 +1311,7 @@ class QuotesRepository {
         'description': _asNullable(trimmed),
         'evidence_paths': evidencePaths,
         'evidence_meta': evidenceMetaMaps,
-        if (currentUserId != null) 'captured_by_user_id': currentUserId,
+        'captured_by_user_id': currentUserId,
       };
       if (_isUuid(quoteId ?? '')) {
         payload['quote_id'] = quoteId;
