@@ -247,17 +247,47 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteUniverse(UniverseCatalogItem universe) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final templateIds = {
+      for (final item in snapshot?.templates ?? const <ConceptTemplateCatalogItem>[])
+        if (item.universeId == universe.id) item.id,
+    };
+    final attributeIds = {
+      for (final item in snapshot?.attributes ?? const <ConceptAttributeCatalogItem>[])
+        if (templateIds.contains(item.templateId)) item.id,
+    };
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => attributeIds.contains(item.attributeId))
+        .length;
+
+    final hasChildren =
+        templateIds.isNotEmpty || attributeIds.isNotEmpty || optionsCount > 0;
     final confirmed = await _confirmDelete(
-      'Eliminar universo',
-      'Se eliminara ${universe.name} si no tiene dependencias.',
+      title: 'Eliminar universo',
+      message: hasChildren
+          ? 'Este universo tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${universe.name} si no tiene dependencias.',
+      requireKeyword: hasChildren,
+      details: hasChildren
+          ? [
+              'Conceptos: ${templateIds.length}',
+              'Atributos: ${attributeIds.length}',
+              'Opciones: $optionsCount',
+            ]
+          : const <String>[],
     );
     if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
-      action: () =>
-          ref.read(catalogAdminProvider.notifier).deleteUniverse(universe.id),
-      successMessage: 'Universo eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteUniverseCascade(universe.id)
+          : ref.read(catalogAdminProvider.notifier).deleteUniverse(universe.id),
+      successMessage: hasChildren
+          ? 'Universo y subelementos eliminados.'
+          : 'Universo eliminado.',
     );
   }
 
@@ -298,18 +328,49 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteProjectType(ProjectTypeCatalogItem projectType) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final templateIds = {
+      for (final item in snapshot?.templates ?? const <ConceptTemplateCatalogItem>[])
+        if (item.projectTypeId == projectType.id) item.id,
+    };
+    final attributeIds = {
+      for (final item in snapshot?.attributes ?? const <ConceptAttributeCatalogItem>[])
+        if (templateIds.contains(item.templateId)) item.id,
+    };
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => attributeIds.contains(item.attributeId))
+        .length;
+
+    final hasChildren =
+        templateIds.isNotEmpty || attributeIds.isNotEmpty || optionsCount > 0;
     final confirmed = await _confirmDelete(
-      'Eliminar tipo de proyecto',
-      'Se eliminara ${projectType.name} si no tiene dependencias.',
+      title: 'Eliminar tipo de proyecto',
+      message: hasChildren
+          ? 'Este tipo de proyecto tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${projectType.name} si no tiene dependencias.',
+      requireKeyword: hasChildren,
+      details: hasChildren
+          ? [
+              'Conceptos: ${templateIds.length}',
+              'Atributos: ${attributeIds.length}',
+              'Opciones: $optionsCount',
+            ]
+          : const <String>[],
     );
     if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
-      action: () => ref
-          .read(catalogAdminProvider.notifier)
-          .deleteProjectType(projectType.id),
-      successMessage: 'Tipo de proyecto eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteProjectTypeCascade(projectType.id)
+          : ref
+                .read(catalogAdminProvider.notifier)
+                .deleteProjectType(projectType.id),
+      successMessage: hasChildren
+          ? 'Tipo de proyecto y subelementos eliminados.'
+          : 'Tipo de proyecto eliminado.',
     );
   }
 
@@ -382,9 +443,28 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteTemplate(ConceptTemplateCatalogItem template) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final attributeIds = {
+      for (final item in snapshot?.attributes ?? const <ConceptAttributeCatalogItem>[])
+        if (item.templateId == template.id) item.id,
+    };
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => attributeIds.contains(item.attributeId))
+        .length;
+    final hasChildren = attributeIds.isNotEmpty || optionsCount > 0;
+
     final confirmed = await _confirmDelete(
-      'Eliminar concepto',
-      'Se eliminara ${template.name} si no tiene atributos dependientes.',
+      title: 'Eliminar concepto',
+      message: hasChildren
+          ? 'Este concepto tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${template.name} si no tiene atributos dependientes.',
+      requireKeyword: hasChildren,
+      details: hasChildren
+          ? [
+              'Atributos: ${attributeIds.length}',
+              'Opciones: $optionsCount',
+            ]
+          : const <String>[],
     );
     if (confirmed != true || !mounted) {
       return;
@@ -394,9 +474,14 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       ref.read(catalogUiControllerProvider.notifier).selectTemplate(null);
     }
     await _runMutation(
-      action: () =>
-          ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
-      successMessage: 'Concepto eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteTemplateCascade(template.id)
+          : ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
+      successMessage: hasChildren
+          ? 'Concepto y subelementos eliminados.'
+          : 'Concepto eliminado.',
     );
   }
 
@@ -443,17 +528,32 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteAttribute(ConceptAttributeCatalogItem attribute) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => item.attributeId == attribute.id)
+        .length;
+    final hasChildren = optionsCount > 0;
+
     final confirmed = await _confirmDelete(
-      'Eliminar atributo',
-      'Se eliminara ${attribute.name} si no tiene opciones dependientes.',
+      title: 'Eliminar atributo',
+      message: hasChildren
+          ? 'Este atributo tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${attribute.name} si no tiene opciones dependientes.',
+      requireKeyword: hasChildren,
+      details: hasChildren ? ['Opciones: $optionsCount'] : const <String>[],
     );
     if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
-      action: () =>
-          ref.read(catalogAdminProvider.notifier).deleteAttribute(attribute.id),
-      successMessage: 'Atributo eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteAttributeCascade(attribute.id)
+          : ref.read(catalogAdminProvider.notifier).deleteAttribute(attribute.id),
+      successMessage: hasChildren
+          ? 'Atributo y subelementos eliminados.'
+          : 'Atributo eliminado.',
     );
   }
 
@@ -497,8 +597,8 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
 
   Future<void> _deleteOption(AttributeOptionCatalogItem option) async {
     final confirmed = await _confirmDelete(
-      'Eliminar opción',
-      'Se eliminara la opción ${option.value}.',
+      title: 'Eliminar opción',
+      message: 'Se eliminara la opción ${option.value}.',
     );
     if (confirmed != true || !mounted) {
       return;
@@ -704,24 +804,61 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     );
   }
 
-  Future<bool?> _confirmDelete(String title, String message) {
+  Future<bool?> _confirmDelete({
+    required String title,
+    required String message,
+    bool requireKeyword = false,
+    List<String> details = const <String>[],
+  }) {
+    final confirmController = TextEditingController();
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Eliminar'),
-          ),
-        ],
+        content: StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final canConfirm = !requireKeyword || confirmController.text == 'ELIMINAR';
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(message),
+                if (details.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final detail in details) Text(detail),
+                ],
+                if (requireKeyword) ...[
+                  const SizedBox(height: 16),
+                  const Text('Escribe ELIMINAR para confirmar.'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: confirmController,
+                    onChanged: (_) => setStateDialog(() {}),
+                    decoration: const InputDecoration(labelText: 'Confirmación'),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      child: const Text('Cancelar'),
+                    ),
+                    FilledButton(
+                      onPressed: canConfirm
+                          ? () => Navigator.of(dialogContext).pop(true)
+                          : null,
+                      child: const Text('Eliminar'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
-    );
+    ).whenComplete(confirmController.dispose);
   }
 }
 
