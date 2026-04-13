@@ -1152,6 +1152,12 @@ class _ImportPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeSelectedProjectTypeId = projectTypes.any(
+      (item) => item.id == selectedProjectTypeId,
+    )
+        ? selectedProjectTypeId
+        : null;
+
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1190,7 +1196,10 @@ class _ImportPanel extends StatelessWidget {
           const Text('Columnas opcionales: project_type, base_description.'),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: selectedProjectTypeId,
+            key: ValueKey(
+              'import-project-type-${safeSelectedProjectTypeId ?? 'none'}-${projectTypes.length}',
+            ),
+            initialValue: safeSelectedProjectTypeId,
             decoration: const InputDecoration(
               labelText: 'Tipo de proyecto destino',
             ),
