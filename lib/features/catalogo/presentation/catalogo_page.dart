@@ -1554,6 +1554,15 @@ class _ConceptDialogState extends State<_ConceptDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final safeUniverseId = widget.universes.any((item) => item.id == _universeId)
+        ? _universeId
+        : null;
+    final safeProjectTypeId = widget.projectTypes.any(
+      (item) => item.id == _projectTypeId,
+    )
+        ? _projectTypeId
+        : null;
+
     return AlertDialog(
       title: Text(
         widget.initial == null ? 'Nuevo concepto' : 'Editar concepto',
@@ -1565,7 +1574,10 @@ class _ConceptDialogState extends State<_ConceptDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _universeId,
+                key: ValueKey(
+                  'concept-universe-${safeUniverseId ?? 'none'}-${widget.universes.length}',
+                ),
+                initialValue: safeUniverseId,
                 decoration: const InputDecoration(labelText: 'Universo'),
                 items: [
                   for (final item in widget.universes)
@@ -1575,7 +1587,10 @@ class _ConceptDialogState extends State<_ConceptDialog> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: _projectTypeId,
+                key: ValueKey(
+                  'concept-project-type-${safeProjectTypeId ?? 'none'}-${widget.projectTypes.length}',
+                ),
+                initialValue: safeProjectTypeId,
                 decoration: const InputDecoration(
                   labelText: 'Tipo de proyecto',
                 ),
@@ -1741,9 +1756,20 @@ class _ConceptDialogState extends State<_ConceptDialog> {
         FilledButton(
           onPressed: () {
             try {
+              final selectedUniverseId = widget.universes.any(
+                (item) => item.id == _universeId,
+              )
+                  ? _universeId
+                  : null;
+              final selectedProjectTypeId = widget.projectTypes.any(
+                (item) => item.id == _projectTypeId,
+              )
+                  ? _projectTypeId
+                  : null;
+
               final draft = CatalogConceptDraft.fromRaw(
-                universeId: _universeId,
-                projectTypeId: _projectTypeId,
+                universeId: selectedUniverseId,
+                projectTypeId: selectedProjectTypeId,
                 name: _nameController.text,
                 baseDescription: _descriptionController.text,
                 defaultUnit: _unitController.text,
