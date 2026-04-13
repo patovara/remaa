@@ -251,7 +251,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       'Eliminar universo',
       'Se eliminara ${universe.name} si no tiene dependencias.',
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
@@ -302,7 +302,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       'Eliminar tipo de proyecto',
       'Se eliminara ${projectType.name} si no tiene dependencias.',
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
@@ -386,7 +386,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       'Eliminar concepto',
       'Se eliminara ${template.name} si no tiene atributos dependientes.',
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     if (ref.read(catalogUiControllerProvider).selectedTemplateId ==
@@ -447,7 +447,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       'Eliminar atributo',
       'Se eliminara ${attribute.name} si no tiene opciones dependientes.',
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
@@ -500,7 +500,7 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       'Eliminar opción',
       'Se eliminara la opción ${option.value}.',
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
@@ -707,16 +707,16 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   Future<bool?> _confirmDelete(String title, String message) {
     return showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Eliminar'),
           ),
         ],
