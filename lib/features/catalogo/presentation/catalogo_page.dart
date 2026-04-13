@@ -89,91 +89,115 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       ),
       child: catalogAsync.when(
         data: (snapshot) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) {
-              return;
-            }
-            ref
+          try {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) {
+                return;
+              }
+              ref
+                  .read(catalogUiControllerProvider.notifier)
+                  .syncWithSnapshot(snapshot);
+            });
+
+            final viewData = ref
                 .read(catalogUiControllerProvider.notifier)
-                .syncWithSnapshot(snapshot);
-          });
+                .viewDataFor(snapshot);
 
-          final viewData = ref
-              .read(catalogUiControllerProvider.notifier)
-              .viewDataFor(snapshot);
-
-          return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SummaryStrip(snapshot: snapshot),
-                const SizedBox(height: 24),
-                _UniversesPanel(
-                  snapshot: snapshot,
-                  onCreate: _createUniverse,
-                  onEdit: _editUniverse,
-                  onDelete: _deleteUniverse,
-                ),
-                const SizedBox(height: 24),
-                _ProjectTypesPanel(
-                  snapshot: snapshot,
-                  onCreate: _createProjectType,
-                  onEdit: _editProjectType,
-                  onDelete: _deleteProjectType,
-                ),
-                const SizedBox(height: 24),
-                _TemplatesPanel(
-                  snapshot: snapshot,
-                  selectedUniverseId: viewData.selectedUniverseId,
-                  selectedProjectTypeId: viewData.selectedProjectTypeId,
-                  bulkPercentController: _bulkPercentController,
-                  templates: viewData.filteredTemplates,
-                  onUniverseChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectUniverse,
-                  onProjectTypeChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectProjectType,
-                  onSearchChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .changeTemplateSearch,
-                  onBulkAdjust: _bulkAdjustPrices,
-                  onCreate: _createTemplate,
-                  onEdit: _editTemplate,
-                  onDelete: _deleteTemplate,
-                ),
-                const SizedBox(height: 24),
-                _AttributesPanel(
-                  snapshot: snapshot,
-                  selectedTemplateId: viewData.selectedTemplateId,
-                  visibleTemplates: viewData.visibleTemplates,
-                  visibleAttributes: viewData.visibleAttributes,
-                  onTemplateChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectTemplate,
-                  onCreateAttribute: _createAttribute,
-                  onEditAttribute: _editAttribute,
-                  onDeleteAttribute: _deleteAttribute,
-                  onCreateOption: _createOption,
-                  onEditOption: _editOption,
-                  onDeleteOption: _deleteOption,
-                ),
-                const SizedBox(height: 24),
-                _ImportPanel(
-                  projectTypes: snapshot.projectTypes,
-                  selectedProjectTypeId: viewData.selectedImportProjectTypeId,
-                  onProjectTypeChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectImportProjectType,
-                  onImport: _importCsv,
-                  onDownloadTemplate: _downloadCsvTemplate,
-                  isImporting: uiState.isImporting,
-                  lastSummary: uiState.lastImportSummary,
-                  lastFileName: uiState.lastImportFileName,
-                ),
-              ],
-            ),
-          );
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SummaryStrip(snapshot: snapshot),
+                  const SizedBox(height: 24),
+                  _UniversesPanel(
+                    snapshot: snapshot,
+                    onCreate: _createUniverse,
+                    onEdit: _editUniverse,
+                    onDelete: _deleteUniverse,
+                  ),
+                  const SizedBox(height: 24),
+                  _ProjectTypesPanel(
+                    snapshot: snapshot,
+                    onCreate: _createProjectType,
+                    onEdit: _editProjectType,
+                    onDelete: _deleteProjectType,
+                  ),
+                  const SizedBox(height: 24),
+                  _TemplatesPanel(
+                    snapshot: snapshot,
+                    selectedUniverseId: viewData.selectedUniverseId,
+                    selectedProjectTypeId: viewData.selectedProjectTypeId,
+                    bulkPercentController: _bulkPercentController,
+                    templates: viewData.filteredTemplates,
+                    onUniverseChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectUniverse,
+                    onProjectTypeChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectProjectType,
+                    onSearchChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .changeTemplateSearch,
+                    onBulkAdjust: _bulkAdjustPrices,
+                    onCreate: _createTemplate,
+                    onEdit: _editTemplate,
+                    onDelete: _deleteTemplate,
+                  ),
+                  const SizedBox(height: 24),
+                  _AttributesPanel(
+                    snapshot: snapshot,
+                    selectedTemplateId: viewData.selectedTemplateId,
+                    visibleTemplates: viewData.visibleTemplates,
+                    visibleAttributes: viewData.visibleAttributes,
+                    onTemplateChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectTemplate,
+                    onCreateAttribute: _createAttribute,
+                    onEditAttribute: _editAttribute,
+                    onDeleteAttribute: _deleteAttribute,
+                    onCreateOption: _createOption,
+                    onEditOption: _editOption,
+                    onDeleteOption: _deleteOption,
+                  ),
+                  const SizedBox(height: 24),
+                  _ImportPanel(
+                    projectTypes: snapshot.projectTypes,
+                    selectedProjectTypeId: viewData.selectedImportProjectTypeId,
+                    onProjectTypeChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectImportProjectType,
+                    onImport: _importCsv,
+                    onDownloadTemplate: _downloadCsvTemplate,
+                    isImporting: uiState.isImporting,
+                    lastSummary: uiState.lastImportSummary,
+                    lastFileName: uiState.lastImportFileName,
+                  ),
+                ],
+              ),
+            );
+          } catch (error) {
+            return RemaPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Se detectó un error al renderizar el catálogo. '
+                    'La pantalla no se bloqueó para que puedas continuar.',
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(error.toString()),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => ref
+                        .read(catalogAdminProvider.notifier)
+                        .reload(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Recargar catálogo'),
+                  ),
+                ],
+              ),
+            );
+          }
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => RemaPanel(
