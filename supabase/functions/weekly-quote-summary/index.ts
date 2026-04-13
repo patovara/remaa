@@ -16,6 +16,8 @@ type QuoteSummaryRow = {
   projectCode: string;
   projectName: string;
   clientName: string;
+  approvedAt?: string;
+  actaAt?: string;
 };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -216,27 +218,39 @@ async function isWeeklySummaryEnabled(adminClient: ReturnType<typeof createClien
 }
 
 async function fetchQuotesSummary(adminClient: ReturnType<typeof createClient>): Promise<QuoteSummaryRow[]> {
-  const { data, error } = await adminClient
+  const projectJoin = "projects:projects(code,name,clients:clients(contact_name,business_name))";
+  const baseSelect = `quote_number,status,total,created_at,${projectJoin}`;
+  const orderOpts = { ascending: false };
+
+  // Try with timestamp columns; fall back if migration hasn't been applied yet
+  const { data: withDates, error: datesError } = await adminClient
     .from("quotes")
-    .select(
-      "quote_number,status,total,created_at,projects:projects(code,name,clients:clients(contact_name,business_name))",
-    )
+    .select(`${baseSelect},approved_at,acta_at`)
     .in("status", ["approved", "acta_finalizada"])
-    .order("created_at", { ascending: false })
+    .order("created_at", orderOpts)
     .limit(400);
 
-  if (error) {
-    throw new Error(`Failed to fetch quote summary: ${error.message}`);
+  let rawRows: Record<string, unknown>[];
+  if (datesError) {
+    const { data: fallback, error: fallbackError } = await adminClient
+      .from("quotes")
+      .select(baseSelect)
+      .in("status", ["approved", "acta_finalizada"])
+      .order("created_at", orderOpts)
+      .limit(400);
+    if (fallbackError) {
+      throw new Error(`Failed to fetch quote summary: ${fallbackError.message}`);
+    }
+    rawRows = (fallback ?? []) as Record<string, unknown>[];
+  } else {
+    rawRows = (withDates ?? []) as Record<string, unknown>[];
   }
 
-  const rows = (data ?? []) as Record<string, unknown>[];
-  return rows.map((row) => {
+  return rawRows.map((row) => {
     const project = (row.projects as Record<string, unknown> | null) ?? {};
     const client = (project.clients as Record<string, unknown> | null) ?? {};
-
     const contactName = `${client.contact_name ?? ""}`.trim();
     const businessName = `${client.business_name ?? ""}`.trim();
-
     return {
       quoteNumber: `${row.quote_number ?? ""}`.trim(),
       status: row.status === "approved" ? "approved" : "acta_finalizada",
@@ -245,6 +259,8 @@ async function fetchQuotesSummary(adminClient: ReturnType<typeof createClient>):
       projectCode: `${project.code ?? ""}`.trim(),
       projectName: `${project.name ?? ""}`.trim(),
       clientName: contactName || businessName || "Sin cliente",
+      approvedAt: row.approved_at ? `${row.approved_at}`.trim() : undefined,
+      actaAt: row.acta_at ? `${row.acta_at}`.trim() : undefined,
     };
   });
 }
@@ -258,9 +274,10 @@ function buildSummaryHtml(params: {
   const approvedTotal = params.approvedRows.reduce((sum, row) => sum + row.total, 0);
   const pendingPaymentTotal = params.pendingPaymentRows.reduce((sum, row) => sum + row.total, 0);
 
-  const renderRows = (rows: QuoteSummaryRow[]) => {
-    if (rows.length == 0) {
-      return `<tr><td colspan="4" style="padding:8px;border:1px solid #ddd;">Sin registros</td></tr>`;
+  const renderRows = (rows: QuoteSummaryRow[], showActaAt: boolean) => {
+    const colspan = showActaAt ? 6 : 5;
+    if (rows.length === 0) {
+      return `<tr><td colspan="${colspan}" style="padding:8px;border:1px solid #ddd;">Sin registros</td></tr>`;
     }
 
     return rows
@@ -270,7 +287,9 @@ function buildSummaryHtml(params: {
             <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(row.quoteNumber)}</td>
             <td style="padding:8px;border:1px solid #ddd;">${escapeHtml(row.clientName)}</td>
             <td style="padding:8px;border:1px solid #ddd;">${escapeHtml([row.projectCode, row.projectName].filter((it) => it).join(" - "))}</td>
-            <td style="padding:8px;border:1px solid #ddd; text-align:right;">$${row.total.toFixed(2)}</td>
+            <td style="padding:8px;border:1px solid #ddd;">${formatDate(row.approvedAt)}</td>
+            ${showActaAt ? `<td style="padding:8px;border:1px solid #ddd;">${formatDate(row.actaAt)}</td>` : ""}
+            <td style="padding:8px;border:1px solid #ddd;text-align:right;">$${row.total.toFixed(2)}</td>
           </tr>`,
       )
       .join("");
@@ -304,11 +323,12 @@ function buildSummaryHtml(params: {
             <th style="padding:8px;border:1px solid #ddd;text-align:left;">Folio</th>
             <th style="padding:8px;border:1px solid #ddd;text-align:left;">Cliente</th>
             <th style="padding:8px;border:1px solid #ddd;text-align:left;">Proyecto</th>
+            <th style="padding:8px;border:1px solid #ddd;text-align:left;">Fecha Aprobaci&oacute;n</th>
             <th style="padding:8px;border:1px solid #ddd;text-align:right;">Total</th>
           </tr>
         </thead>
         <tbody>
-          ${renderRows(params.approvedRows)}
+          ${renderRows(params.approvedRows, false)}
         </tbody>
       </table>
 
@@ -319,11 +339,13 @@ function buildSummaryHtml(params: {
             <th style="padding:8px;border:1px solid #ddd;text-align:left;">Folio</th>
             <th style="padding:8px;border:1px solid #ddd;text-align:left;">Cliente</th>
             <th style="padding:8px;border:1px solid #ddd;text-align:left;">Proyecto</th>
+            <th style="padding:8px;border:1px solid #ddd;text-align:left;">Fecha Aprobaci&oacute;n</th>
+            <th style="padding:8px;border:1px solid #ddd;text-align:left;">Fecha Conclusi&oacute;n</th>
             <th style="padding:8px;border:1px solid #ddd;text-align:right;">Total</th>
           </tr>
         </thead>
         <tbody>
-          ${renderRows(params.pendingPaymentRows)}
+          ${renderRows(params.pendingPaymentRows, true)}
         </tbody>
       </table>
     </div>
@@ -437,6 +459,16 @@ function readIsActive(
     return userMetadata.is_active;
   }
   return true;
+}
+
+function formatDate(iso?: string): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return "—";
+  }
 }
 
 function escapeHtml(value: string) {

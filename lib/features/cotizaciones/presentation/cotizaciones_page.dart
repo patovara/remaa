@@ -1667,20 +1667,21 @@ class _SendQuoteEmailDialogState extends State<_SendQuoteEmailDialog> {
     super.dispose();
   }
 
-  bool _isValidEmail(String value) {
-    final email = value.trim();
-    return email.contains('@') && email.contains('.');
+  bool _areEmailsValid(String value) {
+    final parts = value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return false;
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return parts.every((e) => emailRegex.hasMatch(e));
   }
 
   void _submit() {
-    final email = _emailController.text.trim().toLowerCase();
-    if (!_isValidEmail(email)) {
-      setState(() => _emailError = 'Ingresa un correo valido.');
+    final emails = _emailController.text.trim();
+    if (!_areEmailsValid(emails)) {
+      setState(() => _emailError = 'Ingresa correos válidos separados por coma.');
       return;
     }
-
     Navigator.of(context).pop((
-      email: email,
+      email: emails.toLowerCase(),
       note: _noteController.text.trim(),
     ));
   }
@@ -1703,7 +1704,8 @@ class _SendQuoteEmailDialogState extends State<_SendQuoteEmailDialog> {
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                labelText: 'Correo del cliente',
+                labelText: 'Correo(s) del destinatario',
+                hintText: 'cliente@ejemplo.com, otro@ejemplo.com',
                 errorText: _emailError,
               ),
               onChanged: (_) {
