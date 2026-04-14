@@ -155,11 +155,8 @@ Deno.serve(async (req: Request) => {
 
   const requestOrigin = (req.headers.get("origin") ?? "").replace(/\/$/, "");
   const imageUrls = [
-    appPublicUrl ? `${appPublicUrl}/assets/assets/images/logo_remaa.png` : "",
     appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.webp` : "",
-    requestOrigin ? `${requestOrigin}/assets/assets/images/logo_remaa.png` : "",
     requestOrigin ? `${requestOrigin}/assets/assets/images/firmamvazquez.webp` : "",
-    "https://remaa-staging.vercel.app/assets/assets/images/logo_remaa.png",
     "https://remaa-staging.vercel.app/assets/assets/images/firmamvazquez.webp",
   ].filter((url) => url.length > 0);
 
@@ -306,17 +303,17 @@ function buildQuoteEmailHtml(params: {
       <p style="margin:0 0 8px;">Quedo atento a tus comentarios</p>
       <p style="margin:0 0 24px;">&iexcl;Saludos!</p>
 
-      <hr style="border:none;border-top:1px solid #e5e5e5;margin:0 0 16px;" />
-      <p style="font-size:11px;color:#888;margin:0;line-height:1.5;">
-        En caso de requerir factura por favor env&iacute;enos su informaci&oacute;n y datos de facturaci&oacute;n a
-        <a href="mailto:facturas@remaa.mx" style="color:#888;">facturas@remaa.mx</a>
-      </p>
-
       ${
         params.hasFooterImage
           ? `<img src="cid:footer-image" alt="Imagen" style="max-width:280px;display:block;margin:20px 0 0;" />`
           : `<p style="margin:20px 0 0;font-weight:bold;color:#333;">Grupo REMA</p>`
       }
+
+      <hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;" />
+      <p style="font-size:11px;color:#888;margin:0;line-height:1.5;">
+        En caso de requerir factura por favor env&iacute;enos su informaci&oacute;n y datos de facturaci&oacute;n a
+        <a href="mailto:facturas@remaa.mx" style="color:#888;">facturas@remaa.mx</a>
+      </p>
     </div>
   `;
 }
