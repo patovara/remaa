@@ -383,27 +383,16 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     try {
       final items = await _quotesRepository.fetchItemsByQuoteId(quoteId);
 
-      final concepts = <String>[];
-      for (var index = 0; index < items.length; index++) {
-        final item = items[index];
-        final concept = item.concept.trim();
-        if (concept.isNotEmpty) {
-          final quantity = item.quantity;
-          final unit = item.unit.trim();
-          final normalizedConcept = concept.replaceAll(RegExp(r'\s+'), ' ').trim();
-          final prefix = quantity > 0
-              ? '${index + 1}. ${_formatDecimal(quantity)} ${unit.isEmpty ? 'UN' : unit} - '
-              : '${index + 1}. ';
-          concepts.add('$prefix$normalizedConcept');
-        }
-      }
+      final firstConcept = items
+          .map((item) => item.concept.trim())
+          .firstWhere((concept) => concept.isNotEmpty, orElse: () => '');
 
-      if (!mounted || concepts.isEmpty) {
+      if (!mounted || firstConcept.isEmpty) {
         return;
       }
 
       setState(() {
-        _servicioController.text = concepts.join('\n');
+        _servicioController.text = _normalizeServiceDescriptionForActa(firstConcept);
       });
     } catch (error) {
       AppLogger.error(
@@ -411,6 +400,23 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         data: {'quoteId': quoteId, 'error': error.toString()},
       );
     }
+  }
+
+  String _normalizeServiceDescriptionForActa(String rawConcept) {
+    final normalized = rawConcept.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) {
+      return '';
+    }
+
+    const marker = 'superficie preparada';
+    final lower = normalized.toLowerCase();
+    final markerIndex = lower.indexOf(marker);
+    if (markerIndex >= 0) {
+      final cut = markerIndex + marker.length;
+      return normalized.substring(0, cut).trim();
+    }
+
+    return normalized;
   }
 
   Future<void> _checkActaStatus(String quoteId) async {
@@ -715,11 +721,13 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     try {
       final row = await client
           .from('clients')
-          .select('id, business_name, city, state, address_line')
+          .select('id, business_name, contact_name, city, state, address_line')
           .eq('id', clientId)
           .single();
 
-      final name = row['business_name'] as String? ?? '';
+        final businessName = (row['business_name'] as String? ?? '').trim();
+        final contactName = (row['contact_name'] as String? ?? '').trim();
+        final clientNameForActa = contactName.isNotEmpty ? contactName : businessName;
       final address = row['address_line'] as String? ?? '';
       final city = row['city'] as String? ?? '';
       final state = row['state'] as String? ?? '';
@@ -730,7 +738,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         setState(() {
           _loadedClient = ClientRecord(
             id: clientId,
-            name: name,
+            name: businessName,
+            contactName: contactName,
             sector: '',
             badge: '',
             activeProjects: '',
@@ -741,8 +750,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
             address: address,
             responsibles: responsibles,
           );
-          _clienteController.text = name;
-          _razonSocialController.text = name;
+          _clienteController.text = clientNameForActa;
+          _razonSocialController.text = businessName;
           _direccionController.text = address;
           _ubicacionController.text = location;
           _applyResponsiblesToActa(responsibles);
@@ -756,7 +765,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   void _loadClientIntoControllers(ClientRecord client) {
     setState(() {
       _loadedClient = client;
-      _clienteController.text = client.name;
+      final contactName = (client.contactName ?? '').trim();
+      _clienteController.text = contactName.isNotEmpty ? contactName : client.name;
       _razonSocialController.text = client.name;
       _direccionController.text = client.address;
       _ubicacionController.text = client.address;
@@ -1216,13 +1226,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     if (lower.endsWith('.webp')) return 'image/webp';
     if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
     return 'image/jpeg';
-  }
-
-  String _formatDecimal(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toStringAsFixed(0);
-    }
-    return value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
   }
 
   Future<Uint8List> _buildPdfBytes() async {
