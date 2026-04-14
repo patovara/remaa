@@ -155,6 +155,9 @@ Deno.serve(async (req: Request) => {
 
   const requestOrigin = (req.headers.get("origin") ?? "").replace(/\/$/, "");
   const imageUrls = [
+    appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.png` : "",
+    requestOrigin ? `${requestOrigin}/assets/assets/images/firmamvazquez.png` : "",
+    "https://remaa-staging.vercel.app/assets/assets/images/firmamvazquez.png",
     appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.webp` : "",
     requestOrigin ? `${requestOrigin}/assets/assets/images/firmamvazquez.webp` : "",
     "https://remaa-staging.vercel.app/assets/assets/images/firmamvazquez.webp",
