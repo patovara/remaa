@@ -176,15 +176,33 @@ class PresupuestoPage extends ConsumerWidget {
     String nextStatus,
   ) async {
     try {
+      final currentItems = await ref.read(quoteItemsProvider(quote.id).future);
+
       await ref.read(quotesProvider.notifier).updateStatus(
             quoteId: quote.id,
             status: nextStatus,
           );
+
+      // Al concluir, generar PDF y subirlo automáticamente como approval_pdf
+      if (nextStatus == QuoteStatus.concluded && currentItems.isNotEmpty) {
+        try {
+          final pdfBytes = await _buildQuotePdf(ref: ref, quote: quote, items: currentItems);
+          final fileName = 'cotizacion_${_sanitizeFolioForFileName(quote.quoteNumber)}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          await ref.read(quotesProvider.notifier).attachApprovalPdf(
+                quoteId: quote.id,
+                bytes: pdfBytes,
+                fileName: fileName,
+              );
+        } catch (_) {
+          // No bloquea el flujo si el PDF falla
+        }
+      }
+
       if (!context.mounted) {
         return;
       }
       final message = switch (nextStatus) {
-        QuoteStatus.concluded => 'Cotización concluida. Ya puedes adjuntar el PDF de aprobación.',
+        QuoteStatus.concluded => 'Cotización concluida.',
         QuoteStatus.draft => 'Cotización reabierta para edición.',
         _ => 'Estado actualizado.',
       };
