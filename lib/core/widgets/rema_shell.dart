@@ -162,6 +162,9 @@ class _DesktopNavTile extends StatelessWidget {
 class _MobileNav extends StatelessWidget {
   const _MobileNav({required this.location, required this.navItems});
 
+  static const double _mobileSmallMaxWidth = 420;
+  static const double _tabletMinWidth = 760;
+
   final String location;
   final List<_NavItem> navItems;
 
@@ -173,16 +176,28 @@ class _MobileNav extends StatelessWidget {
         child: Container(
           color: RemaColors.surface.withValues(alpha: 0.86),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          child: Row(
-            children: [
-              for (final item in navItems)
-                Expanded(
-                  child: _MobileNavTile(
-                    item: item,
-                    isActive: location.startsWith(item.route),
-                  ),
-                ),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final isSmallMobile = width < _mobileSmallMaxWidth;
+              final isTabletUp = width >= _tabletMinWidth;
+              final labelMode = isSmallMobile
+                  ? _MobileNavLabelMode.hidden
+                  : (isTabletUp ? _MobileNavLabelMode.full : _MobileNavLabelMode.short);
+
+              return Row(
+                children: [
+                  for (final item in navItems)
+                    Expanded(
+                      child: _MobileNavTile(
+                        item: item,
+                        isActive: location.startsWith(item.route),
+                        labelMode: labelMode,
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -190,46 +205,64 @@ class _MobileNav extends StatelessWidget {
   }
 }
 
+enum _MobileNavLabelMode {
+  full,
+  short,
+  hidden,
+}
+
 class _MobileNavTile extends StatelessWidget {
-  const _MobileNavTile({required this.item, required this.isActive});
+  const _MobileNavTile({
+    required this.item,
+    required this.isActive,
+    required this.labelMode,
+  });
 
   final _NavItem item;
   final bool isActive;
+  final _MobileNavLabelMode labelMode;
 
   @override
   Widget build(BuildContext context) {
-    final mobileLabel = item.shortLabel ?? item.label;
+    final mobileLabel = switch (labelMode) {
+      _MobileNavLabelMode.full => item.label,
+      _MobileNavLabelMode.short => item.shortLabel ?? item.label,
+      _MobileNavLabelMode.hidden => null,
+    };
 
     return InkWell(
       onTap: () => context.go(item.route),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        padding: EdgeInsets.symmetric(horizontal: 2, vertical: mobileLabel == null ? 6 : 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               item.icon,
               size: 18,
               color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
             ),
-            const SizedBox(height: 2),
-            SizedBox(
-              width: double.infinity,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  mobileLabel,
-                  maxLines: 1,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 9,
-                    letterSpacing: 0.2,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
+            if (mobileLabel != null) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    mobileLabel,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 0.2,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
