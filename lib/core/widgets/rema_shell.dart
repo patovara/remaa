@@ -8,20 +8,21 @@ import '../auth/admin_access.dart';
 import '../theme/rema_colors.dart';
 
 class _NavItem {
-  const _NavItem(this.label, this.icon, this.route);
+  const _NavItem(this.label, this.icon, this.route, {this.shortLabel});
 
   final String label;
+  final String? shortLabel;
   final IconData icon;
   final String route;
 }
 
 const _navItems = <_NavItem>[
-  _NavItem('Levantamiento', Icons.architecture, '/levantamiento'),
-  _NavItem('Mis Levantamientos', Icons.assignment_turned_in, '/surveys-staff'),
-  _NavItem('Cotizacion', Icons.request_quote, '/cotizaciones'),
+  _NavItem('Levantamiento', Icons.architecture, '/levantamiento', shortLabel: 'Levant.'),
+  _NavItem('Mis Levantamientos', Icons.assignment_turned_in, '/surveys-staff', shortLabel: 'Mis Lev.'),
+  _NavItem('Cotizacion', Icons.request_quote, '/cotizaciones', shortLabel: 'Cotiz.'),
   _NavItem('Actas', Icons.description, '/actas'),
   _NavItem('Clientes', Icons.group, '/clientes'),
-  _NavItem('Catalogo', Icons.inventory_2, '/catalogo'),
+  _NavItem('Catalogo', Icons.inventory_2, '/catalogo', shortLabel: 'Catalogo'),
   _NavItem('Ajustes', Icons.settings, '/ajustes'),
 ];
 
@@ -161,6 +162,9 @@ class _DesktopNavTile extends StatelessWidget {
 class _MobileNav extends StatelessWidget {
   const _MobileNav({required this.location, required this.navItems});
 
+  static const double _mobileSmallMaxWidth = 420;
+  static const double _tabletMinWidth = 760;
+
   final String location;
   final List<_NavItem> navItems;
 
@@ -171,16 +175,29 @@ class _MobileNav extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           color: RemaColors.surface.withValues(alpha: 0.86),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              for (final item in navItems)
-                _MobileNavTile(
-                  item: item,
-                  isActive: location.startsWith(item.route),
-                ),
-            ],
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final isSmallMobile = width < _mobileSmallMaxWidth;
+              final isTabletUp = width >= _tabletMinWidth;
+              final labelMode = isSmallMobile
+                  ? _MobileNavLabelMode.hidden
+                  : (isTabletUp ? _MobileNavLabelMode.full : _MobileNavLabelMode.short);
+
+              return Row(
+                children: [
+                  for (final item in navItems)
+                    Expanded(
+                      child: _MobileNavTile(
+                        item: item,
+                        isActive: location.startsWith(item.route),
+                        labelMode: labelMode,
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -188,36 +205,64 @@ class _MobileNav extends StatelessWidget {
   }
 }
 
+enum _MobileNavLabelMode {
+  full,
+  short,
+  hidden,
+}
+
 class _MobileNavTile extends StatelessWidget {
-  const _MobileNavTile({required this.item, required this.isActive});
+  const _MobileNavTile({
+    required this.item,
+    required this.isActive,
+    required this.labelMode,
+  });
 
   final _NavItem item;
   final bool isActive;
+  final _MobileNavLabelMode labelMode;
 
   @override
   Widget build(BuildContext context) {
+    final mobileLabel = switch (labelMode) {
+      _MobileNavLabelMode.full => item.label,
+      _MobileNavLabelMode.short => item.shortLabel ?? item.label,
+      _MobileNavLabelMode.hidden => null,
+    };
+
     return InkWell(
       onTap: () => context.go(item.route),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: EdgeInsets.symmetric(horizontal: 2, vertical: mobileLabel == null ? 6 : 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               item.icon,
-              size: 20,
+              size: 18,
               color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
             ),
-            const SizedBox(height: 4),
-            Text(
-              item.label,
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 0.8,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
+            if (mobileLabel != null) ...[
+              const SizedBox(height: 2),
+              SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    mobileLabel,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 0.2,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
