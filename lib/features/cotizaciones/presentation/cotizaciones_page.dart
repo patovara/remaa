@@ -35,6 +35,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   String _search = '';
   String? _statusFilter; // null = todos, 'draft', 'concluded', 'approved', 'declined'
   bool _didOpenComposerFromRoute = false;
+  bool _isSendQuoteEmailDialogOpen = false;
   late final Future<List<ClientOption>> _clientOptionsFuture;
 
   @override
@@ -520,28 +521,33 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   Future<void> _sendQuoteByEmail(QuoteRecord quote, ProjectLookup? project) async {
-    final suggested = await ref
-        .read(quotesProvider.notifier)
-        .fetchRecipientEmailForQuote(quote.id);
-
-    if (!mounted) {
+    if (_isSendQuoteEmailDialogOpen) {
       return;
     }
-
-    final payload = await showDialog<({String email, String note})>(
-      context: context,
-      builder: (dialogContext) => _SendQuoteEmailDialog(
-        initialEmail: (suggested ?? quote.recipientEmail ?? '').trim(),
-        quoteNumber: quote.quoteNumber,
-        projectName: project?.name ?? 'Proyecto sin nombre',
-      ),
-    );
-
-    if (!mounted || payload == null) {
-      return;
-    }
+    _isSendQuoteEmailDialogOpen = true;
 
     try {
+      final suggested = await ref
+          .read(quotesProvider.notifier)
+          .fetchRecipientEmailForQuote(quote.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      final payload = await showDialog<({String email, String note})>(
+        context: context,
+        builder: (dialogContext) => _SendQuoteEmailDialog(
+          initialEmail: (suggested ?? quote.recipientEmail ?? '').trim(),
+          quoteNumber: quote.quoteNumber,
+          projectName: project?.name ?? 'Proyecto sin nombre',
+        ),
+      );
+
+      if (!mounted || payload == null) {
+        return;
+      }
+
       await ref.read(quotesProvider.notifier).sendQuoteEmail(
             quoteId: quote.id,
             recipientEmail: payload.email,
@@ -555,6 +561,8 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       if (mounted) {
         showRemaMessage(context, '$error');
       }
+    } finally {
+      _isSendQuoteEmailDialogOpen = false;
     }
   }
 
