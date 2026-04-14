@@ -8,20 +8,21 @@ import '../auth/admin_access.dart';
 import '../theme/rema_colors.dart';
 
 class _NavItem {
-  const _NavItem(this.label, this.icon, this.route);
+  const _NavItem(this.label, this.icon, this.route, {this.shortLabel});
 
   final String label;
+  final String? shortLabel;
   final IconData icon;
   final String route;
 }
 
 const _navItems = <_NavItem>[
-  _NavItem('Levantamiento', Icons.architecture, '/levantamiento'),
-  _NavItem('Mis Levantamientos', Icons.assignment_turned_in, '/surveys-staff'),
-  _NavItem('Cotizacion', Icons.request_quote, '/cotizaciones'),
+  _NavItem('Levantamiento', Icons.architecture, '/levantamiento', shortLabel: 'Levant.'),
+  _NavItem('Mis Levantamientos', Icons.assignment_turned_in, '/surveys-staff', shortLabel: 'Mis Lev.'),
+  _NavItem('Cotizacion', Icons.request_quote, '/cotizaciones', shortLabel: 'Cotiz.'),
   _NavItem('Actas', Icons.description, '/actas'),
   _NavItem('Clientes', Icons.group, '/clientes'),
-  _NavItem('Catalogo', Icons.inventory_2, '/catalogo'),
+  _NavItem('Catalogo', Icons.inventory_2, '/catalogo', shortLabel: 'Catalogo'),
   _NavItem('Ajustes', Icons.settings, '/ajustes'),
 ];
 
@@ -197,6 +198,8 @@ class _MobileNavTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobileLabel = item.shortLabel ?? item.label;
+
     return InkWell(
       onTap: () => context.go(item.route),
       child: Padding(
@@ -210,16 +213,21 @@ class _MobileNavTile extends StatelessWidget {
               color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
             ),
             const SizedBox(height: 2),
-            Text(
-              item.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 9,
-                letterSpacing: 0.3,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
+            SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  mobileLabel,
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 9,
+                    letterSpacing: 0.2,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
+                  ),
+                ),
               ),
             ),
           ],
