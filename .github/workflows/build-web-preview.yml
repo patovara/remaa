@@ -1,6 +1,7 @@
 name: Build Web Preview
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "feature/**"
@@ -10,6 +11,10 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
       - "web/**"
+      - ".github/workflows/build-web-preview.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -45,7 +50,9 @@ jobs:
           EOF
 
       - name: Build Flutter web (staging)
-        run: flutter build web --dart-define=ENV_FILE=.env.staging
+        run: |
+          cp .env.staging .env
+          flutter build web --dart-define=ENV_FILE=.env.staging
 
       - name: Commit build/web back to branch
         run: |
