@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/theme/rema_colors.dart';
 import '../../../core/utils/image_optimizer.dart';
@@ -29,6 +31,7 @@ class LevantamientoPage extends ConsumerStatefulWidget {
 
 class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   final _metadataRepository = ClientMetadataRepository();
+  final _imagePicker = ImagePicker();
   final _projectKeyController = TextEditingController();
   final _projectNameController = TextEditingController();
   final _clientController = TextEditingController();
@@ -236,28 +239,20 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
 
     setState(() => _isProcessingPhotos = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: true,
-        withData: true,
-      );
-
-      if (!mounted || result == null || result.files.isEmpty) {
+      final selection = await _pickEvidenceMedia(maxPhotos: remaining);
+      if (!mounted || selection.files.isEmpty) {
         return;
       }
 
-      final selectedFiles = result.files.toList();
-      final acceptedFiles = selectedFiles.take(remaining).toList();
       final normalizedMedia = <_PickedMedia>[];
       final rejectedMessages = <String>[];
-      for (final file in acceptedFiles) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) {
+      for (final file in selection.files) {
+        if (file.bytes.isEmpty) {
           continue;
         }
         try {
           final optimized = await optimizeImageForDocument(
-            inputBytes: bytes,
+            inputBytes: file.bytes,
             fileName: file.name,
             profile: ImageOptimizationProfile.gridDocument,
           );
@@ -285,7 +280,7 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
         _persistDraftSnapshot();
       }
 
-      if (acceptedFiles.length < selectedFiles.length) {
+      if (selection.reachedLimit) {
         showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
         return;
       }
@@ -354,26 +349,23 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
   }
 
   Future<List<_PickedMedia>> _pickEvidenceForEdit({required int maxPhotos}) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: true,
-      withData: true,
-    );
-
-    if (!mounted || result == null || result.files.isEmpty) {
+    final selection = await _pickEvidenceMedia(maxPhotos: maxPhotos);
+    if (!mounted || selection.files.isEmpty) {
       return const <_PickedMedia>[];
     }
 
-    final selectedFiles = result.files.take(maxPhotos).toList();
+    if (selection.reachedLimit) {
+      showRemaMessage(context, 'Solo se permiten 2 fotos por descripcion.');
+    }
+
     final normalizedMedia = <_PickedMedia>[];
-    for (final file in selectedFiles) {
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+    for (final file in selection.files) {
+      if (file.bytes.isEmpty) {
         continue;
       }
       try {
         final optimized = await optimizeImageForDocument(
-          inputBytes: bytes,
+          inputBytes: file.bytes,
           fileName: file.name,
           profile: ImageOptimizationProfile.gridDocument,
         );
@@ -392,6 +384,125 @@ class _LevantamientoPageState extends ConsumerState<LevantamientoPage> {
       }
     }
     return normalizedMedia;
+  }
+
+  Future<_MediaSelectionResult> _pickEvidenceMedia({required int maxPhotos}) async {
+    final source = await _askMediaSource();
+    if (source == null) {
+      return const _MediaSelectionResult(files: []);
+    }
+
+    if (source == _MediaSource.camera) {
+      final capture = await _imagePicker.pickImage(source: ImageSource.camera);
+      if (capture == null) {
+        return const _MediaSelectionResult(files: []);
+      }
+      final bytes = await capture.readAsBytes();
+      if (bytes.isEmpty) {
+        return const _MediaSelectionResult(files: []);
+      }
+      return _MediaSelectionResult(
+        files: [_PendingMediaFile(name: _extractFileName(capture.name, capture.path), bytes: bytes)],
+      );
+    }
+
+    if (_supportsNativePicker) {
+      final picked = await _imagePicker.pickMultiImage();
+      if (picked.isEmpty) {
+        return const _MediaSelectionResult(files: []);
+      }
+      final files = <_PendingMediaFile>[];
+      for (final item in picked.take(maxPhotos)) {
+        final bytes = await item.readAsBytes();
+        if (bytes.isEmpty) {
+          continue;
+        }
+        files.add(
+          _PendingMediaFile(
+            name: _extractFileName(item.name, item.path),
+            bytes: bytes,
+          ),
+        );
+      }
+      return _MediaSelectionResult(
+        files: files,
+        reachedLimit: picked.length > maxPhotos,
+      );
+    }
+
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
+      withData: true,
+    );
+
+    if (!mounted || picked == null || picked.files.isEmpty) {
+      return const _MediaSelectionResult(files: []);
+    }
+
+    final files = <_PendingMediaFile>[];
+    for (final item in picked.files.take(maxPhotos)) {
+      final bytes = item.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        continue;
+      }
+      files.add(_PendingMediaFile(name: item.name, bytes: bytes));
+    }
+    return _MediaSelectionResult(
+      files: files,
+      reachedLimit: picked.files.length > maxPhotos,
+    );
+  }
+
+  bool get _supportsNativePicker {
+    if (kIsWeb) {
+      return false;
+    }
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+  }
+
+  Future<_MediaSource?> _askMediaSource() async {
+    if (!_supportsNativePicker || !mounted) {
+      return _MediaSource.gallery;
+    }
+
+    return showModalBottomSheet<_MediaSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Tomar foto'),
+                onTap: () => Navigator.of(sheetContext).pop(_MediaSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Elegir de galeria'),
+                onTap: () => Navigator.of(sheetContext).pop(_MediaSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _extractFileName(String providedName, String path) {
+    final trimmed = providedName.trim();
+    if (trimmed.isNotEmpty) {
+      return trimmed;
+    }
+    final segments = path.split(RegExp(r'[\\/]'));
+    final candidate = segments.isNotEmpty ? segments.last.trim() : '';
+    if (candidate.isNotEmpty) {
+      return candidate;
+    }
+    return 'imagen_${DateTime.now().millisecondsSinceEpoch}.jpg';
   }
 
   List<String> _existingEvidencePaths(SurveyEntryRecord entry) {
@@ -1628,6 +1739,25 @@ class _ProjectDetailsPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _MediaSource { camera, gallery }
+
+class _PendingMediaFile {
+  const _PendingMediaFile({required this.name, required this.bytes});
+
+  final String name;
+  final Uint8List bytes;
+}
+
+class _MediaSelectionResult {
+  const _MediaSelectionResult({
+    required this.files,
+    this.reachedLimit = false,
+  });
+
+  final List<_PendingMediaFile> files;
+  final bool reachedLimit;
 }
 
 String _formatDate(DateTime value) {

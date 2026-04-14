@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>REMA necesita acceso a la camara para capturar evidencia del levantamiento.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>REMA necesita acceso a la galeria para adjuntar evidencia del levantamiento.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>REMA necesita permiso para guardar fotos capturadas cuando corresponda.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
