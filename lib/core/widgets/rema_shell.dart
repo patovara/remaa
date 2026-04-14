@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -159,82 +158,11 @@ class _DesktopNavTile extends StatelessWidget {
   }
 }
 
-class _MobileNav extends StatefulWidget {
+class _MobileNav extends StatelessWidget {
   const _MobileNav({required this.location, required this.navItems});
 
   final String location;
   final List<_NavItem> navItems;
-
-  @override
-  State<_MobileNav> createState() => _MobileNavState();
-}
-
-class _MobileNavState extends State<_MobileNav> {
-  late final ScrollController _scrollController;
-  bool _showLeftHint = false;
-  bool _showRightHint = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController()..addListener(_updateEdgeHints);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updateEdgeHints());
-  }
-
-  @override
-  void dispose() {
-    _scrollController
-      ..removeListener(_updateEdgeHints)
-      ..dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant _MobileNav oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updateEdgeHints());
-  }
-
-  void _updateEdgeHints() {
-    if (!mounted || !_scrollController.hasClients) {
-      return;
-    }
-    final position = _scrollController.position;
-    final showLeft = position.pixels > 2;
-    final showRight = position.maxScrollExtent - position.pixels > 2;
-    if (showLeft == _showLeftHint && showRight == _showRightHint) {
-      return;
-    }
-    setState(() {
-      _showLeftHint = showLeft;
-      _showRightHint = showRight;
-    });
-  }
-
-  void _handlePointerSignal(PointerSignalEvent event) {
-    if (!_scrollController.hasClients || event is! PointerScrollEvent) {
-      return;
-    }
-    final delta = event.scrollDelta.dx != 0 ? event.scrollDelta.dx : event.scrollDelta.dy;
-    _scrollBy(delta);
-  }
-
-  void _handleHorizontalDragUpdate(DragUpdateDetails details) {
-    _scrollBy(-details.delta.dx);
-  }
-
-  void _scrollBy(double delta) {
-    if (!_scrollController.hasClients || delta == 0) {
-      return;
-    }
-    final position = _scrollController.position;
-    final target =
-        (position.pixels + delta).clamp(position.minScrollExtent, position.maxScrollExtent).toDouble();
-    if (target == position.pixels) {
-      return;
-    }
-    _scrollController.jumpTo(target);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -243,94 +171,19 @@ class _MobileNavState extends State<_MobileNav> {
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           color: RemaColors.surface.withValues(alpha: 0.86),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Listener(
-            onPointerSignal: _handlePointerSignal,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragUpdate: _handleHorizontalDragUpdate,
-              child: Stack(
-                children: [
-                  ScrollConfiguration(
-                    behavior: const MaterialScrollBehavior().copyWith(
-                      scrollbars: false,
-                      dragDevices: {
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.mouse,
-                        PointerDeviceKind.trackpad,
-                        PointerDeviceKind.stylus,
-                        PointerDeviceKind.unknown,
-                      },
-                    ),
-                    child: SingleChildScrollView(
-                      controller: _scrollController,
-                      dragStartBehavior: DragStartBehavior.down,
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: Row(
-                        children: [
-                          for (final item in widget.navItems)
-                            _MobileNavTile(
-                              item: item,
-                              isActive: widget.location.startsWith(item.route),
-                            ),
-                        ],
-                      ),
-                    ),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(
+            children: [
+              for (final item in navItems)
+                Expanded(
+                  child: _MobileNavTile(
+                    item: item,
+                    isActive: location.startsWith(item.route),
                   ),
-                  if (_showLeftHint)
-                    const Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      child: IgnorePointer(
-                        child: _ScrollHintEdge(isLeft: true),
-                      ),
-                    ),
-                  if (_showRightHint)
-                    const Positioned(
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      child: IgnorePointer(
-                        child: _ScrollHintEdge(isLeft: false),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+                ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ScrollHintEdge extends StatelessWidget {
-  const _ScrollHintEdge({required this.isLeft});
-
-  final bool isLeft;
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = isLeft ? Icons.chevron_left : Icons.chevron_right;
-    final begin = isLeft ? Alignment.centerLeft : Alignment.centerRight;
-    final end = isLeft ? Alignment.centerRight : Alignment.centerLeft;
-    return Container(
-      width: 28,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: begin,
-          end: end,
-          colors: [
-            RemaColors.surface.withValues(alpha: 0.95),
-            RemaColors.surface.withValues(alpha: 0),
-          ],
-        ),
-      ),
-      child: Align(
-        alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
-        child: Icon(icon, size: 16, color: RemaColors.onSurfaceVariant.withValues(alpha: 0.8)),
       ),
     );
   }
@@ -347,21 +200,24 @@ class _MobileNavTile extends StatelessWidget {
     return InkWell(
       onTap: () => context.go(item.route),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               item.icon,
-              size: 20,
+              size: 18,
               color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 0.8,
+                fontSize: 9,
+                letterSpacing: 0.3,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 color: isActive ? RemaColors.primaryDark : RemaColors.onSurfaceVariant,
               ),
