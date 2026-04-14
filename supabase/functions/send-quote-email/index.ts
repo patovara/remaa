@@ -7,6 +7,14 @@ type RequestBody = {
   note?: string;
 };
 
+type ResendAttachment = {
+  filename: string;
+  content: string;
+  content_type: string;
+  content_id?: string;
+  inline?: boolean;
+};
+
 type Role = "super_admin" | "admin" | "staff";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -120,10 +128,10 @@ Deno.serve(async (req: Request) => {
   const pdfPath = `${quoteRow.approval_pdf_path ?? ""}`.trim();
   const allRecipients = [...toEmails, ...ccEmails].join(",");
 
-  const subject = `Cotizacion REMA | ${projectName || "Proyecto"}${quoteNumber ? ` (${quoteNumber})` : ""}`;
+  const subject = `Cotizacion REMA | ${projectName || "Proyecto"}`;
 
   // Download approval PDF from storage and attach it if it exists
-  let pdfAttachment: { filename: string; content: string; content_type: string } | null = null;
+  let pdfAttachment: ResendAttachment | null = null;
   if (pdfPath) {
     try {
       const { data: pdfBlob, error: pdfDownloadError } = await adminClient.storage
@@ -145,37 +153,23 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Embed firma as inline base64 attachment so it renders without external URL dependencies
-  let firmaAttachment: { filename: string; content: string; content_type: string; content_id: string; inline: boolean } | null = null;
-  if (appPublicUrl) {
-    try {
-      const firmaRes = await fetch(`${appPublicUrl}/assets/assets/images/firmamvazquez.webp`);
-      if (firmaRes.ok) {
-        const firmaBuffer = await firmaRes.arrayBuffer();
-        const firmaUint8 = new Uint8Array(firmaBuffer);
-        let firmaBinary = "";
-        for (let i = 0; i < firmaUint8.length; i++) {
-          firmaBinary += String.fromCharCode(firmaUint8[i]);
-        }
-        firmaAttachment = {
-          filename: "firma.webp",
-          content: btoa(firmaBinary),
-          content_type: "image/webp",
-          content_id: "firma",
-          inline: true,
-        };
-      }
-    } catch {
-      // Continue without firma if fetch fails
-    }
-  }
+  const requestOrigin = (req.headers.get("origin") ?? "").replace(/\/$/, "");
+  const imageUrls = [
+    appPublicUrl ? `${appPublicUrl}/assets/assets/images/logo_remaa.png` : "",
+    appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.webp` : "",
+    requestOrigin ? `${requestOrigin}/assets/assets/images/logo_remaa.png` : "",
+    requestOrigin ? `${requestOrigin}/assets/assets/images/firmamvazquez.webp` : "",
+    "https://remaa-staging.vercel.app/assets/assets/images/logo_remaa.png",
+    "https://remaa-staging.vercel.app/assets/assets/images/firmamvazquez.webp",
+  ].filter((url) => url.length > 0);
 
-  const hasFirma = firmaAttachment !== null;
-  const html = buildQuoteEmailHtml({ recipientName, projectName, quoteNumber, note, hasFirma });
-  const text = buildQuoteEmailText({ recipientName, projectName, quoteNumber, note });
+  const footerImageAttachment = await fetchFirstInlineImage(imageUrls, "imagen-final");
+  const hasFooterImage = footerImageAttachment !== null;
+  const html = buildQuoteEmailHtml({ recipientName, projectName, note, hasFooterImage });
+  const text = buildQuoteEmailText({ recipientName, projectName, note });
 
-  const attachments: unknown[] = [];
-  if (firmaAttachment) attachments.push(firmaAttachment);
+  const attachments: ResendAttachment[] = [];
+  if (footerImageAttachment) attachments.push(footerImageAttachment);
   if (pdfAttachment) attachments.push(pdfAttachment);
 
   const resendBody: Record<string, unknown> = {
@@ -290,13 +284,10 @@ function asStringArray(value: unknown): string[] {
 function buildQuoteEmailHtml(params: {
   recipientName: string;
   projectName: string;
-  quoteNumber: string;
   note: string;
-  hasFirma: boolean;
+  hasFooterImage: boolean;
 }) {
-  const projectLabel = params.projectName
-    ? `${escapeHtml(params.projectName)}${params.quoteNumber ? ` (${escapeHtml(params.quoteNumber)})` : ""}`
-    : escapeHtml(params.quoteNumber || "");
+  const projectLabel = escapeHtml(params.projectName || "Proyecto");
 
   return `
     <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1f1f1f;line-height:1.6;">
@@ -315,17 +306,17 @@ function buildQuoteEmailHtml(params: {
       <p style="margin:0 0 8px;">Quedo atento a tus comentarios</p>
       <p style="margin:0 0 24px;">&iexcl;Saludos!</p>
 
-      ${
-        params.hasFirma
-          ? `<img src="cid:firma" alt="Firma" style="max-width:280px;display:block;margin:0 0 24px;" />`
-          : `<p style="margin:0 0 24px;font-weight:bold;color:#333;">Grupo REMA</p>`
-      }
-
       <hr style="border:none;border-top:1px solid #e5e5e5;margin:0 0 16px;" />
       <p style="font-size:11px;color:#888;margin:0;line-height:1.5;">
         En caso de requerir factura por favor env&iacute;enos su informaci&oacute;n y datos de facturaci&oacute;n a
         <a href="mailto:facturas@remaa.mx" style="color:#888;">facturas@remaa.mx</a>
       </p>
+
+      ${
+        params.hasFooterImage
+          ? `<img src="cid:footer-image" alt="Imagen" style="max-width:280px;display:block;margin:20px 0 0;" />`
+          : `<p style="margin:20px 0 0;font-weight:bold;color:#333;">Grupo REMA</p>`
+      }
     </div>
   `;
 }
@@ -333,12 +324,9 @@ function buildQuoteEmailHtml(params: {
 function buildQuoteEmailText(params: {
   recipientName: string;
   projectName: string;
-  quoteNumber: string;
   note: string;
 }) {
-  const projectLabel = [params.projectName, params.quoteNumber ? `(${params.quoteNumber})` : ""]
-    .filter(Boolean)
-    .join(" ");
+  const projectLabel = params.projectName || "Proyecto";
   const lines = [
     "Buen dia, un gusto saludarte!",
     "",
@@ -389,6 +377,49 @@ async function insertOutboundLog(
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function fetchFirstInlineImage(urls: string[], baseFileName: string): Promise<ResendAttachment | null> {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+
+      const contentType = guessImageContentType(url, res.headers.get("content-type") ?? "");
+      const ext = contentType === "image/webp" ? "webp" : contentType === "image/jpeg" ? "jpg" : "png";
+
+      const buffer = await res.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+
+      return {
+        filename: `${baseFileName}.${ext}`,
+        content: btoa(binary),
+        content_type: contentType,
+        content_id: "footer-image",
+        inline: true,
+      };
+    } catch {
+      // Try next URL candidate
+    }
+  }
+  return null;
+}
+
+function guessImageContentType(url: string, headerContentType: string): "image/png" | "image/jpeg" | "image/webp" {
+  const normalizedHeader = headerContentType.toLowerCase();
+  if (normalizedHeader.includes("image/png")) return "image/png";
+  if (normalizedHeader.includes("image/jpeg") || normalizedHeader.includes("image/jpg")) return "image/jpeg";
+  if (normalizedHeader.includes("image/webp")) return "image/webp";
+
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.endsWith(".png")) return "image/png";
+  if (lowerUrl.endsWith(".jpg") || lowerUrl.endsWith(".jpeg")) return "image/jpeg";
+  if (lowerUrl.endsWith(".webp")) return "image/webp";
+  return "image/png";
 }
 
 function escapeHtml(value: string): string {
