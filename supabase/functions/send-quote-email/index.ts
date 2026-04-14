@@ -145,9 +145,38 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const firmaUrl = appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.webp` : null;
-  const html = buildQuoteEmailHtml({ recipientName, projectName, quoteNumber, note, firmaUrl });
+  // Embed firma as inline base64 attachment so it renders without external URL dependencies
+  let firmaAttachment: { filename: string; content: string; content_type: string; content_id: string; inline: boolean } | null = null;
+  if (appPublicUrl) {
+    try {
+      const firmaRes = await fetch(`${appPublicUrl}/assets/assets/images/firmamvazquez.webp`);
+      if (firmaRes.ok) {
+        const firmaBuffer = await firmaRes.arrayBuffer();
+        const firmaUint8 = new Uint8Array(firmaBuffer);
+        let firmaBinary = "";
+        for (let i = 0; i < firmaUint8.length; i++) {
+          firmaBinary += String.fromCharCode(firmaUint8[i]);
+        }
+        firmaAttachment = {
+          filename: "firma.webp",
+          content: btoa(firmaBinary),
+          content_type: "image/webp",
+          content_id: "firma",
+          inline: true,
+        };
+      }
+    } catch {
+      // Continue without firma if fetch fails
+    }
+  }
+
+  const hasFirma = firmaAttachment !== null;
+  const html = buildQuoteEmailHtml({ recipientName, projectName, quoteNumber, note, hasFirma });
   const text = buildQuoteEmailText({ recipientName, projectName, quoteNumber, note });
+
+  const attachments: unknown[] = [];
+  if (firmaAttachment) attachments.push(firmaAttachment);
+  if (pdfAttachment) attachments.push(pdfAttachment);
 
   const resendBody: Record<string, unknown> = {
     from: SYSTEM_FROM_EMAIL,
@@ -158,7 +187,7 @@ Deno.serve(async (req: Request) => {
     html,
     text,
   };
-  if (pdfAttachment) resendBody.attachments = [pdfAttachment];
+  if (attachments.length > 0) resendBody.attachments = attachments;
 
   const resendResponse = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -263,7 +292,7 @@ function buildQuoteEmailHtml(params: {
   projectName: string;
   quoteNumber: string;
   note: string;
-  firmaUrl: string | null;
+  hasFirma: boolean;
 }) {
   const projectLabel = params.projectName
     ? `${escapeHtml(params.projectName)}${params.quoteNumber ? ` (${escapeHtml(params.quoteNumber)})` : ""}`
@@ -287,8 +316,8 @@ function buildQuoteEmailHtml(params: {
       <p style="margin:0 0 24px;">&iexcl;Saludos!</p>
 
       ${
-        params.firmaUrl
-          ? `<img src="${params.firmaUrl}" alt="Firma" style="max-width:280px;display:block;margin:0 0 24px;" />`
+        params.hasFirma
+          ? `<img src="cid:firma" alt="Firma" style="max-width:280px;display:block;margin:0 0 24px;" />`
           : `<p style="margin:0 0 24px;font-weight:bold;color:#333;">Grupo REMA</p>`
       }
 
