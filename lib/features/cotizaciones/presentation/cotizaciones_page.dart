@@ -17,6 +17,9 @@ import '../domain/quote_models.dart';
 import 'concepts_catalog_controller.dart';
 import 'quotes_controller.dart';
 
+// Global lock to prevent stacked email dialogs across rapid taps and widget instances.
+bool _isSendQuoteEmailDialogOpenGlobal = false;
+
 class CotizacionesPage extends ConsumerStatefulWidget {
   const CotizacionesPage({
     super.key,
@@ -133,6 +136,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                       context,
                                       'Compartir ${entry.quote.quoteNumber} listo para integrar.',
                                     ),
+                                    onSendEmail: () => _sendQuoteByEmail(
+                                      entry.quote,
+                                      projectById[entry.quote.projectId],
+                                    ),
                                     onAttachPdf: entry.quote.isConcluded
                                         ? () => _attachApprovalPdf(
                                               entry.quote,
@@ -154,7 +161,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                     onMarkPaid: entry.quote.isActaFinalizada
                                         ? () => _changeStatus(entry.quote.id, QuoteStatus.paid)
                                         : null,
-                                    onGoToActas: entry.quote.isApproved
+                                        onGoToActas: (entry.quote.isConcluded ||
+                                          entry.quote.isApproved ||
+                                          entry.quote.isActaFinalizada ||
+                                          entry.quote.isPaid)
                                         ? () => _goToActas(
                                               context,
                                               entry.quote,
@@ -216,6 +226,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                       context,
                                       'Compartir ${entry.quote.quoteNumber} listo para integrar.',
                                     ),
+                                    onSendEmail: () => _sendQuoteByEmail(
+                                      entry.quote,
+                                      projectById[entry.quote.projectId],
+                                    ),
                                     onAttachPdf: entry.quote.isConcluded
                                         ? () => _attachApprovalPdf(
                                               entry.quote,
@@ -237,7 +251,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                     onMarkPaid: entry.quote.isActaFinalizada
                                         ? () => _changeStatus(entry.quote.id, QuoteStatus.paid)
                                         : null,
-                                    onGoToActas: entry.quote.isApproved
+                                        onGoToActas: (entry.quote.isConcluded ||
+                                          entry.quote.isApproved ||
+                                          entry.quote.isActaFinalizada ||
+                                          entry.quote.isPaid)
                                         ? () => _goToActas(
                                               context,
                                               entry.quote,
@@ -433,7 +450,9 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
 
   Future<void> _changeStatus(String quoteId, String newStatus) async {
     try {
-      await ref.read(quotesProvider.notifier).updateStatus(quoteId: quoteId, status: newStatus);
+      await ref
+          .read(quotesProvider.notifier)
+          .updateStatusWithOptions(quoteId: quoteId, status: newStatus);
       if (mounted) {
         final label = switch (newStatus) {
           QuoteStatus.concluded => 'Concluida',
@@ -446,9 +465,106 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
         showRemaMessage(context, 'Cotizacion $label.');
       }
     } catch (error) {
+      final message = error.toString();
+      if (newStatus == QuoteStatus.approved &&
+          message.contains(approveWithoutPdfConfirmationRequired)) {
+        final confirmed = await _confirmApproveWithoutPdf();
+        if (confirmed == true) {
+          try {
+            await ref.read(quotesProvider.notifier).updateStatusWithOptions(
+                  quoteId: quoteId,
+                  status: newStatus,
+                  allowApproveWithoutPdf: true,
+                );
+            if (mounted) {
+              showRemaMessage(
+                context,
+                'Cotizacion aprobada sin PDF de confirmacion.',
+              );
+            }
+            return;
+          } catch (retryError) {
+            if (mounted) {
+              showRemaMessage(context, '$retryError');
+            }
+            return;
+          }
+        }
+        return;
+      }
+      if (mounted) {
+        showRemaMessage(context, message);
+      }
+    }
+  }
+
+  Future<bool?> _confirmApproveWithoutPdf() {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Continuar sin aprobación PDF'),
+        content: const Text(
+          'Esta cotización no tiene PDF de confirmación.\n\n'
+          'Para sectores no hotelería puedes continuar sin aprobación.\n\n'
+          '¿Deseas aprobar de todos modos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendQuoteByEmail(QuoteRecord quote, ProjectLookup? project) async {
+    if (_isSendQuoteEmailDialogOpenGlobal) {
+      return;
+    }
+    _isSendQuoteEmailDialogOpenGlobal = true;
+
+    try {
+      final suggested = await ref
+          .read(quotesProvider.notifier)
+          .fetchRecipientEmailForQuote(quote.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      final payload = await showDialog<({String email, String note})>(
+        context: context,
+        builder: (dialogContext) => _SendQuoteEmailDialog(
+          initialEmail: (suggested ?? quote.recipientEmail ?? '').trim(),
+          quoteNumber: quote.quoteNumber,
+          projectName: project?.name ?? 'Proyecto sin nombre',
+        ),
+      );
+
+      if (!mounted || payload == null) {
+        return;
+      }
+
+      await ref.read(quotesProvider.notifier).sendQuoteEmail(
+            quoteId: quote.id,
+            recipientEmail: payload.email,
+            note: payload.note,
+          );
+      await ref.read(quotesProvider.notifier).reload();
+      if (mounted) {
+        showRemaMessage(context, 'Cotizacion enviada a ${payload.email}.');
+      }
+    } catch (error) {
       if (mounted) {
         showRemaMessage(context, '$error');
       }
+    } finally {
+      _isSendQuoteEmailDialogOpenGlobal = false;
     }
   }
 
@@ -1131,6 +1247,7 @@ class _QuoteRow extends StatelessWidget {
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
+    required this.onSendEmail,
     this.onAttachPdf,
     this.onPreviewPdf,
     this.onPreviewActa,
@@ -1149,6 +1266,7 @@ class _QuoteRow extends StatelessWidget {
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
+  final VoidCallback onSendEmail;
   final VoidCallback? onAttachPdf;
   final VoidCallback? onPreviewPdf;
   final VoidCallback? onPreviewActa;
@@ -1280,6 +1398,11 @@ class _QuoteRow extends StatelessWidget {
                   tooltip: quote.isDraft ? 'Editar conceptos' : 'Ver presupuesto',
                 ),
                 IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
+                IconButton(
+                  onPressed: onSendEmail,
+                  icon: const Icon(Icons.mail_outline),
+                  tooltip: 'Enviar cotizacion por correo',
+                ),
                 if (onAttachPdf != null)
                   IconButton(
                     onPressed: onAttachPdf,
@@ -1345,6 +1468,7 @@ class _QuoteMobileCard extends StatelessWidget {
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
+    required this.onSendEmail,
     this.onAttachPdf,
     this.onPreviewPdf,
     this.onPreviewActa,
@@ -1363,6 +1487,7 @@ class _QuoteMobileCard extends StatelessWidget {
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
+  final VoidCallback onSendEmail;
   final VoidCallback? onAttachPdf;
   final VoidCallback? onPreviewPdf;
   final VoidCallback? onPreviewActa;
@@ -1460,6 +1585,11 @@ class _QuoteMobileCard extends StatelessWidget {
                       tooltip: quote.isDraft ? 'Editar conceptos' : 'Ver presupuesto',
                     ),
                     IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
+                    IconButton(
+                      onPressed: onSendEmail,
+                      icon: const Icon(Icons.mail_outline),
+                      tooltip: 'Enviar cotizacion por correo',
+                    ),
                     if (onAttachPdf != null)
                       IconButton(
                         onPressed: onAttachPdf,
@@ -1515,6 +1645,107 @@ class _QuoteMobileCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SendQuoteEmailDialog extends StatefulWidget {
+  const _SendQuoteEmailDialog({
+    required this.initialEmail,
+    required this.quoteNumber,
+    required this.projectName,
+  });
+
+  final String initialEmail;
+  final String quoteNumber;
+  final String projectName;
+
+  @override
+  State<_SendQuoteEmailDialog> createState() => _SendQuoteEmailDialogState();
+}
+
+class _SendQuoteEmailDialogState extends State<_SendQuoteEmailDialog> {
+  late final TextEditingController _emailController =
+      TextEditingController(text: widget.initialEmail);
+  late final TextEditingController _noteController = TextEditingController();
+  String? _emailError;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  bool _areEmailsValid(String value) {
+    final parts = value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return false;
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return parts.every((e) => emailRegex.hasMatch(e));
+  }
+
+  void _submit() {
+    final emails = _emailController.text.trim();
+    if (!_areEmailsValid(emails)) {
+      setState(() => _emailError = 'Ingresa correos válidos separados por coma.');
+      return;
+    }
+    Navigator.of(context).pop((
+      email: emails.toLowerCase(),
+      note: _noteController.text.trim(),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Enviar cotizacion por correo'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Folio: ${widget.quoteNumber}'),
+            const SizedBox(height: 4),
+            Text('Proyecto: ${widget.projectName}'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Correo(s) del destinatario',
+                hintText: 'cliente@ejemplo.com, otro@ejemplo.com',
+                errorText: _emailError,
+              ),
+              onChanged: (_) {
+                if (_emailError != null) {
+                  setState(() => _emailError = null);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Mensaje adicional (opcional)',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_outlined),
+          label: const Text('Enviar'),
+        ),
+      ],
     );
   }
 }

@@ -7,7 +7,7 @@ on:
         description: "Aplicar migraciones a staging"
         required: true
         type: boolean
-        default: true
+        default: false
       deploy_functions:
         description: "Desplegar Edge Functions"
         required: true
@@ -71,7 +71,8 @@ jobs:
       - name: Deploy edge functions
         if: ${{ inputs.deploy_functions }}
         run: |
-          supabase functions deploy user-admin
+          supabase functions deploy user-admin --no-verify-jwt
           supabase functions deploy mailer
           supabase functions deploy email-inbound
+          supabase functions deploy send-quote-email --no-verify-jwt
           supabase functions deploy weekly-quote-summary --no-verify-jwt

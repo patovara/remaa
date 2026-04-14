@@ -181,6 +181,14 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
   }
 
   Future<void> updateStatus({required String quoteId, required String status}) async {
+    return updateStatusWithOptions(quoteId: quoteId, status: status);
+  }
+
+  Future<void> updateStatusWithOptions({
+    required String quoteId,
+    required String status,
+    bool allowApproveWithoutPdf = false,
+  }) async {
     final current = state.valueOrNull ?? const <QuoteRecord>[];
     QuoteRecord? quote;
     for (final item in current) {
@@ -191,7 +199,11 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
     }
     if (quote == null) return;
 
-    final updated = await _repository.updateStatus(quote: quote, status: status);
+    final updated = await _repository.updateStatus(
+      quote: quote,
+      status: status,
+      allowApproveWithoutPdf: allowApproveWithoutPdf,
+    );
     state = AsyncData([
       for (final item in current)
         if (item.id == quoteId) updated else item,
@@ -246,6 +258,22 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
       for (final item in current)
         if (item.id == quoteId) updated else item,
     ]);
+  }
+
+  Future<String?> fetchRecipientEmailForQuote(String quoteId) {
+    return _repository.fetchRecipientEmailForQuote(quoteId: quoteId);
+  }
+
+  Future<void> sendQuoteEmail({
+    required String quoteId,
+    required String recipientEmail,
+    String? note,
+  }) {
+    return _repository.sendQuoteEmail(
+      quoteId: quoteId,
+      recipientEmail: recipientEmail,
+      note: note,
+    );
   }
 }
 
