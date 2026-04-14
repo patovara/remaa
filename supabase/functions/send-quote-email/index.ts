@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { FIRMAMVAZQUEZ_PNG_BASE64 } from "./firma_base64.ts";
 
 type RequestBody = {
   quote_id?: string;
@@ -13,6 +14,8 @@ type ResendAttachment = {
   content_type: string;
   content_id?: string;
   inline?: boolean;
+  cid?: string;
+  disposition?: string;
 };
 
 type Role = "super_admin" | "admin" | "staff";
@@ -153,23 +156,21 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const requestOrigin = (req.headers.get("origin") ?? "").replace(/\/$/, "");
-  const imageUrls = [
-    appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.png` : "",
-    requestOrigin ? `${requestOrigin}/assets/assets/images/firmamvazquez.png` : "",
-    "https://remaa-staging.vercel.app/assets/assets/images/firmamvazquez.png",
-    appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.webp` : "",
-    requestOrigin ? `${requestOrigin}/assets/assets/images/firmamvazquez.webp` : "",
-    "https://remaa-staging.vercel.app/assets/assets/images/firmamvazquez.webp",
-  ].filter((url) => url.length > 0);
-
-  const footerImageAttachment = await fetchFirstInlineImage(imageUrls, "imagen-final");
-  const hasFooterImage = footerImageAttachment !== null;
+  const footerImageAttachment: ResendAttachment = {
+    filename: "firmamvazquez.png",
+    content: FIRMAMVAZQUEZ_PNG_BASE64,
+    content_type: "image/png",
+    content_id: "footer-image",
+    cid: "footer-image",
+    inline: true,
+    disposition: "inline",
+  };
+  const hasFooterImage = true;
   const html = buildQuoteEmailHtml({ recipientName, projectName, note, hasFooterImage });
   const text = buildQuoteEmailText({ recipientName, projectName, note });
 
   const attachments: ResendAttachment[] = [];
-  if (footerImageAttachment) attachments.push(footerImageAttachment);
+  attachments.push(footerImageAttachment);
   if (pdfAttachment) attachments.push(pdfAttachment);
 
   const resendBody: Record<string, unknown> = {
@@ -377,49 +378,6 @@ async function insertOutboundLog(
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-async function fetchFirstInlineImage(urls: string[], baseFileName: string): Promise<ResendAttachment | null> {
-  for (const url of urls) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-
-      const contentType = guessImageContentType(url, res.headers.get("content-type") ?? "");
-      const ext = contentType === "image/webp" ? "webp" : contentType === "image/jpeg" ? "jpg" : "png";
-
-      const buffer = await res.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-
-      return {
-        filename: `${baseFileName}.${ext}`,
-        content: btoa(binary),
-        content_type: contentType,
-        content_id: "footer-image",
-        inline: true,
-      };
-    } catch {
-      // Try next URL candidate
-    }
-  }
-  return null;
-}
-
-function guessImageContentType(url: string, headerContentType: string): "image/png" | "image/jpeg" | "image/webp" {
-  const normalizedHeader = headerContentType.toLowerCase();
-  if (normalizedHeader.includes("image/png")) return "image/png";
-  if (normalizedHeader.includes("image/jpeg") || normalizedHeader.includes("image/jpg")) return "image/jpeg";
-  if (normalizedHeader.includes("image/webp")) return "image/webp";
-
-  const lowerUrl = url.toLowerCase();
-  if (lowerUrl.endsWith(".png")) return "image/png";
-  if (lowerUrl.endsWith(".jpg") || lowerUrl.endsWith(".jpeg")) return "image/jpeg";
-  if (lowerUrl.endsWith(".webp")) return "image/webp";
-  return "image/png";
 }
 
 function escapeHtml(value: string): string {
