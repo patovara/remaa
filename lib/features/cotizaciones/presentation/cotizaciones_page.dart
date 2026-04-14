@@ -17,6 +17,9 @@ import '../domain/quote_models.dart';
 import 'concepts_catalog_controller.dart';
 import 'quotes_controller.dart';
 
+// Global lock to prevent stacked email dialogs across rapid taps and widget instances.
+bool _isSendQuoteEmailDialogOpenGlobal = false;
+
 class CotizacionesPage extends ConsumerStatefulWidget {
   const CotizacionesPage({
     super.key,
@@ -35,7 +38,6 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   String _search = '';
   String? _statusFilter; // null = todos, 'draft', 'concluded', 'approved', 'declined'
   bool _didOpenComposerFromRoute = false;
-  bool _isSendQuoteEmailDialogOpen = false;
   late final Future<List<ClientOption>> _clientOptionsFuture;
 
   @override
@@ -521,10 +523,10 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   Future<void> _sendQuoteByEmail(QuoteRecord quote, ProjectLookup? project) async {
-    if (_isSendQuoteEmailDialogOpen) {
+    if (_isSendQuoteEmailDialogOpenGlobal) {
       return;
     }
-    _isSendQuoteEmailDialogOpen = true;
+    _isSendQuoteEmailDialogOpenGlobal = true;
 
     try {
       final suggested = await ref
@@ -562,7 +564,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
         showRemaMessage(context, '$error');
       }
     } finally {
-      _isSendQuoteEmailDialogOpen = false;
+      _isSendQuoteEmailDialogOpenGlobal = false;
     }
   }
 
