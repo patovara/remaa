@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -210,6 +211,19 @@ class _MobileNavState extends State<_MobileNav> {
     });
   }
 
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (!_scrollController.hasClients || event is! PointerScrollEvent) {
+      return;
+    }
+    final position = _scrollController.position;
+    final delta = event.scrollDelta.dx != 0 ? event.scrollDelta.dx : event.scrollDelta.dy;
+    if (delta == 0) {
+      return;
+    }
+    final target = (position.pixels + delta).clamp(position.minScrollExtent, position.maxScrollExtent);
+    _scrollController.jumpTo(target);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ClipRect(
@@ -218,41 +232,56 @@ class _MobileNavState extends State<_MobileNav> {
         child: Container(
           color: RemaColors.surface.withValues(alpha: 0.86),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                controller: _scrollController,
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  children: [
-                    for (final item in widget.navItems)
-                      _MobileNavTile(
-                        item: item,
-                        isActive: widget.location.startsWith(item.route),
-                      ),
-                  ],
-                ),
-              ),
-              if (_showLeftHint)
-                const Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: _ScrollHintEdge(isLeft: true),
+          child: Listener(
+            onPointerSignal: _handlePointerSignal,
+            child: Stack(
+              children: [
+                ScrollConfiguration(
+                  behavior: const MaterialScrollBehavior().copyWith(
+                    scrollbars: false,
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                      PointerDeviceKind.unknown,
+                    },
+                  ),
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        for (final item in widget.navItems)
+                          _MobileNavTile(
+                            item: item,
+                            isActive: widget.location.startsWith(item.route),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              if (_showRightHint)
-                const Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  child: IgnorePointer(
-                    child: _ScrollHintEdge(isLeft: false),
+                if (_showLeftHint)
+                  const Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: _ScrollHintEdge(isLeft: true),
+                    ),
                   ),
-                ),
-            ],
+                if (_showRightHint)
+                  const Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: _ScrollHintEdge(isLeft: false),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
