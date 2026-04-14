@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const firmaUrl = appPublicUrl ? `${appPublicUrl}/assets/images/firmamvazquez.webp` : null;
+  const firmaUrl = appPublicUrl ? `${appPublicUrl}/assets/assets/images/firmamvazquez.webp` : null;
   const html = buildQuoteEmailHtml({ recipientName, projectName, quoteNumber, note, firmaUrl });
   const text = buildQuoteEmailText({ recipientName, projectName, quoteNumber, note });
 
