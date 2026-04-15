@@ -408,8 +408,14 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       return '';
     }
 
-    const marker = 'superficie preparada';
+    // Remueve notas comerciales/operativas que suelen iniciar con "incluye".
     final lower = normalized.toLowerCase();
+    final includesMatch = RegExp(r'\bincluye\b').firstMatch(lower);
+    if (includesMatch != null) {
+      return normalized.substring(0, includesMatch.start).trim();
+    }
+
+    const marker = 'superficie preparada';
     final markerIndex = lower.indexOf(marker);
     if (markerIndex >= 0) {
       final cut = markerIndex + marker.length;
