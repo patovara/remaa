@@ -540,7 +540,7 @@ class PresupuestoPage extends ConsumerWidget {
               ? (_) => pw.Positioned.fill(
                     child: pw.Center(
                       child: pw.Opacity(
-                        opacity: 0.03, //se ajusto la opacidad para que la marca de agua sea más sutil
+                        opacity: 0.1, //se ajusto la opacidad para que la marca de agua sea más sutil
                         child: pw.Image(watermark, width: 380, fit: pw.BoxFit.contain),
                       ),
                     ),
