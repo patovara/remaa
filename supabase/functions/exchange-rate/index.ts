@@ -72,7 +72,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const shouldAttemptExternal = exchangeApiKey.isNotEmpty;
+  const shouldAttemptExternal = exchangeApiKey.length > 0;
   if (shouldAttemptExternal) {
     const external = await fetchExternalRate(base, target);
     if (external.ok) {
