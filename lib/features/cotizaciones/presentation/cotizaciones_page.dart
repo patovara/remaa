@@ -2073,12 +2073,12 @@ class _DualCurrencyAmount extends StatelessWidget {
 
 String? _quoteUsdLabel({required QuoteRecord quote, required double? estimatedRate}) {
   if (quote.finalTotalUsd != null) {
-    return '${quote.finalTotalUsd!.round()} USD';
+    return '${quote.finalTotalUsd!.ceil()} USD';
   }
   if (estimatedRate == null) {
     return null;
   }
-  return '${(quote.total * estimatedRate).round()} USD';
+  return '${(quote.total * estimatedRate).ceil()} USD';
 }
 
 String _money(double value) {

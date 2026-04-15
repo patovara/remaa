@@ -1679,12 +1679,12 @@ String _money(double value) {
 }
 
 String _usdFromRate(double valueMxn, double rate) {
-  final usd = (valueMxn * rate).round();
+  final usd = (valueMxn * rate).ceil();
   return '$usd USD';
 }
 
 String _usdRoundedLabel(double value) {
-  return '${value.round()} USD';
+  return '${value.ceil()} USD';
 }
 
 String _date(DateTime value) => DateFormat('dd/MM/yyyy').format(value);

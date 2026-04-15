@@ -368,9 +368,9 @@ class QuotesRepository {
     required QuoteRecord quote,
     required QuoteCurrencyRate rate,
   }) async {
-    final subtotalUsd = (quote.subtotal * rate.rate).roundToDouble();
-    final taxUsd = (quote.tax * rate.rate).roundToDouble();
-    final totalUsd = (quote.total * rate.rate).roundToDouble();
+    final subtotalUsd = (quote.subtotal * rate.rate).ceilToDouble();
+    final taxUsd = (quote.tax * rate.rate).ceilToDouble();
+    final totalUsd = (quote.total * rate.rate).ceilToDouble();
 
     final updated = quote.copyWith(
       finalExchangeRate: rate.rate,
