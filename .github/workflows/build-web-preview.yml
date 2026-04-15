@@ -1,15 +1,10 @@
 name: Build Web Preview
 
 on:
-  push:
-    branches:
-      - "feature/**"
-    paths:
-      - "lib/**"
-      - "assets/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "web/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -45,7 +40,9 @@ jobs:
           EOF
 
       - name: Build Flutter web (staging)
-        run: flutter build web --dart-define=ENV_FILE=.env.staging
+        run: |
+          cp .env.staging .env
+          flutter build web --dart-define=ENV_FILE=.env.staging
 
       - name: Commit build/web back to branch
         run: |

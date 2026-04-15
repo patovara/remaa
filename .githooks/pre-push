@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+# Solo aplica para branches de feature para previews de Vercel.
+if [[ "$branch" != feature/* ]]; then
+  exit 0
+fi
+
+if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
+  changed_files="$(git diff --name-only "@{u}"..HEAD)"
+  if ! echo "$changed_files" | grep -Eq '^(lib/|assets/|web/|pubspec\.yaml|pubspec\.lock)'; then
+    echo "[pre-push] Sin cambios funcionales de app. Se omite build/web."
+    exit 0
+  fi
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if [[ ! -f ".env.staging" ]]; then
+  echo "[pre-push] Falta .env.staging. No se puede construir build/web."
+  exit 1
+fi
+
+echo "[pre-push] Construyendo web con .env.staging..."
+cp .env.staging .env
+flutter build web --dart-define=ENV_FILE=.env.staging
+
+git add build/web
+
+if git diff --cached --quiet -- build/web; then
+  echo "[pre-push] build/web sin cambios. Continuando push."
+  exit 0
+fi
+
+git commit -m "build(web): auto-rebuild for web preview [skip ci]" >/dev/null
+
+echo "[pre-push] Se creó un commit automático de build/web."
+echo "[pre-push] Ejecuta git push de nuevo para subir también ese commit."
+exit 1
