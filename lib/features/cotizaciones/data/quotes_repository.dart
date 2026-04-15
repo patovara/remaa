@@ -322,14 +322,15 @@ class QuotesRepository {
       throw StateError('Supabase no esta disponible para consultar tipo de cambio.');
     }
 
+    // Función es pública (no requiere autenticación), pero incluir token si existe
     final accessToken = client.auth.currentSession?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      throw StateError('Sesion expirada. Inicia sesion nuevamente.');
-    }
+    final headers = accessToken != null && accessToken.isNotEmpty
+        ? {'Authorization': 'Bearer $accessToken'}
+        : <String, String>{};
 
     final response = await client.functions.invoke(
       'exchange-rate',
-      headers: {'Authorization': 'Bearer $accessToken'},
+      headers: headers,
       body: {
         'base': base,
         'target': target,

@@ -36,28 +36,8 @@ Deno.serve(async (req: Request) => {
     return jsonError("Method not allowed.", 405);
   }
 
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+  if (!supabaseUrl || !serviceRoleKey) {
     return jsonError("Missing Supabase environment variables.", 500);
-  }
-
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.replace("Bearer ", "").trim();
-  if (!token) {
-    return jsonError("Missing Authorization bearer token.", 401);
-  }
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const {
-    data: { user: caller },
-    error: callerError,
-  } = await userClient.auth.getUser();
-
-  if (callerError || !caller) {
-    return jsonError("Unauthorized user.", 401);
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
