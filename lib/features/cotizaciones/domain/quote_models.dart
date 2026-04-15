@@ -9,6 +9,9 @@ abstract final class QuoteStatus {
   static const String paid = 'paid';
 }
 
+const String approveWithoutPdfConfirmationRequired =
+  'approve_without_pdf_confirmation_required';
+
 class QuoteRecord {
   const QuoteRecord({
     required this.id,
@@ -20,9 +23,11 @@ class QuoteRecord {
     required this.subtotal,
     required this.tax,
     required this.total,
+    this.createdAt,
     this.validUntil,
     this.approvalPdfPath,
     this.approvalPdfUploadedAt,
+    this.recipientEmail,
   });
 
   final String id;
@@ -34,9 +39,11 @@ class QuoteRecord {
   final double subtotal;
   final double tax;
   final double total;
+  final DateTime? createdAt;
   final DateTime? validUntil;
   final String? approvalPdfPath;
   final DateTime? approvalPdfUploadedAt;
+  final String? recipientEmail;
 
   bool get isDraft => status == QuoteStatus.draft;
   bool get isConcluded => status == QuoteStatus.concluded;
@@ -57,9 +64,11 @@ class QuoteRecord {
     double? subtotal,
     double? tax,
     double? total,
+    DateTime? createdAt,
     DateTime? validUntil,
     String? approvalPdfPath,
     DateTime? approvalPdfUploadedAt,
+    String? recipientEmail,
   }) {
     return QuoteRecord(
       id: id ?? this.id,
@@ -71,9 +80,11 @@ class QuoteRecord {
       subtotal: subtotal ?? this.subtotal,
       tax: tax ?? this.tax,
       total: total ?? this.total,
+      createdAt: createdAt ?? this.createdAt,
       validUntil: validUntil ?? this.validUntil,
       approvalPdfPath: approvalPdfPath ?? this.approvalPdfPath,
       approvalPdfUploadedAt: approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,
+      recipientEmail: recipientEmail ?? this.recipientEmail,
     );
   }
 }

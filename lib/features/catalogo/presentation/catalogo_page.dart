@@ -89,91 +89,115 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       ),
       child: catalogAsync.when(
         data: (snapshot) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) {
-              return;
-            }
-            ref
+          try {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) {
+                return;
+              }
+              ref
+                  .read(catalogUiControllerProvider.notifier)
+                  .syncWithSnapshot(snapshot);
+            });
+
+            final viewData = ref
                 .read(catalogUiControllerProvider.notifier)
-                .syncWithSnapshot(snapshot);
-          });
+                .viewDataFor(snapshot);
 
-          final viewData = ref
-              .read(catalogUiControllerProvider.notifier)
-              .viewDataFor(snapshot);
-
-          return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SummaryStrip(snapshot: snapshot),
-                const SizedBox(height: 24),
-                _UniversesPanel(
-                  snapshot: snapshot,
-                  onCreate: _createUniverse,
-                  onEdit: _editUniverse,
-                  onDelete: _deleteUniverse,
-                ),
-                const SizedBox(height: 24),
-                _ProjectTypesPanel(
-                  snapshot: snapshot,
-                  onCreate: _createProjectType,
-                  onEdit: _editProjectType,
-                  onDelete: _deleteProjectType,
-                ),
-                const SizedBox(height: 24),
-                _TemplatesPanel(
-                  snapshot: snapshot,
-                  selectedUniverseId: viewData.selectedUniverseId,
-                  selectedProjectTypeId: viewData.selectedProjectTypeId,
-                  bulkPercentController: _bulkPercentController,
-                  templates: viewData.filteredTemplates,
-                  onUniverseChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectUniverse,
-                  onProjectTypeChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectProjectType,
-                  onSearchChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .changeTemplateSearch,
-                  onBulkAdjust: _bulkAdjustPrices,
-                  onCreate: _createTemplate,
-                  onEdit: _editTemplate,
-                  onDelete: _deleteTemplate,
-                ),
-                const SizedBox(height: 24),
-                _AttributesPanel(
-                  snapshot: snapshot,
-                  selectedTemplateId: viewData.selectedTemplateId,
-                  visibleTemplates: viewData.visibleTemplates,
-                  visibleAttributes: viewData.visibleAttributes,
-                  onTemplateChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectTemplate,
-                  onCreateAttribute: _createAttribute,
-                  onEditAttribute: _editAttribute,
-                  onDeleteAttribute: _deleteAttribute,
-                  onCreateOption: _createOption,
-                  onEditOption: _editOption,
-                  onDeleteOption: _deleteOption,
-                ),
-                const SizedBox(height: 24),
-                _ImportPanel(
-                  projectTypes: snapshot.projectTypes,
-                  selectedProjectTypeId: viewData.selectedImportProjectTypeId,
-                  onProjectTypeChanged: ref
-                      .read(catalogUiControllerProvider.notifier)
-                      .selectImportProjectType,
-                  onImport: _importCsv,
-                  onDownloadTemplate: _downloadCsvTemplate,
-                  isImporting: uiState.isImporting,
-                  lastSummary: uiState.lastImportSummary,
-                  lastFileName: uiState.lastImportFileName,
-                ),
-              ],
-            ),
-          );
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SummaryStrip(snapshot: snapshot),
+                  const SizedBox(height: 24),
+                  _UniversesPanel(
+                    snapshot: snapshot,
+                    onCreate: _createUniverse,
+                    onEdit: _editUniverse,
+                    onDelete: _deleteUniverse,
+                  ),
+                  const SizedBox(height: 24),
+                  _ProjectTypesPanel(
+                    snapshot: snapshot,
+                    onCreate: _createProjectType,
+                    onEdit: _editProjectType,
+                    onDelete: _deleteProjectType,
+                  ),
+                  const SizedBox(height: 24),
+                  _TemplatesPanel(
+                    snapshot: snapshot,
+                    selectedUniverseId: viewData.selectedUniverseId,
+                    selectedProjectTypeId: viewData.selectedProjectTypeId,
+                    bulkPercentController: _bulkPercentController,
+                    templates: viewData.filteredTemplates,
+                    onUniverseChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectUniverse,
+                    onProjectTypeChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectProjectType,
+                    onSearchChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .changeTemplateSearch,
+                    onBulkAdjust: _bulkAdjustPrices,
+                    onCreate: _createTemplate,
+                    onEdit: _editTemplate,
+                    onDelete: _deleteTemplate,
+                  ),
+                  const SizedBox(height: 24),
+                  _AttributesPanel(
+                    snapshot: snapshot,
+                    selectedTemplateId: viewData.selectedTemplateId,
+                    visibleTemplates: viewData.visibleTemplates,
+                    visibleAttributes: viewData.visibleAttributes,
+                    onTemplateChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectTemplate,
+                    onCreateAttribute: _createAttribute,
+                    onEditAttribute: _editAttribute,
+                    onDeleteAttribute: _deleteAttribute,
+                    onCreateOption: _createOption,
+                    onEditOption: _editOption,
+                    onDeleteOption: _deleteOption,
+                  ),
+                  const SizedBox(height: 24),
+                  _ImportPanel(
+                    projectTypes: snapshot.projectTypes,
+                    selectedProjectTypeId: viewData.selectedImportProjectTypeId,
+                    onProjectTypeChanged: ref
+                        .read(catalogUiControllerProvider.notifier)
+                        .selectImportProjectType,
+                    onImport: _importCsv,
+                    onDownloadTemplate: _downloadCsvTemplate,
+                    isImporting: uiState.isImporting,
+                    lastSummary: uiState.lastImportSummary,
+                    lastFileName: uiState.lastImportFileName,
+                  ),
+                ],
+              ),
+            );
+          } catch (error) {
+            return RemaPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Se detectó un error al renderizar el catálogo. '
+                    'La pantalla no se bloqueó para que puedas continuar.',
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(error.toString()),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => ref
+                        .read(catalogAdminProvider.notifier)
+                        .reload(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Recargar catálogo'),
+                  ),
+                ],
+              ),
+            );
+          }
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => RemaPanel(
@@ -223,17 +247,47 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteUniverse(UniverseCatalogItem universe) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final templateIds = {
+      for (final item in snapshot?.templates ?? const <ConceptTemplateCatalogItem>[])
+        if (item.universeId == universe.id) item.id,
+    };
+    final attributeIds = {
+      for (final item in snapshot?.attributes ?? const <ConceptAttributeCatalogItem>[])
+        if (templateIds.contains(item.templateId)) item.id,
+    };
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => attributeIds.contains(item.attributeId))
+        .length;
+
+    final hasChildren =
+        templateIds.isNotEmpty || attributeIds.isNotEmpty || optionsCount > 0;
     final confirmed = await _confirmDelete(
-      'Eliminar universo',
-      'Se eliminara ${universe.name} si no tiene dependencias.',
+      title: 'Eliminar universo',
+      message: hasChildren
+          ? 'Este universo tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${universe.name} si no tiene dependencias.',
+      requireKeyword: hasChildren,
+      details: hasChildren
+          ? [
+              'Conceptos: ${templateIds.length}',
+              'Atributos: ${attributeIds.length}',
+              'Opciones: $optionsCount',
+            ]
+          : const <String>[],
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
-      action: () =>
-          ref.read(catalogAdminProvider.notifier).deleteUniverse(universe.id),
-      successMessage: 'Universo eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteUniverseCascade(universe.id)
+          : ref.read(catalogAdminProvider.notifier).deleteUniverse(universe.id),
+      successMessage: hasChildren
+          ? 'Universo y subelementos eliminados.'
+          : 'Universo eliminado.',
     );
   }
 
@@ -274,18 +328,49 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteProjectType(ProjectTypeCatalogItem projectType) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final templateIds = {
+      for (final item in snapshot?.templates ?? const <ConceptTemplateCatalogItem>[])
+        if (item.projectTypeId == projectType.id) item.id,
+    };
+    final attributeIds = {
+      for (final item in snapshot?.attributes ?? const <ConceptAttributeCatalogItem>[])
+        if (templateIds.contains(item.templateId)) item.id,
+    };
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => attributeIds.contains(item.attributeId))
+        .length;
+
+    final hasChildren =
+        templateIds.isNotEmpty || attributeIds.isNotEmpty || optionsCount > 0;
     final confirmed = await _confirmDelete(
-      'Eliminar tipo de proyecto',
-      'Se eliminara ${projectType.name} si no tiene dependencias.',
+      title: 'Eliminar tipo de proyecto',
+      message: hasChildren
+          ? 'Este tipo de proyecto tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${projectType.name} si no tiene dependencias.',
+      requireKeyword: hasChildren,
+      details: hasChildren
+          ? [
+              'Conceptos: ${templateIds.length}',
+              'Atributos: ${attributeIds.length}',
+              'Opciones: $optionsCount',
+            ]
+          : const <String>[],
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
-      action: () => ref
-          .read(catalogAdminProvider.notifier)
-          .deleteProjectType(projectType.id),
-      successMessage: 'Tipo de proyecto eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteProjectTypeCascade(projectType.id)
+          : ref
+                .read(catalogAdminProvider.notifier)
+                .deleteProjectType(projectType.id),
+      successMessage: hasChildren
+          ? 'Tipo de proyecto y subelementos eliminados.'
+          : 'Tipo de proyecto eliminado.',
     );
   }
 
@@ -358,11 +443,30 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteTemplate(ConceptTemplateCatalogItem template) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final attributeIds = {
+      for (final item in snapshot?.attributes ?? const <ConceptAttributeCatalogItem>[])
+        if (item.templateId == template.id) item.id,
+    };
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => attributeIds.contains(item.attributeId))
+        .length;
+    final hasChildren = attributeIds.isNotEmpty || optionsCount > 0;
+
     final confirmed = await _confirmDelete(
-      'Eliminar concepto',
-      'Se eliminara ${template.name} si no tiene atributos dependientes.',
+      title: 'Eliminar concepto',
+      message: hasChildren
+          ? 'Este concepto tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${template.name} si no tiene atributos dependientes.',
+      requireKeyword: hasChildren,
+      details: hasChildren
+          ? [
+              'Atributos: ${attributeIds.length}',
+              'Opciones: $optionsCount',
+            ]
+          : const <String>[],
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     if (ref.read(catalogUiControllerProvider).selectedTemplateId ==
@@ -370,9 +474,14 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
       ref.read(catalogUiControllerProvider.notifier).selectTemplate(null);
     }
     await _runMutation(
-      action: () =>
-          ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
-      successMessage: 'Concepto eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteTemplateCascade(template.id)
+          : ref.read(catalogAdminProvider.notifier).deleteTemplate(template.id),
+      successMessage: hasChildren
+          ? 'Concepto y subelementos eliminados.'
+          : 'Concepto eliminado.',
     );
   }
 
@@ -419,17 +528,32 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
   }
 
   Future<void> _deleteAttribute(ConceptAttributeCatalogItem attribute) async {
+    final snapshot = ref.read(catalogAdminProvider).valueOrNull;
+    final optionsCount = (snapshot?.options ?? const <AttributeOptionCatalogItem>[])
+        .where((item) => item.attributeId == attribute.id)
+        .length;
+    final hasChildren = optionsCount > 0;
+
     final confirmed = await _confirmDelete(
-      'Eliminar atributo',
-      'Se eliminara ${attribute.name} si no tiene opciones dependientes.',
+      title: 'Eliminar atributo',
+      message: hasChildren
+          ? 'Este atributo tiene subelementos asociados. Para confirmar la eliminación en cascada escribe ELIMINAR.'
+          : 'Se eliminara ${attribute.name} si no tiene opciones dependientes.',
+      requireKeyword: hasChildren,
+      details: hasChildren ? ['Opciones: $optionsCount'] : const <String>[],
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
-      action: () =>
-          ref.read(catalogAdminProvider.notifier).deleteAttribute(attribute.id),
-      successMessage: 'Atributo eliminado.',
+      action: () => hasChildren
+          ? ref
+                .read(catalogAdminProvider.notifier)
+                .deleteAttributeCascade(attribute.id)
+          : ref.read(catalogAdminProvider.notifier).deleteAttribute(attribute.id),
+      successMessage: hasChildren
+          ? 'Atributo y subelementos eliminados.'
+          : 'Atributo eliminado.',
     );
   }
 
@@ -473,10 +597,10 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
 
   Future<void> _deleteOption(AttributeOptionCatalogItem option) async {
     final confirmed = await _confirmDelete(
-      'Eliminar opción',
-      'Se eliminara la opción ${option.value}.',
+      title: 'Eliminar opción',
+      message: 'Se eliminara la opción ${option.value}.',
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _runMutation(
@@ -680,24 +804,61 @@ class _CatalogoPageState extends ConsumerState<CatalogoPage> {
     );
   }
 
-  Future<bool?> _confirmDelete(String title, String message) {
+  Future<bool?> _confirmDelete({
+    required String title,
+    required String message,
+    bool requireKeyword = false,
+    List<String> details = const <String>[],
+  }) {
+    final confirmController = TextEditingController();
     return showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Eliminar'),
-          ),
-        ],
+        content: StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final canConfirm = !requireKeyword || confirmController.text == 'ELIMINAR';
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(message),
+                if (details.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final detail in details) Text(detail),
+                ],
+                if (requireKeyword) ...[
+                  const SizedBox(height: 16),
+                  const Text('Escribe ELIMINAR para confirmar.'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: confirmController,
+                    onChanged: (_) => setStateDialog(() {}),
+                    decoration: const InputDecoration(labelText: 'Confirmación'),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      child: const Text('Cancelar'),
+                    ),
+                    FilledButton(
+                      onPressed: canConfirm
+                          ? () => Navigator.of(dialogContext).pop(true)
+                          : null,
+                      child: const Text('Eliminar'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
-    );
+    ).whenComplete(confirmController.dispose);
   }
 }
 
@@ -905,6 +1066,17 @@ class _TemplatesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeSelectedUniverseId = snapshot.universes.any(
+      (item) => item.id == selectedUniverseId,
+    )
+        ? selectedUniverseId
+        : null;
+    final safeSelectedProjectTypeId = snapshot.projectTypes.any(
+      (item) => item.id == selectedProjectTypeId,
+    )
+        ? selectedProjectTypeId
+        : null;
+
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -923,7 +1095,10 @@ class _TemplatesPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: selectedUniverseId,
+                  key: ValueKey(
+                    'templates-universe-${safeSelectedUniverseId ?? 'none'}-${snapshot.universes.length}',
+                  ),
+                  initialValue: safeSelectedUniverseId,
                   decoration: const InputDecoration(labelText: 'Universo'),
                   items: [
                     for (final item in snapshot.universes)
@@ -935,7 +1110,10 @@ class _TemplatesPanel extends StatelessWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: selectedProjectTypeId,
+                  key: ValueKey(
+                    'templates-project-type-${safeSelectedProjectTypeId ?? 'none'}-${snapshot.projectTypes.length}',
+                  ),
+                  initialValue: safeSelectedProjectTypeId,
                   decoration: const InputDecoration(
                     labelText: 'Tipo de proyecto',
                   ),
@@ -1055,6 +1233,12 @@ class _AttributesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeSelectedTemplateId = visibleTemplates.any(
+      (item) => item.id == selectedTemplateId,
+    )
+        ? selectedTemplateId
+        : null;
+
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1063,14 +1247,17 @@ class _AttributesPanel extends StatelessWidget {
             title: 'Atributos y opciones',
             icon: Icons.tune,
             trailing: FilledButton.icon(
-              onPressed: selectedTemplateId == null ? null : onCreateAttribute,
+              onPressed: safeSelectedTemplateId == null ? null : onCreateAttribute,
               icon: const Icon(Icons.add),
               label: const Text('Nuevo atributo'),
             ),
           ),
           const SizedBox(height: 20),
           DropdownButtonFormField<String>(
-            initialValue: selectedTemplateId,
+            key: ValueKey(
+              'attributes-template-${safeSelectedTemplateId ?? 'none'}-${visibleTemplates.length}',
+            ),
+            initialValue: safeSelectedTemplateId,
             decoration: const InputDecoration(labelText: 'Concepto'),
             items: [
               for (final item in visibleTemplates)
@@ -1079,7 +1266,7 @@ class _AttributesPanel extends StatelessWidget {
             onChanged: onTemplateChanged,
           ),
           const SizedBox(height: 20),
-          if (selectedTemplateId == null)
+          if (safeSelectedTemplateId == null)
             const Text('Selecciona un concepto para administrar atributos.')
           else if (visibleAttributes.isEmpty)
             const Text('Este concepto aún no tiene atributos.')
@@ -1126,6 +1313,12 @@ class _ImportPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeSelectedProjectTypeId = projectTypes.any(
+      (item) => item.id == selectedProjectTypeId,
+    )
+        ? selectedProjectTypeId
+        : null;
+
     return RemaPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1164,7 +1357,10 @@ class _ImportPanel extends StatelessWidget {
           const Text('Columnas opcionales: project_type, base_description.'),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: selectedProjectTypeId,
+            key: ValueKey(
+              'import-project-type-${safeSelectedProjectTypeId ?? 'none'}-${projectTypes.length}',
+            ),
+            initialValue: safeSelectedProjectTypeId,
             decoration: const InputDecoration(
               labelText: 'Tipo de proyecto destino',
             ),
@@ -1519,6 +1715,15 @@ class _ConceptDialogState extends State<_ConceptDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final safeUniverseId = widget.universes.any((item) => item.id == _universeId)
+        ? _universeId
+        : null;
+    final safeProjectTypeId = widget.projectTypes.any(
+      (item) => item.id == _projectTypeId,
+    )
+        ? _projectTypeId
+        : null;
+
     return AlertDialog(
       title: Text(
         widget.initial == null ? 'Nuevo concepto' : 'Editar concepto',
@@ -1530,7 +1735,10 @@ class _ConceptDialogState extends State<_ConceptDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: _universeId,
+                key: ValueKey(
+                  'concept-universe-${safeUniverseId ?? 'none'}-${widget.universes.length}',
+                ),
+                initialValue: safeUniverseId,
                 decoration: const InputDecoration(labelText: 'Universo'),
                 items: [
                   for (final item in widget.universes)
@@ -1540,7 +1748,10 @@ class _ConceptDialogState extends State<_ConceptDialog> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: _projectTypeId,
+                key: ValueKey(
+                  'concept-project-type-${safeProjectTypeId ?? 'none'}-${widget.projectTypes.length}',
+                ),
+                initialValue: safeProjectTypeId,
                 decoration: const InputDecoration(
                   labelText: 'Tipo de proyecto',
                 ),
@@ -1706,9 +1917,20 @@ class _ConceptDialogState extends State<_ConceptDialog> {
         FilledButton(
           onPressed: () {
             try {
+              final selectedUniverseId = widget.universes.any(
+                (item) => item.id == _universeId,
+              )
+                  ? _universeId
+                  : null;
+              final selectedProjectTypeId = widget.projectTypes.any(
+                (item) => item.id == _projectTypeId,
+              )
+                  ? _projectTypeId
+                  : null;
+
               final draft = CatalogConceptDraft.fromRaw(
-                universeId: _universeId,
-                projectTypeId: _projectTypeId,
+                universeId: selectedUniverseId,
+                projectTypeId: selectedProjectTypeId,
                 name: _nameController.text,
                 baseDescription: _descriptionController.text,
                 defaultUnit: _unitController.text,

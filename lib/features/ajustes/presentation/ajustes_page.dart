@@ -10,6 +10,7 @@ import '../../../core/utils/rema_feedback.dart';
 import '../../../core/widgets/page_frame.dart';
 import '../../../core/widgets/rema_panels.dart';
 import '../../auth/data/auth_repository.dart';
+import '../data/weekly_quote_summary_repository.dart';
 import '../data/user_management_repository.dart';
 
 class AjustesPage extends ConsumerStatefulWidget {
@@ -21,6 +22,7 @@ class AjustesPage extends ConsumerStatefulWidget {
 
 class _AjustesPageState extends ConsumerState<AjustesPage> {
   final _userRepository = UserManagementRepository();
+  final _weeklySummaryRepository = WeeklyQuoteSummaryRepository();
   late final AuthRepository _authRepository;
 
   bool _pushAlerts = true;
@@ -28,6 +30,7 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
   String _language = 'Espanol (Mexico)';
   String _units = 'Sistema Metrico (m, cm)';
   bool _usersLoading = false;
+  bool _isSendingWeeklySummary = false;
   String? _usersError;
   List<ManagedUser> _users = const [];
 
@@ -190,9 +193,39 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
     }
   }
 
+  Future<void> _resendWeeklySummary() async {
+    final isAdmin = ref.read(isAdminProvider);
+    if (!isAdmin) {
+      showRemaMessage(context, 'Solo admin o super admin pueden reenviar este correo.');
+      return;
+    }
+
+    setState(() => _isSendingWeeklySummary = true);
+    try {
+      await _weeklySummaryRepository.resendNow();
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(
+        context,
+        'Resumen reenviado a mvazquez@gruporemaa.com, mvazquez@remaa.mx y facturas@remaa.mx.',
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, 'No fue posible reenviar el resumen: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingWeeklySummary = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSuperAdmin = ref.watch(isSuperAdminProvider);
+    final isAdmin = ref.watch(isAdminProvider);
 
     return PageFrame(
       title: 'Configuracion',
@@ -238,14 +271,19 @@ class _AjustesPageState extends ConsumerState<AjustesPage> {
           final sidebar = _NotificationsPanel(
             pushAlerts: _pushAlerts,
             emailAlerts: _emailAlerts,
+            canManageEmailSummary: isAdmin,
+            isSendingWeeklySummary: _isSendingWeeklySummary,
             onPushChanged: (value) {
               setState(() => _pushAlerts = value);
               _savePref('pref_push_alerts', value);
             },
-            onEmailChanged: (value) {
-              setState(() => _emailAlerts = value);
-              _savePref('pref_email_alerts', value);
-            },
+            onEmailChanged: isAdmin
+                ? (value) {
+                    setState(() => _emailAlerts = value);
+                    _savePref('pref_email_alerts', value);
+                  }
+                : null,
+            onResendWeeklySummary: isAdmin ? _resendWeeklySummary : null,
           );
 
           if (!isWide) {
@@ -616,14 +654,20 @@ class _NotificationsPanel extends StatelessWidget {
   const _NotificationsPanel({
     required this.pushAlerts,
     required this.emailAlerts,
+    required this.canManageEmailSummary,
+    required this.isSendingWeeklySummary,
     required this.onPushChanged,
     required this.onEmailChanged,
+    required this.onResendWeeklySummary,
   });
 
   final bool pushAlerts;
   final bool emailAlerts;
+  final bool canManageEmailSummary;
+  final bool isSendingWeeklySummary;
   final ValueChanged<bool> onPushChanged;
-  final ValueChanged<bool> onEmailChanged;
+  final ValueChanged<bool>? onEmailChanged;
+  final VoidCallback? onResendWeeklySummary;
 
   @override
   Widget build(BuildContext context) {
@@ -644,10 +688,30 @@ class _NotificationsPanel extends StatelessWidget {
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             title: const Text('Correo Electronico'),
-            subtitle: const Text('Resumen semanal de proyectos'),
+            subtitle: Text(
+              canManageEmailSummary
+                  ? 'Resumen semanal de cotizaciones (Aprobadas y Por cobrar)'
+                  : 'Solo disponible para Admin y Super Admin',
+            ),
             value: emailAlerts,
             onChanged: onEmailChanged,
           ),
+          if (canManageEmailSummary) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: isSendingWeeklySummary ? null : onResendWeeklySummary,
+              icon: const Icon(Icons.forward_to_inbox_outlined),
+              label: Text(isSendingWeeklySummary ? 'Enviando...' : 'Reenviar resumen ahora'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Destino: mvazquez@gruporemaa.com, mvazquez@remaa.mx, facturas@remaa.mx',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: RemaColors.onSurfaceVariant),
+            ),
+          ],
         ],
       ),
     );

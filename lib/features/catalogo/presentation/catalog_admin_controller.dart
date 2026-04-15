@@ -163,6 +163,27 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
   Future<void> deleteTemplate(String id) =>
       _mutate(() => _repository.deleteTemplate(id));
 
+  Future<void> deleteTemplateCascade(String id) async {
+    final snapshot = await _repository.fetchCatalog();
+    final attributeIds = {
+      for (final attribute in snapshot.attributes)
+        if (attribute.templateId == id) attribute.id,
+    };
+
+    for (final option in snapshot.options) {
+      if (attributeIds.contains(option.attributeId)) {
+        await _repository.deleteOption(option.id);
+      }
+    }
+
+    for (final attributeId in attributeIds) {
+      await _repository.deleteAttribute(attributeId);
+    }
+
+    await _repository.deleteTemplate(id);
+    await reload();
+  }
+
   Future<void> createAttribute({
     required String templateId,
     required String name,
@@ -181,6 +202,18 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
 
   Future<void> deleteAttribute(String id) =>
       _mutate(() => _repository.deleteAttribute(id));
+
+  Future<void> deleteAttributeCascade(String id) async {
+    final snapshot = await _repository.fetchCatalog();
+    for (final option in snapshot.options) {
+      if (option.attributeId == id) {
+        await _repository.deleteOption(option.id);
+      }
+    }
+
+    await _repository.deleteAttribute(id);
+    await reload();
+  }
 
   Future<void> createOption({
     required String attributeId,
@@ -203,6 +236,28 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
 
   Future<void> deleteOption(String id) =>
       _mutate(() => _repository.deleteOption(id));
+
+  Future<void> deleteUniverseCascade(String id) async {
+    final snapshot = await _repository.fetchCatalog();
+    final templateIds = {
+      for (final template in snapshot.templates)
+        if (template.universeId == id) template.id,
+    };
+    await _deleteTemplatesCascadeByIds(snapshot, templateIds);
+    await _repository.deleteUniverse(id);
+    await reload();
+  }
+
+  Future<void> deleteProjectTypeCascade(String id) async {
+    final snapshot = await _repository.fetchCatalog();
+    final templateIds = {
+      for (final template in snapshot.templates)
+        if (template.projectTypeId == id) template.id,
+    };
+    await _deleteTemplatesCascadeByIds(snapshot, templateIds);
+    await _repository.deleteProjectType(id);
+    await reload();
+  }
 
   Future<CatalogImportSummary> importCsv({
     required String csvContent,
@@ -230,5 +285,33 @@ class CatalogAdminController extends AsyncNotifier<ConceptCatalogSnapshot> {
   Future<void> _mutate(Future<void> Function() operation) async {
     await operation();
     await reload();
+  }
+
+  Future<void> _deleteTemplatesCascadeByIds(
+    ConceptCatalogSnapshot snapshot,
+    Set<String> templateIds,
+  ) async {
+    if (templateIds.isEmpty) {
+      return;
+    }
+
+    final attributeIds = {
+      for (final attribute in snapshot.attributes)
+        if (templateIds.contains(attribute.templateId)) attribute.id,
+    };
+
+    for (final option in snapshot.options) {
+      if (attributeIds.contains(option.attributeId)) {
+        await _repository.deleteOption(option.id);
+      }
+    }
+
+    for (final attributeId in attributeIds) {
+      await _repository.deleteAttribute(attributeId);
+    }
+
+    for (final templateId in templateIds) {
+      await _repository.deleteTemplate(templateId);
+    }
   }
 }

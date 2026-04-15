@@ -7,7 +7,7 @@ on:
         description: "Aplicar migraciones a staging"
         required: true
         type: boolean
-        default: true
+        default: false
       deploy_functions:
         description: "Desplegar Edge Functions"
         required: true
@@ -52,6 +52,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
           EMAIL_WEBHOOK_SECRET: ${{ secrets.EMAIL_WEBHOOK_SECRET }}
+          WEEKLY_SUMMARY_SCHEDULER_SECRET: ${{ secrets.WEEKLY_SUMMARY_SCHEDULER_SECRET }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL_STAGING }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY_STAGING }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_STAGING }}
@@ -62,6 +63,7 @@ jobs:
             RESEND_API_KEY="$RESEND_API_KEY" \
             RESEND_FROM_EMAIL="$RESEND_FROM_EMAIL" \
             EMAIL_WEBHOOK_SECRET="$EMAIL_WEBHOOK_SECRET" \
+            WEEKLY_SUMMARY_SCHEDULER_SECRET="$WEEKLY_SUMMARY_SCHEDULER_SECRET" \
             SUPABASE_URL="$SUPABASE_URL" \
             SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY"
@@ -69,6 +71,8 @@ jobs:
       - name: Deploy edge functions
         if: ${{ inputs.deploy_functions }}
         run: |
-          supabase functions deploy user-admin
+          supabase functions deploy user-admin --no-verify-jwt
           supabase functions deploy mailer
           supabase functions deploy email-inbound
+          supabase functions deploy send-quote-email --no-verify-jwt
+          supabase functions deploy weekly-quote-summary --no-verify-jwt

@@ -1,0 +1,58 @@
+name: Build Web Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.5"
+          channel: "stable"
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Write staging env file
+        run: |
+          cat > .env.staging << EOF
+          APP_ENV=staging
+          APP_PUBLIC_URL=${{ secrets.APP_PUBLIC_URL_STAGING }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL_STAGING }}
+          SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY_STAGING }}
+          STRIPE_PUBLISHABLE_KEY=
+          ENABLE_BILLING=false
+          RESEND_FROM_EMAIL=${{ secrets.RESEND_FROM_EMAIL }}
+          EOF
+
+      - name: Build Flutter web (staging)
+        run: |
+          cp .env.staging .env
+          flutter build web --dart-define=ENV_FILE=.env.staging
+
+      - name: Commit build/web back to branch
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add build/web
+          # Solo commitear si hay cambios reales
+          if git diff --cached --quiet; then
+            echo "No changes in build/web — skipping commit"
+          else
+            git commit -m "build(web): auto-rebuild for web preview [skip ci]"
+            git push
+          fi

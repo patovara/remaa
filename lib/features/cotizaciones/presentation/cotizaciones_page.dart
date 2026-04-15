@@ -17,6 +17,9 @@ import '../domain/quote_models.dart';
 import 'concepts_catalog_controller.dart';
 import 'quotes_controller.dart';
 
+// Global lock to prevent stacked email dialogs across rapid taps and widget instances.
+bool _isSendQuoteEmailDialogOpenGlobal = false;
+
 class CotizacionesPage extends ConsumerStatefulWidget {
   const CotizacionesPage({
     super.key,
@@ -35,10 +38,12 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   String _search = '';
   String? _statusFilter; // null = todos, 'draft', 'concluded', 'approved', 'declined'
   bool _didOpenComposerFromRoute = false;
+  late final Future<List<ClientOption>> _clientOptionsFuture;
 
   @override
   void initState() {
     super.initState();
+    _clientOptionsFuture = _fetchClientOptions();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _didOpenComposerFromRoute) {
         return;
@@ -71,152 +76,215 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
       child: quotesAsync.when(
         data: (quotes) {
           final filtered = _filterQuotes(quotes);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Buscar cotización por folio...',
-                  prefixIcon: Icon(Icons.search),
-                ),
-                onChanged: (value) => setState(() => _search = value.trim().toLowerCase()),
-              ),
-              const SizedBox(height: 24),
-              _StatusFilterBar(
-                current: _statusFilter,
-                onChanged: (value) => setState(() => _statusFilter = value),
-              ),
-              const SizedBox(height: 16),
-              _QuotesMetrics(quotes: filtered),
-              const SizedBox(height: 24),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final mobile = constraints.maxWidth < 600;
+          return FutureBuilder<List<ClientOption>>(
+            future: _clientOptionsFuture,
+            builder: (context, clientsSnapshot) {
+              final clientNameById = {
+                for (final client in clientsSnapshot.data ?? const <ClientOption>[])
+                  client.id: client.name,
+              };
+              final groupedQuotes = _buildGroupedQuotes(
+                quotes: filtered,
+                projectById: projectById,
+                clientNameById: clientNameById,
+              );
 
-                  if (mobile) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 12),
-                        if (filtered.isEmpty)
-                          const Text('No hay cotizaciones para mostrar.')
-                        else
-                          for (final quote in filtered)
-                            _QuoteMobileCard(
-                              quote: quote,
-                              onViewProjectDescription: () =>
-                                  _showProjectDescription(quote, projectById[quote.projectId]),
-                              onEdit: () => context.go('/presupuesto/${quote.id}'),
-                              onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
-                              onAttachPdf: quote.isConcluded
-                                  ? () => _attachApprovalPdf(quote, projectById[quote.projectId])
-                                  : null,
-                              onPreviewPdf: quote.hasApprovalPdf
-                                  ? () => _previewApprovalPdf(context, quote)
-                                  : null,
-                              onPreviewActa: quote.isActaFinalizada || quote.isPaid
-                                  ? () => _previewFinalActa(context, quote)
-                                  : null,
-                              onDownloadActa: quote.isActaFinalizada || quote.isPaid
-                                  ? () => _downloadFinalActa(context, quote)
-                                  : null,
-                              onShareActa: quote.isActaFinalizada || quote.isPaid
-                                  ? () => _shareFinalActa(context, quote)
-                                  : null,
-                              onMarkPaid: quote.isActaFinalizada
-                                  ? () => _changeStatus(quote.id, QuoteStatus.paid)
-                                  : null,
-                              onGoToActas: quote.isApproved
-                                  ? () => _goToActas(context, quote, projectById[quote.projectId])
-                                  : null,
-                              onConclude: quote.isDraft
-                                  ? () => _changeStatus(quote.id, QuoteStatus.concluded)
-                                  : null,
-                              onApprove: quote.isConcluded
-                                  ? () => _changeStatus(quote.id, QuoteStatus.approved)
-                                  : null,
-                              onDecline: !quote.isDeclined &&
-                                  !quote.isActaFinalizada &&
-                                  !quote.hasApprovalPdf
-                                  ? () => _changeStatus(quote.id, QuoteStatus.declined)
-                                  : null,
-                              onReactivate: (quote.isDeclined || quote.isConcluded)
-                                  ? () => _changeStatus(quote.id, QuoteStatus.draft)
-                                  : null,
-                            ),
-                      ],
-                    );
-                  }
-
-                  return RemaPanel(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                          child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 24),
-                          child: _QuoteTableHeader(),
-                        ),
-                        if (filtered.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Text('No hay cotizaciones para mostrar.'),
-                          )
-                        else
-                          for (final quote in filtered)
-                            _QuoteRow(
-                              quote: quote,
-                              onViewProjectDescription: () =>
-                                  _showProjectDescription(quote, projectById[quote.projectId]),
-                              onEdit: () => context.go('/presupuesto/${quote.id}'),
-                              onShare: () => showRemaMessage(context, 'Compartir ${quote.quoteNumber} listo para integrar.'),
-                              onAttachPdf: quote.isConcluded
-                                  ? () => _attachApprovalPdf(quote, projectById[quote.projectId])
-                                  : null,
-                              onPreviewPdf: quote.hasApprovalPdf
-                                  ? () => _previewApprovalPdf(context, quote)
-                                  : null,
-                              onPreviewActa: quote.isActaFinalizada || quote.isPaid
-                                  ? () => _previewFinalActa(context, quote)
-                                  : null,
-                              onDownloadActa: quote.isActaFinalizada || quote.isPaid
-                                  ? () => _downloadFinalActa(context, quote)
-                                  : null,
-                              onShareActa: quote.isActaFinalizada || quote.isPaid
-                                  ? () => _shareFinalActa(context, quote)
-                                  : null,
-                              onMarkPaid: quote.isActaFinalizada
-                                  ? () => _changeStatus(quote.id, QuoteStatus.paid)
-                                  : null,
-                              onGoToActas: quote.isApproved
-                                  ? () => _goToActas(context, quote, projectById[quote.projectId])
-                                  : null,
-                              onConclude: quote.isDraft
-                                  ? () => _changeStatus(quote.id, QuoteStatus.concluded)
-                                  : null,
-                              onApprove: quote.isConcluded
-                                  ? () => _changeStatus(quote.id, QuoteStatus.approved)
-                                  : null,
-                              onDecline: !quote.isDeclined &&
-                                  !quote.isActaFinalizada &&
-                                  !quote.hasApprovalPdf
-                                  ? () => _changeStatus(quote.id, QuoteStatus.declined)
-                                  : null,
-                              onReactivate: (quote.isDeclined || quote.isConcluded)
-                                  ? () => _changeStatus(quote.id, QuoteStatus.draft)
-                                  : null,
-                            ),
-                      ],
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Buscar cotización por folio...',
+                      prefixIcon: Icon(Icons.search),
                     ),
-                  );
-                },
-              ),
-            ],
+                    onChanged: (value) => setState(() => _search = value.trim().toLowerCase()),
+                  ),
+                  const SizedBox(height: 24),
+                  _StatusFilterBar(
+                    current: _statusFilter,
+                    onChanged: (value) => setState(() => _statusFilter = value),
+                  ),
+                  const SizedBox(height: 16),
+                  _QuotesMetrics(quotes: filtered),
+                  const SizedBox(height: 24),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final mobile = constraints.maxWidth < 600;
+
+                      if (mobile) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
+                            const SizedBox(height: 12),
+                            if (groupedQuotes.isEmpty)
+                              const Text('No hay cotizaciones para mostrar.')
+                            else
+                              for (final clientGroup in groupedQuotes)
+                                _ClientQuotesGroup(
+                                  clientGroup: clientGroup,
+                                  mobile: true,
+                                  quoteBuilder: (entry) => _QuoteMobileCard(
+                                    quote: entry.quote,
+                                    projectName: entry.projectName,
+                                    onViewProjectDescription: () => _showProjectDescription(
+                                      entry.quote,
+                                      projectById[entry.quote.projectId],
+                                    ),
+                                    onEdit: () => context.go('/presupuesto/${entry.quote.id}'),
+                                    onShare: () => showRemaMessage(
+                                      context,
+                                      'Compartir ${entry.quote.quoteNumber} listo para integrar.',
+                                    ),
+                                    onSendEmail: () => _sendQuoteByEmail(
+                                      entry.quote,
+                                      projectById[entry.quote.projectId],
+                                    ),
+                                    onAttachPdf: entry.quote.isConcluded
+                                        ? () => _attachApprovalPdf(
+                                              entry.quote,
+                                              projectById[entry.quote.projectId],
+                                            )
+                                        : null,
+                                    onPreviewPdf: entry.quote.hasApprovalPdf
+                                        ? () => _previewApprovalPdf(context, entry.quote)
+                                        : null,
+                                    onPreviewActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                        ? () => _previewFinalActa(context, entry.quote)
+                                        : null,
+                                    onDownloadActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                        ? () => _downloadFinalActa(context, entry.quote)
+                                        : null,
+                                    onShareActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                        ? () => _shareFinalActa(context, entry.quote)
+                                        : null,
+                                    onMarkPaid: entry.quote.isActaFinalizada
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.paid)
+                                        : null,
+                                        onGoToActas: (entry.quote.isConcluded ||
+                                          entry.quote.isApproved ||
+                                          entry.quote.isActaFinalizada ||
+                                          entry.quote.isPaid)
+                                        ? () => _goToActas(
+                                              context,
+                                              entry.quote,
+                                              projectById[entry.quote.projectId],
+                                            )
+                                        : null,
+                                    onConclude: entry.quote.isDraft
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.concluded)
+                                        : null,
+                                    onApprove: entry.quote.isConcluded
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.approved)
+                                        : null,
+                                    onDecline: !entry.quote.isDeclined &&
+                                            !entry.quote.isActaFinalizada &&
+                                            !entry.quote.hasApprovalPdf
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.declined)
+                                        : null,
+                                    onReactivate: (entry.quote.isDeclined || entry.quote.isConcluded)
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.draft)
+                                        : null,
+                                  ),
+                                ),
+                          ],
+                        );
+                      }
+
+                      return RemaPanel(
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                              child: Text('Listado Detallado', style: Theme.of(context).textTheme.titleLarge),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 24),
+                              child: _QuoteTableHeader(),
+                            ),
+                            if (groupedQuotes.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Text('No hay cotizaciones para mostrar.'),
+                              )
+                            else
+                              for (final clientGroup in groupedQuotes)
+                                _ClientQuotesGroup(
+                                  clientGroup: clientGroup,
+                                  mobile: false,
+                                  quoteBuilder: (entry) => _QuoteRow(
+                                    quote: entry.quote,
+                                    projectName: entry.projectName,
+                                    onViewProjectDescription: () => _showProjectDescription(
+                                      entry.quote,
+                                      projectById[entry.quote.projectId],
+                                    ),
+                                    onEdit: () => context.go('/presupuesto/${entry.quote.id}'),
+                                    onShare: () => showRemaMessage(
+                                      context,
+                                      'Compartir ${entry.quote.quoteNumber} listo para integrar.',
+                                    ),
+                                    onSendEmail: () => _sendQuoteByEmail(
+                                      entry.quote,
+                                      projectById[entry.quote.projectId],
+                                    ),
+                                    onAttachPdf: entry.quote.isConcluded
+                                        ? () => _attachApprovalPdf(
+                                              entry.quote,
+                                              projectById[entry.quote.projectId],
+                                            )
+                                        : null,
+                                    onPreviewPdf: entry.quote.hasApprovalPdf
+                                        ? () => _previewApprovalPdf(context, entry.quote)
+                                        : null,
+                                    onPreviewActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                        ? () => _previewFinalActa(context, entry.quote)
+                                        : null,
+                                    onDownloadActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                        ? () => _downloadFinalActa(context, entry.quote)
+                                        : null,
+                                    onShareActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                        ? () => _shareFinalActa(context, entry.quote)
+                                        : null,
+                                    onMarkPaid: entry.quote.isActaFinalizada
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.paid)
+                                        : null,
+                                        onGoToActas: (entry.quote.isConcluded ||
+                                          entry.quote.isApproved ||
+                                          entry.quote.isActaFinalizada ||
+                                          entry.quote.isPaid)
+                                        ? () => _goToActas(
+                                              context,
+                                              entry.quote,
+                                              projectById[entry.quote.projectId],
+                                            )
+                                        : null,
+                                    onConclude: entry.quote.isDraft
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.concluded)
+                                        : null,
+                                    onApprove: entry.quote.isConcluded
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.approved)
+                                        : null,
+                                    onDecline: !entry.quote.isDeclined &&
+                                            !entry.quote.isActaFinalizada &&
+                                            !entry.quote.hasApprovalPdf
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.declined)
+                                        : null,
+                                    onReactivate: (entry.quote.isDeclined || entry.quote.isConcluded)
+                                        ? () => _changeStatus(entry.quote.id, QuoteStatus.draft)
+                                        : null,
+                                  ),
+                                ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+            },
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -253,9 +321,138 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     return result;
   }
 
+  List<_ClientQuoteGroup> _buildGroupedQuotes({
+    required List<QuoteRecord> quotes,
+    required Map<String, ProjectLookup> projectById,
+    required Map<String, String> clientNameById,
+  }) {
+    final byClient = <String, List<_QuoteListEntry>>{};
+
+    for (final quote in quotes) {
+      final project = projectById[quote.projectId];
+      final clientId = project?.clientId?.trim();
+      final clientName =
+          (clientId != null && clientId.isNotEmpty)
+              ? (clientNameById[clientId]?.trim().isNotEmpty ?? false)
+                  ? clientNameById[clientId]!.trim()
+                  : 'Cliente sin nombre'
+              : 'Sin cliente';
+
+      byClient.putIfAbsent(clientName, () => <_QuoteListEntry>[]).add(
+            _QuoteListEntry(
+              quote: quote,
+              projectName: (project?.name.trim().isNotEmpty ?? false)
+                  ? project!.name.trim()
+                  : 'Proyecto sin nombre',
+            ),
+          );
+    }
+
+    final clients = <_ClientQuoteGroup>[];
+    for (final entry in byClient.entries) {
+      final yearMap = <int?, List<_QuoteListEntry>>{};
+      for (final item in entry.value) {
+        yearMap.putIfAbsent(item.quote.createdAt?.year, () => <_QuoteListEntry>[]).add(item);
+      }
+
+      final years = <_YearQuoteGroup>[];
+      for (final yearEntry in yearMap.entries) {
+        final monthMap = <int?, List<_QuoteListEntry>>{};
+        for (final item in yearEntry.value) {
+          monthMap.putIfAbsent(item.quote.createdAt?.month, () => <_QuoteListEntry>[]).add(item);
+        }
+
+        final months = <_MonthQuoteGroup>[];
+        for (final monthEntry in monthMap.entries) {
+          final items = List<_QuoteListEntry>.from(monthEntry.value)
+            ..sort((a, b) {
+              final left = a.quote.createdAt;
+              final right = b.quote.createdAt;
+              if (left != null && right != null) {
+                final byDate = right.compareTo(left);
+                if (byDate != 0) {
+                  return byDate;
+                }
+              }
+              return b.quote.quoteNumber.compareTo(a.quote.quoteNumber);
+            });
+          months.add(
+            _MonthQuoteGroup(
+              month: monthEntry.key,
+              label: _monthLabel(monthEntry.key),
+              items: items,
+            ),
+          );
+        }
+
+        months.sort((a, b) {
+          if (a.month == null && b.month == null) {
+            return 0;
+          }
+          if (a.month == null) {
+            return 1;
+          }
+          if (b.month == null) {
+            return -1;
+          }
+          return b.month!.compareTo(a.month!);
+        });
+
+        years.add(
+          _YearQuoteGroup(
+            year: yearEntry.key,
+            label: yearEntry.key?.toString() ?? 'SIN FECHA',
+            months: months,
+          ),
+        );
+      }
+
+      years.sort((a, b) {
+        if (a.year == null && b.year == null) {
+          return 0;
+        }
+        if (a.year == null) {
+          return 1;
+        }
+        if (b.year == null) {
+          return -1;
+        }
+        return b.year!.compareTo(a.year!);
+      });
+
+      clients.add(_ClientQuoteGroup(clientName: entry.key, years: years));
+    }
+
+    clients.sort((a, b) => a.clientName.compareTo(b.clientName));
+    return clients;
+  }
+
+  String _monthLabel(int? month) {
+    if (month == null || month < 1 || month > 12) {
+      return 'SIN FECHA';
+    }
+    const names = [
+      'ENERO',
+      'FEBRERO',
+      'MARZO',
+      'ABRIL',
+      'MAYO',
+      'JUNIO',
+      'JULIO',
+      'AGOSTO',
+      'SEPTIEMBRE',
+      'OCTUBRE',
+      'NOVIEMBRE',
+      'DICIEMBRE',
+    ];
+    return names[month - 1];
+  }
+
   Future<void> _changeStatus(String quoteId, String newStatus) async {
     try {
-      await ref.read(quotesProvider.notifier).updateStatus(quoteId: quoteId, status: newStatus);
+      await ref
+          .read(quotesProvider.notifier)
+          .updateStatusWithOptions(quoteId: quoteId, status: newStatus);
       if (mounted) {
         final label = switch (newStatus) {
           QuoteStatus.concluded => 'Concluida',
@@ -268,9 +465,106 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
         showRemaMessage(context, 'Cotizacion $label.');
       }
     } catch (error) {
+      final message = error.toString();
+      if (newStatus == QuoteStatus.approved &&
+          message.contains(approveWithoutPdfConfirmationRequired)) {
+        final confirmed = await _confirmApproveWithoutPdf();
+        if (confirmed == true) {
+          try {
+            await ref.read(quotesProvider.notifier).updateStatusWithOptions(
+                  quoteId: quoteId,
+                  status: newStatus,
+                  allowApproveWithoutPdf: true,
+                );
+            if (mounted) {
+              showRemaMessage(
+                context,
+                'Cotizacion aprobada sin PDF de confirmacion.',
+              );
+            }
+            return;
+          } catch (retryError) {
+            if (mounted) {
+              showRemaMessage(context, '$retryError');
+            }
+            return;
+          }
+        }
+        return;
+      }
+      if (mounted) {
+        showRemaMessage(context, message);
+      }
+    }
+  }
+
+  Future<bool?> _confirmApproveWithoutPdf() {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Continuar sin aprobación PDF'),
+        content: const Text(
+          'Esta cotización no tiene PDF de confirmación.\n\n'
+          'Para sectores no hotelería puedes continuar sin aprobación.\n\n'
+          '¿Deseas aprobar de todos modos?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendQuoteByEmail(QuoteRecord quote, ProjectLookup? project) async {
+    if (_isSendQuoteEmailDialogOpenGlobal) {
+      return;
+    }
+    _isSendQuoteEmailDialogOpenGlobal = true;
+
+    try {
+      final suggested = await ref
+          .read(quotesProvider.notifier)
+          .fetchRecipientEmailForQuote(quote.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      final payload = await showDialog<({String email, String note})>(
+        context: context,
+        builder: (dialogContext) => _SendQuoteEmailDialog(
+          initialEmail: (suggested ?? quote.recipientEmail ?? '').trim(),
+          quoteNumber: quote.quoteNumber,
+          projectName: project?.name ?? 'Proyecto sin nombre',
+        ),
+      );
+
+      if (!mounted || payload == null) {
+        return;
+      }
+
+      await ref.read(quotesProvider.notifier).sendQuoteEmail(
+            quoteId: quote.id,
+            recipientEmail: payload.email,
+            note: payload.note,
+          );
+      await ref.read(quotesProvider.notifier).reload();
+      if (mounted) {
+        showRemaMessage(context, 'Cotizacion enviada a ${payload.email}.');
+      }
+    } catch (error) {
       if (mounted) {
         showRemaMessage(context, '$error');
       }
+    } finally {
+      _isSendQuoteEmailDialogOpenGlobal = false;
     }
   }
 
@@ -553,7 +847,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 
   Future<List<ClientOption>> _fetchClientOptions() async {
-    final mergedByName = <String, ClientOption>{};
+    final mergedById = <String, ClientOption>{};
 
     final client = SupabaseBootstrap.client;
     if (client == null) {
@@ -563,19 +857,21 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     try {
       final rows = await client
           .from('clients')
-          .select('id, business_name')
+          .select('id, business_name, contact_name')
           .order('business_name');
       for (final row in rows) {
         final id = (row['id'] as String? ?? '').trim();
-        final name = (row['business_name'] as String? ?? '').trim();
-        if (id.isEmpty || name.isEmpty) {
+        final contactName = (row['contact_name'] as String? ?? '').trim();
+        final businessName = (row['business_name'] as String? ?? '').trim();
+        final displayName = contactName.isNotEmpty ? contactName : businessName;
+        if (id.isEmpty || displayName.isEmpty) {
           continue;
         }
-        mergedByName[name.toLowerCase()] = ClientOption(id: id, name: name);
+        mergedById[id] = ClientOption(id: id, name: displayName);
       }
     } catch (_) {}
 
-    final result = mergedByName.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    final result = mergedById.values.toList()..sort((a, b) => a.name.compareTo(b.name));
     return result;
   }
 
@@ -685,9 +981,6 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   }
 }
 
-bool _isMobile(BuildContext context) => MediaQuery.of(context).size.width < 600;
-bool _isDesktop(BuildContext context) => MediaQuery.of(context).size.width >= 1024;
-
 class _QuotesMetrics extends StatelessWidget {
   const _QuotesMetrics({required this.quotes});
 
@@ -695,35 +988,35 @@ class _QuotesMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = quotes.fold<double>(0, (sum, quote) => sum + quote.total);
     final pending = quotes.where((quote) => quote.isDraft).length;
     final concluded = quotes.where((quote) => quote.isConcluded).length;
-    final average = quotes.isEmpty ? 0.0 : total / quotes.length;
+    final approved = quotes.where((quote) => quote.isApproved).length;
+    final pendingPayment = quotes.where((quote) => quote.isActaFinalizada).length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final tiles = [
           RemaMetricTile(
-            label: 'Total Cotizado',
-            value: _money(total),
-            caption: '${quotes.length} cotizaciones',
-          ),
-          RemaMetricTile(
             label: 'Pendientes',
             value: '$pending',
             caption: 'Estado draft',
-            backgroundColor: RemaColors.surfaceWhite,
           ),
           RemaMetricTile(
             label: 'Concluidas',
             value: '$concluded',
             caption: 'Listas para aprobacion',
+            backgroundColor: RemaColors.surfaceWhite,
+          ),
+          RemaMetricTile(
+            label: 'Aprobadas',
+            value: '$approved',
+            caption: 'Con autorizacion',
             backgroundColor: RemaColors.surfaceLow,
           ),
           RemaMetricTile(
-            label: 'Valor Promedio',
-            value: _money(average),
-            caption: 'Por cotizacion',
+            label: 'Por cobrar',
+            value: '$pendingPayment',
+            caption: 'Acta finalizada',
             backgroundColor: const Color(0xFFFFDEA0),
           ),
         ];
@@ -863,12 +1156,98 @@ class _HeaderCell extends StatelessWidget {
   }
 }
 
+class _QuoteListEntry {
+  const _QuoteListEntry({
+    required this.quote,
+    required this.projectName,
+  });
+
+  final QuoteRecord quote;
+  final String projectName;
+}
+
+class _MonthQuoteGroup {
+  const _MonthQuoteGroup({
+    required this.month,
+    required this.label,
+    required this.items,
+  });
+
+  final int? month;
+  final String label;
+  final List<_QuoteListEntry> items;
+}
+
+class _YearQuoteGroup {
+  const _YearQuoteGroup({
+    required this.year,
+    required this.label,
+    required this.months,
+  });
+
+  final int? year;
+  final String label;
+  final List<_MonthQuoteGroup> months;
+}
+
+class _ClientQuoteGroup {
+  const _ClientQuoteGroup({
+    required this.clientName,
+    required this.years,
+  });
+
+  final String clientName;
+  final List<_YearQuoteGroup> years;
+}
+
+class _ClientQuotesGroup extends StatelessWidget {
+  const _ClientQuotesGroup({
+    required this.clientGroup,
+    required this.mobile,
+    required this.quoteBuilder,
+  });
+
+  final _ClientQuoteGroup clientGroup;
+  final bool mobile;
+  final Widget Function(_QuoteListEntry entry) quoteBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleStyle = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ExpansionTile(
+        title: Text(clientGroup.clientName.toUpperCase(), style: titleStyle),
+        children: [
+          for (final yearGroup in clientGroup.years)
+            ExpansionTile(
+              title: Text(yearGroup.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              children: [
+                for (final monthGroup in yearGroup.months)
+                  ExpansionTile(
+                    title: Text(monthGroup.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    childrenPadding: EdgeInsets.only(bottom: mobile ? 6 : 0),
+                    children: [
+                      for (final entry in monthGroup.items) quoteBuilder(entry),
+                    ],
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _QuoteRow extends StatelessWidget {
   const _QuoteRow({
     required this.quote,
+    required this.projectName,
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
+    required this.onSendEmail,
     this.onAttachPdf,
     this.onPreviewPdf,
     this.onPreviewActa,
@@ -883,9 +1262,11 @@ class _QuoteRow extends StatelessWidget {
   });
 
   final QuoteRecord quote;
+  final String projectName;
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
+  final VoidCallback onSendEmail;
   final VoidCallback? onAttachPdf;
   final VoidCallback? onPreviewPdf;
   final VoidCallback? onPreviewActa;
@@ -912,11 +1293,26 @@ class _QuoteRow extends StatelessWidget {
         children: [
           Expanded(
             flex: 3,
-            child: Text(
-              quote.quoteNumber,
-              style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  quote.quoteNumber,
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  projectName,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: RemaColors.onSurfaceVariant, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -996,19 +1392,17 @@ class _QuoteRow extends StatelessWidget {
                   tooltip: 'Ver descripcion del levantamiento',
                   color: RemaColors.primaryDark,
                 ),
-                if (quote.isDraft)
-                  OutlinedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_note_outlined, size: 18),
-                    label: const Text('Conceptos'),
-                  )
-                else
-                  IconButton(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined),
-                    tooltip: 'Ver presupuesto',
-                  ),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: quote.isDraft ? 'Editar conceptos' : 'Ver presupuesto',
+                ),
                 IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
+                IconButton(
+                  onPressed: onSendEmail,
+                  icon: const Icon(Icons.mail_outline),
+                  tooltip: 'Enviar cotizacion por correo',
+                ),
                 if (onAttachPdf != null)
                   IconButton(
                     onPressed: onAttachPdf,
@@ -1070,9 +1464,11 @@ class _QuoteRow extends StatelessWidget {
 class _QuoteMobileCard extends StatelessWidget {
   const _QuoteMobileCard({
     required this.quote,
+    required this.projectName,
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
+    required this.onSendEmail,
     this.onAttachPdf,
     this.onPreviewPdf,
     this.onPreviewActa,
@@ -1087,9 +1483,11 @@ class _QuoteMobileCard extends StatelessWidget {
   });
 
   final QuoteRecord quote;
+  final String projectName;
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
+  final VoidCallback onSendEmail;
   final VoidCallback? onAttachPdf;
   final VoidCallback? onPreviewPdf;
   final VoidCallback? onPreviewActa;
@@ -1116,11 +1514,26 @@ class _QuoteMobileCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      quote.quoteNumber,
-                      style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          quote.quoteNumber,
+                          style: const TextStyle(fontWeight: FontWeight.w700, color: RemaColors.primaryDark),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          projectName,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: RemaColors.onSurfaceVariant, fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1166,19 +1579,17 @@ class _QuoteMobileCard extends StatelessWidget {
                       tooltip: 'Ver descripcion del levantamiento',
                       color: RemaColors.primaryDark,
                     ),
-                    if (quote.isDraft)
-                      OutlinedButton.icon(
-                        onPressed: onEdit,
-                        icon: const Icon(Icons.edit_note_outlined, size: 18),
-                        label: const Text('Conceptos'),
-                      )
-                    else
-                      IconButton(
-                        onPressed: onEdit,
-                        icon: const Icon(Icons.edit_outlined),
-                        tooltip: 'Ver presupuesto',
-                      ),
+                    IconButton(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: quote.isDraft ? 'Editar conceptos' : 'Ver presupuesto',
+                    ),
                     IconButton(onPressed: onShare, icon: const Icon(Icons.share_outlined), tooltip: 'Compartir'),
+                    IconButton(
+                      onPressed: onSendEmail,
+                      icon: const Icon(Icons.mail_outline),
+                      tooltip: 'Enviar cotizacion por correo',
+                    ),
                     if (onAttachPdf != null)
                       IconButton(
                         onPressed: onAttachPdf,
@@ -1234,6 +1645,107 @@ class _QuoteMobileCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SendQuoteEmailDialog extends StatefulWidget {
+  const _SendQuoteEmailDialog({
+    required this.initialEmail,
+    required this.quoteNumber,
+    required this.projectName,
+  });
+
+  final String initialEmail;
+  final String quoteNumber;
+  final String projectName;
+
+  @override
+  State<_SendQuoteEmailDialog> createState() => _SendQuoteEmailDialogState();
+}
+
+class _SendQuoteEmailDialogState extends State<_SendQuoteEmailDialog> {
+  late final TextEditingController _emailController =
+      TextEditingController(text: widget.initialEmail);
+  late final TextEditingController _noteController = TextEditingController();
+  String? _emailError;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  bool _areEmailsValid(String value) {
+    final parts = value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return false;
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return parts.every((e) => emailRegex.hasMatch(e));
+  }
+
+  void _submit() {
+    final emails = _emailController.text.trim();
+    if (!_areEmailsValid(emails)) {
+      setState(() => _emailError = 'Ingresa correos válidos separados por coma.');
+      return;
+    }
+    Navigator.of(context).pop((
+      email: emails.toLowerCase(),
+      note: _noteController.text.trim(),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Enviar cotizacion por correo'),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Folio: ${widget.quoteNumber}'),
+            const SizedBox(height: 4),
+            Text('Proyecto: ${widget.projectName}'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Correo(s) del destinatario',
+                hintText: 'cliente@ejemplo.com, otro@ejemplo.com',
+                errorText: _emailError,
+              ),
+              onChanged: (_) {
+                if (_emailError != null) {
+                  setState(() => _emailError = null);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Mensaje adicional (opcional)',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_outlined),
+          label: const Text('Enviar'),
+        ),
+      ],
     );
   }
 }

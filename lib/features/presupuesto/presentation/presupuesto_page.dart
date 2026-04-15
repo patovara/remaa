@@ -176,15 +176,33 @@ class PresupuestoPage extends ConsumerWidget {
     String nextStatus,
   ) async {
     try {
+      final currentItems = await ref.read(quoteItemsProvider(quote.id).future);
+
       await ref.read(quotesProvider.notifier).updateStatus(
             quoteId: quote.id,
             status: nextStatus,
           );
+
+      // Al concluir, generar PDF y subirlo automáticamente como approval_pdf
+      if (nextStatus == QuoteStatus.concluded && currentItems.isNotEmpty) {
+        try {
+          final pdfBytes = await _buildQuotePdf(ref: ref, quote: quote, items: currentItems);
+          final fileName = 'cotizacion_${_sanitizeFolioForFileName(quote.quoteNumber)}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          await ref.read(quotesProvider.notifier).attachApprovalPdf(
+                quoteId: quote.id,
+                bytes: pdfBytes,
+                fileName: fileName,
+              );
+        } catch (_) {
+          // No bloquea el flujo si el PDF falla
+        }
+      }
+
       if (!context.mounted) {
         return;
       }
       final message = switch (nextStatus) {
-        QuoteStatus.concluded => 'Cotización concluida. Ya puedes adjuntar el PDF de aprobación.',
+        QuoteStatus.concluded => 'Cotización concluida.',
         QuoteStatus.draft => 'Cotización reabierta para edición.',
         _ => 'Estado actualizado.',
       };
@@ -522,7 +540,7 @@ class PresupuestoPage extends ConsumerWidget {
               ? (_) => pw.Positioned.fill(
                     child: pw.Center(
                       child: pw.Opacity(
-                        opacity: 0.10,
+                        opacity: 0.1, //se ajusto la opacidad para que la marca de agua sea más sutil
                         child: pw.Image(watermark, width: 380, fit: pw.BoxFit.contain),
                       ),
                     ),
@@ -534,17 +552,35 @@ class PresupuestoPage extends ConsumerWidget {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Container(
-                width: 92,
-                height: 46,
-                alignment: pw.Alignment.centerLeft,
-                child: logo != null
-                    ? pw.Image(logo, fit: pw.BoxFit.contain)
-                    : pw.Text(
-                        CompanyProfile.brandName,
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-                      ),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Container(
+                      width: 92,
+                      height: 46,
+                      alignment: pw.Alignment.centerLeft,
+                      child: logo != null
+                          ? pw.Image(logo, fit: pw.BoxFit.contain)
+                          : pw.Text(
+                              CompanyProfile.brandName,
+                              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                            ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      CompanyProfile.legalName,
+                      style: const pw.TextStyle(fontSize: 8.6),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'TEL: ${CompanyProfile.phone}',
+                      style: const pw.TextStyle(fontSize: 8.6),
+                    ),
+                  ],
+                ),
               ),
+              pw.SizedBox(width: 12),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
@@ -730,10 +766,10 @@ pw.Widget _pdfEvidenceBlocks({
     ),
   );
 }
-
+//Aquí están los datos generales y bancarios que se muestran al final del PDF, debajo de los totales. Se mantiene un diseño de dos columnas, con los conceptos generales a la izquierda y los datos bancarios a la derecha.
 pw.Widget _pdfGeneralConceptsAndBankData() {
-  final leftStyle = pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800);
-  final rightStyle = pw.TextStyle(fontSize: 9, color: PdfColors.black);
+  final leftStyle = pw.TextStyle(fontSize: 5, color: PdfColors.grey800);
+  final rightStyle = pw.TextStyle(fontSize: 5.5, color: PdfColors.black);
 
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -745,7 +781,7 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
           children: [
             pw.Text(
               'CONCEPTOS GENERALES:',
-              style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
             pw.Text('1.- ESTE ES UN PRESUPUESTO BASADO EN LA INFORMACIÓN QUE SE NOS PROPORCIONO.', style: leftStyle),
@@ -777,7 +813,7 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
               pw.Text(
                 'DATOS BANCARIOS FACTURACION',
                 style: pw.TextStyle(
-                  fontSize: 10,
+                  fontSize: 7,
                   fontWeight: pw.FontWeight.bold,
                   decoration: pw.TextDecoration.underline,
                 ),
@@ -787,7 +823,7 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
               pw.Text('SOLUCIONES INTEGRALES SUSTENTABLES', style: rightStyle, textAlign: pw.TextAlign.right),
               pw.Text('INTELIGENTES Y DINAMICAS REMA, S.A.S. DE C.V.', style: rightStyle, textAlign: pw.TextAlign.right),
               pw.SizedBox(height: 10),
-              pw.Text('SANTANDER', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.Text('SANTANDER', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
               pw.Text('65-50868153-1', style: rightStyle),
               pw.Text('014691 655086815 315', style: rightStyle),
             ],
@@ -1142,7 +1178,7 @@ class _GeneralConceptsAndBankDataSection extends StatelessWidget {
           crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.end,
           children: [
             Text(
-              'DATOS BANCARIOS FACTURACION',
+              'DATOS BANCARIOS FACTURACIÓN',
               style: textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
                 decoration: TextDecoration.underline,
