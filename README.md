@@ -42,6 +42,13 @@ Para build web alfa (Vercel):
 flutter build web --dart-define=ENV_FILE=.env.alpha
 ```
 
+## Preview automatico sin esperar GitHub Actions
+
+- El repo usa hook versionado en `.githooks/pre-push` para `feature/*`.
+- Antes de `git push`, construye `build/web` con `.env.staging`.
+- Si el build genera cambios, crea commit automatico de `build/web` y cancela ese push.
+- Solo vuelve a correr `git push` y se publica todo en un solo despliegue de Vercel.
+
 ## Estrategia de alfa recomendada
 
 - Frontend web en Vercel.

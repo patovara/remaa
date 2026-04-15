@@ -2,16 +2,6 @@ name: Build Web Preview
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "feature/**"
-    paths:
-      - "lib/**"
-      - "assets/**"
-      - "pubspec.yaml"
-      - "pubspec.lock"
-      - "web/**"
-      - ".github/workflows/build-web-preview.yml"
 
 permissions:
   contents: write
