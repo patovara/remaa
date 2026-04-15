@@ -540,7 +540,7 @@ class PresupuestoPage extends ConsumerWidget {
               ? (_) => pw.Positioned.fill(
                     child: pw.Center(
                       child: pw.Opacity(
-                        opacity: 0.10,
+                        opacity: 0.04, //se ajusto la opacidad para que la marca de agua sea más sutil
                         child: pw.Image(watermark, width: 380, fit: pw.BoxFit.contain),
                       ),
                     ),
@@ -766,10 +766,10 @@ pw.Widget _pdfEvidenceBlocks({
     ),
   );
 }
-
+//Aquí están los datos generales y bancarios que se muestran al final del PDF, debajo de los totales. Se mantiene un diseño de dos columnas, con los conceptos generales a la izquierda y los datos bancarios a la derecha.
 pw.Widget _pdfGeneralConceptsAndBankData() {
-  final leftStyle = pw.TextStyle(fontSize: 8.5, color: PdfColors.grey800);
-  final rightStyle = pw.TextStyle(fontSize: 9, color: PdfColors.black);
+  final leftStyle = pw.TextStyle(fontSize: 5, color: PdfColors.grey800);
+  final rightStyle = pw.TextStyle(fontSize: 5.5, color: PdfColors.black);
 
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -781,7 +781,7 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
           children: [
             pw.Text(
               'CONCEPTOS GENERALES:',
-              style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
             pw.Text('1.- ESTE ES UN PRESUPUESTO BASADO EN LA INFORMACIÓN QUE SE NOS PROPORCIONO.', style: leftStyle),
@@ -813,7 +813,7 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
               pw.Text(
                 'DATOS BANCARIOS FACTURACION',
                 style: pw.TextStyle(
-                  fontSize: 10,
+                  fontSize: 7,
                   fontWeight: pw.FontWeight.bold,
                   decoration: pw.TextDecoration.underline,
                 ),
@@ -823,7 +823,7 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
               pw.Text('SOLUCIONES INTEGRALES SUSTENTABLES', style: rightStyle, textAlign: pw.TextAlign.right),
               pw.Text('INTELIGENTES Y DINAMICAS REMA, S.A.S. DE C.V.', style: rightStyle, textAlign: pw.TextAlign.right),
               pw.SizedBox(height: 10),
-              pw.Text('SANTANDER', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              pw.Text('SANTANDER', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
               pw.Text('65-50868153-1', style: rightStyle),
               pw.Text('014691 655086815 315', style: rightStyle),
             ],
