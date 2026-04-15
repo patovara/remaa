@@ -28,6 +28,14 @@ class QuoteRecord {
     this.approvalPdfPath,
     this.approvalPdfUploadedAt,
     this.recipientEmail,
+    this.finalExchangeRate,
+    this.finalExchangeBase,
+    this.finalExchangeTarget,
+    this.finalExchangeProvider,
+    this.finalExchangeCapturedAt,
+    this.finalSubtotalUsd,
+    this.finalTaxUsd,
+    this.finalTotalUsd,
   });
 
   final String id;
@@ -44,6 +52,14 @@ class QuoteRecord {
   final String? approvalPdfPath;
   final DateTime? approvalPdfUploadedAt;
   final String? recipientEmail;
+  final double? finalExchangeRate;
+  final String? finalExchangeBase;
+  final String? finalExchangeTarget;
+  final String? finalExchangeProvider;
+  final DateTime? finalExchangeCapturedAt;
+  final double? finalSubtotalUsd;
+  final double? finalTaxUsd;
+  final double? finalTotalUsd;
 
   bool get isDraft => status == QuoteStatus.draft;
   bool get isConcluded => status == QuoteStatus.concluded;
@@ -53,6 +69,11 @@ class QuoteRecord {
   bool get isPaid => status == QuoteStatus.paid;
   bool get hasApprovalPdf => approvalPdfPath != null && approvalPdfPath!.trim().isNotEmpty;
   bool get canEditItems => isDraft;
+  bool get hasFinalExchangeSnapshot =>
+      finalExchangeRate != null &&
+      finalExchangeCapturedAt != null &&
+      (finalExchangeBase ?? '').trim().isNotEmpty &&
+      (finalExchangeTarget ?? '').trim().isNotEmpty;
 
   QuoteRecord copyWith({
     String? id,
@@ -69,6 +90,14 @@ class QuoteRecord {
     String? approvalPdfPath,
     DateTime? approvalPdfUploadedAt,
     String? recipientEmail,
+    double? finalExchangeRate,
+    String? finalExchangeBase,
+    String? finalExchangeTarget,
+    String? finalExchangeProvider,
+    DateTime? finalExchangeCapturedAt,
+    double? finalSubtotalUsd,
+    double? finalTaxUsd,
+    double? finalTotalUsd,
   }) {
     return QuoteRecord(
       id: id ?? this.id,
@@ -85,6 +114,14 @@ class QuoteRecord {
       approvalPdfPath: approvalPdfPath ?? this.approvalPdfPath,
       approvalPdfUploadedAt: approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,
       recipientEmail: recipientEmail ?? this.recipientEmail,
+      finalExchangeRate: finalExchangeRate ?? this.finalExchangeRate,
+      finalExchangeBase: finalExchangeBase ?? this.finalExchangeBase,
+      finalExchangeTarget: finalExchangeTarget ?? this.finalExchangeTarget,
+      finalExchangeProvider: finalExchangeProvider ?? this.finalExchangeProvider,
+      finalExchangeCapturedAt: finalExchangeCapturedAt ?? this.finalExchangeCapturedAt,
+      finalSubtotalUsd: finalSubtotalUsd ?? this.finalSubtotalUsd,
+      finalTaxUsd: finalTaxUsd ?? this.finalTaxUsd,
+      finalTotalUsd: finalTotalUsd ?? this.finalTotalUsd,
     );
   }
 }
@@ -198,6 +235,24 @@ class QuoteContextInfo {
       address.trim().isEmpty &&
       location.trim().isEmpty &&
       description.trim().isEmpty;
+}
+
+class QuoteCurrencyRate {
+  const QuoteCurrencyRate({
+    required this.base,
+    required this.target,
+    required this.rate,
+    required this.provider,
+    required this.fetchedAt,
+    required this.isFallback,
+  });
+
+  final String base;
+  final String target;
+  final double rate;
+  final String provider;
+  final DateTime fetchedAt;
+  final bool isFallback;
 }
 
 class SurveyEntryRecord {

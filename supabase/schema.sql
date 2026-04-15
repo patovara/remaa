@@ -272,10 +272,36 @@ create table if not exists public.quotes (
   valid_until date,
   approved_at timestamptz,
   acta_at timestamptz,
+  final_exchange_rate numeric(14,6),
+  final_exchange_base text,
+  final_exchange_target text,
+  final_exchange_provider text,
+  final_exchange_captured_at timestamptz,
+  final_subtotal_usd numeric(14,0),
+  final_tax_usd numeric(14,0),
+  final_total_usd numeric(14,0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (quote_number)
+  unique (quote_number),
+  constraint quotes_final_exchange_rate_positive_check check (final_exchange_rate is null or final_exchange_rate > 0)
 );
+
+create table if not exists public.currency_rates_cache (
+  id bigserial primary key,
+  base_currency text not null,
+  target_currency text not null,
+  rate numeric(14,6) not null,
+  provider text not null default 'exchangerate-api',
+  fetched_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  constraint currency_rates_cache_positive_rate_check check (rate > 0),
+  constraint currency_rates_cache_nonempty_base_check check (length(trim(base_currency)) > 0),
+  constraint currency_rates_cache_nonempty_target_check check (length(trim(target_currency)) > 0),
+  constraint currency_rates_cache_nonempty_provider_check check (length(trim(provider)) > 0)
+);
+
+create index if not exists currency_rates_cache_pair_exp_idx
+  on public.currency_rates_cache(base_currency, target_currency, expires_at desc);
 
 create table if not exists public.project_survey_entries (
   id uuid primary key default gen_random_uuid(),
@@ -341,6 +367,37 @@ alter table public.quotes
 
 alter table public.quotes
   add column if not exists acta_at timestamptz;
+
+alter table public.quotes
+  add column if not exists final_exchange_rate numeric(14,6);
+
+alter table public.quotes
+  add column if not exists final_exchange_base text;
+
+alter table public.quotes
+  add column if not exists final_exchange_target text;
+
+alter table public.quotes
+  add column if not exists final_exchange_provider text;
+
+alter table public.quotes
+  add column if not exists final_exchange_captured_at timestamptz;
+
+alter table public.quotes
+  add column if not exists final_subtotal_usd numeric(14,0);
+
+alter table public.quotes
+  add column if not exists final_tax_usd numeric(14,0);
+
+alter table public.quotes
+  add column if not exists final_total_usd numeric(14,0);
+
+alter table public.quotes
+  drop constraint if exists quotes_final_exchange_rate_positive_check;
+
+alter table public.quotes
+  add constraint quotes_final_exchange_rate_positive_check
+  check (final_exchange_rate is null or final_exchange_rate > 0);
 
 alter table public.clients
   add column if not exists contact_name text;

@@ -60,6 +60,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   Widget build(BuildContext context) {
     final quotesAsync = ref.watch(quotesProvider);
     final projectsAsync = ref.watch(quoteProjectsProvider);
+    final usdRateAsync = ref.watch(quoteUsdRateProvider);
     final projectById = {
       for (final project in projectsAsync.valueOrNull ?? const <ProjectLookup>[])
         project.id: project,
@@ -127,6 +128,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                   quoteBuilder: (entry) => _QuoteMobileCard(
                                     quote: entry.quote,
                                     projectName: entry.projectName,
+                                    estimatedUsdRate: usdRateAsync.valueOrNull?.rate,
                                     onViewProjectDescription: () => _showProjectDescription(
                                       entry.quote,
                                       projectById[entry.quote.projectId],
@@ -217,6 +219,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                   quoteBuilder: (entry) => _QuoteRow(
                                     quote: entry.quote,
                                     projectName: entry.projectName,
+                                    estimatedUsdRate: usdRateAsync.valueOrNull?.rate,
                                     onViewProjectDescription: () => _showProjectDescription(
                                       entry.quote,
                                       projectById[entry.quote.projectId],
@@ -1244,6 +1247,7 @@ class _QuoteRow extends StatelessWidget {
   const _QuoteRow({
     required this.quote,
     required this.projectName,
+    required this.estimatedUsdRate,
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
@@ -1263,6 +1267,7 @@ class _QuoteRow extends StatelessWidget {
 
   final QuoteRecord quote;
   final String projectName;
+  final double? estimatedUsdRate;
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
@@ -1317,10 +1322,9 @@ class _QuoteRow extends StatelessWidget {
           ),
           Expanded(
             flex: 2,
-            child: Text(
-              _money(quote.total),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+            child: _DualCurrencyAmount(
+              mxnLabel: _money(quote.total),
+              usdLabel: _quoteUsdLabel(quote: quote, estimatedRate: estimatedUsdRate),
             ),
           ),
           Expanded(
@@ -1465,6 +1469,7 @@ class _QuoteMobileCard extends StatelessWidget {
   const _QuoteMobileCard({
     required this.quote,
     required this.projectName,
+    required this.estimatedUsdRate,
     required this.onViewProjectDescription,
     required this.onEdit,
     required this.onShare,
@@ -1484,6 +1489,7 @@ class _QuoteMobileCard extends StatelessWidget {
 
   final QuoteRecord quote;
   final String projectName;
+  final double? estimatedUsdRate;
   final VoidCallback onViewProjectDescription;
   final VoidCallback onEdit;
   final VoidCallback onShare;
@@ -1541,7 +1547,11 @@ class _QuoteMobileCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(_money(quote.total)),
+              _DualCurrencyAmount(
+                mxnLabel: _money(quote.total),
+                usdLabel: _quoteUsdLabel(quote: quote, estimatedRate: estimatedUsdRate),
+                compact: true,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 4,
@@ -2019,6 +2029,56 @@ class _NewQuoteDialogState extends State<_NewQuoteDialog> {
       ],
     );
   }
+}
+
+class _DualCurrencyAmount extends StatelessWidget {
+  const _DualCurrencyAmount({
+    required this.mxnLabel,
+    required this.usdLabel,
+    this.compact = false,
+  });
+
+  final String mxnLabel;
+  final String? usdLabel;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final usdStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: RemaColors.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+          fontSize: compact ? 11 : 12,
+        );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          mxnLabel,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+        if (usdLabel != null)
+          Text(
+            usdLabel!,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: usdStyle,
+          ),
+      ],
+    );
+  }
+}
+
+String? _quoteUsdLabel({required QuoteRecord quote, required double? estimatedRate}) {
+  if (quote.finalTotalUsd != null) {
+    return '${quote.finalTotalUsd!.round()} USD';
+  }
+  if (estimatedRate == null) {
+    return null;
+  }
+  return '${(quote.total * estimatedRate).round()} USD';
 }
 
 String _money(double value) {

@@ -95,6 +95,16 @@ Revisar carpeta supabase:
 - stripe_webhook_stub.ts
 - README.md
 
+## Tipo de cambio (USD)
+
+La conversion MXN->USD de cotizaciones usa la Edge Function `exchange-rate` en Supabase.
+
+Secrets requeridos en Supabase:
+
+- `EXCHANGE_RATE_API_KEY`
+- `EXCHANGE_RATE_API_BASE_URL` (opcional, default: `https://v6.exchangerate-api.com/v6`)
+- `EXCHANGE_RATE_CACHE_TTL_MINUTES` (opcional, default: `60`)
+
 ## Arquitectura
 
 Documento: docs/ARCHITECTURE.md

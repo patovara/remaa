@@ -133,6 +133,7 @@ class PresupuestoPage extends ConsumerWidget {
               items: items,
               canEditItems: quote.canEditItems,
               contextState: ref.watch(quoteContextProvider(quote.projectId)),
+              usdRateState: ref.watch(quoteUsdRateProvider),
               universeLabel: _labelById(
                 quote.universeId,
                 catalogState.valueOrNull?.universes.map((item) => (item.id, item.name)).toList() ??
@@ -183,13 +184,25 @@ class PresupuestoPage extends ConsumerWidget {
             status: nextStatus,
           );
 
+      final updatedQuote = _findQuote(
+            ref.read(quotesProvider).valueOrNull ?? const <QuoteRecord>[],
+            quote.id,
+          ) ??
+          quote.copyWith(status: nextStatus);
+
       // Al concluir, generar PDF y subirlo automáticamente como approval_pdf
       if (nextStatus == QuoteStatus.concluded && currentItems.isNotEmpty) {
         try {
-          final pdfBytes = await _buildQuotePdf(ref: ref, quote: quote, items: currentItems);
-          final fileName = 'cotizacion_${_sanitizeFolioForFileName(quote.quoteNumber)}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final pdfBytes = await _buildQuotePdf(
+            ref: ref,
+            quote: updatedQuote,
+            items: currentItems,
+            freezeUsdSnapshot: true,
+          );
+          final fileName =
+              'cotizacion_${_sanitizeFolioForFileName(updatedQuote.quoteNumber)}_${DateTime.now().millisecondsSinceEpoch}.pdf';
           await ref.read(quotesProvider.notifier).attachApprovalPdf(
-                quoteId: quote.id,
+                quoteId: updatedQuote.id,
                 bytes: pdfBytes,
                 fileName: fileName,
               );
@@ -309,7 +322,12 @@ class PresupuestoPage extends ConsumerWidget {
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
-    final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final bytes = await _buildQuotePdf(
+      ref: ref,
+      quote: quote,
+      items: items,
+      freezeUsdSnapshot: false,
+    );
     final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
@@ -324,7 +342,12 @@ class PresupuestoPage extends ConsumerWidget {
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
-    final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final bytes = await _buildQuotePdf(
+      ref: ref,
+      quote: quote,
+      items: items,
+      freezeUsdSnapshot: false,
+    );
     final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
@@ -341,7 +364,12 @@ class PresupuestoPage extends ConsumerWidget {
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
   }) async {
-    final bytes = await _buildQuotePdf(ref: ref, quote: quote, items: items);
+    final bytes = await _buildQuotePdf(
+      ref: ref,
+      quote: quote,
+      items: items,
+      freezeUsdSnapshot: false,
+    );
     final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
@@ -460,21 +488,29 @@ class PresupuestoPage extends ConsumerWidget {
     required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
+    required bool freezeUsdSnapshot,
   }) async {
+    final currencyState = await _resolveQuoteCurrency(
+      ref: ref,
+      quote: quote,
+      freezeSnapshot: freezeUsdSnapshot,
+    );
+    final quoteForPdf = currencyState.quote;
+    final usdRate = currencyState.rate?.rate ?? quoteForPdf.finalExchangeRate;
     final pdf = pw.Document();
     final logo = await _loadHeaderLogo();
     final watermark = await _loadWatermarkImage();
     final money = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
-    final dateLabel = quote.validUntil != null ? _date(quote.validUntil!) : _date(DateTime.now());
+    final dateLabel = quoteForPdf.validUntil != null ? _date(quoteForPdf.validUntil!) : _date(DateTime.now());
     final quoteContext =
-      await ref.read(quotesProvider.notifier).fetchQuoteContext(projectId: quote.projectId);
+      await ref.read(quotesProvider.notifier).fetchQuoteContext(projectId: quoteForPdf.projectId);
     final catalog = await ref.read(conceptsCatalogProvider.future);
     final activeLevantamiento = ref.read(activeLevantamientoProvider);
     final persistedEntries = await ref
         .read(projectSurveyEntriesProvider(quote.projectId).future)
         .catchError((_) => const <SurveyEntryRecord>[]);
     final activeMatchesQuote =
-        activeLevantamiento != null && activeLevantamiento.quoteId == quote.id;
+        activeLevantamiento != null && activeLevantamiento.quoteId == quoteForPdf.id;
     final sessionEntries =
         activeMatchesQuote ? activeLevantamiento.entries : const <SurveyEntryRecord>[];
     final mergedEntries = <SurveyEntryRecord>[...persistedEntries];
@@ -489,17 +525,17 @@ class PresupuestoPage extends ConsumerWidget {
       }
     }
     final universeLabel = _labelById(
-      quote.universeId,
+      quoteForPdf.universeId,
       [for (final item in catalog.universes) (item.id, item.name)],
     );
     final projectTypeLabel = _labelById(
-      quote.projectTypeId,
+      quoteForPdf.projectTypeId,
       [for (final item in catalog.projectTypes) (item.id, item.name)],
     );
     final evidenceEntries = mergedEntries
         .where((entry) => entry.evidencePreviewList.any((bytes) => bytes.isNotEmpty))
         .toList();
-    if (evidenceEntries.isEmpty && activeLevantamiento?.quoteId == quote.id) {
+    if (evidenceEntries.isEmpty && activeLevantamiento?.quoteId == quoteForPdf.id) {
       final fallback = activeLevantamiento?.evidencePreviewList ?? const <Uint8List>[];
       if (fallback.any((bytes) => bytes.isNotEmpty)) {
         evidenceEntries.add(
@@ -585,9 +621,9 @@ class PresupuestoPage extends ConsumerWidget {
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text('COTIZACIÓN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
-                  pw.Text('Folio: ${_displayQuoteFolio(quote.quoteNumber)}'),
+                  pw.Text('Folio: ${_displayQuoteFolio(quoteForPdf.quoteNumber)}'),
                   pw.Text('Fecha: $dateLabel'),
-                  pw.Text('Estado: ${quote.status.toUpperCase()}'),
+                  pw.Text('Estado: ${quoteForPdf.status.toUpperCase()}'),
                 ],
               ),
             ],
@@ -662,8 +698,14 @@ class PresupuestoPage extends ConsumerWidget {
                     ),
                     _pdfCell(item.unit),
                     _pdfCell(item.quantity.toStringAsFixed(2)),
-                    _pdfCell(money.format(item.unitPrice)),
-                    _pdfCell(money.format(item.lineTotal)),
+                    _pdfCurrencyCell(
+                      primary: money.format(item.unitPrice),
+                      secondary: usdRate == null ? null : _usdFromRate(item.unitPrice, usdRate),
+                    ),
+                    _pdfCurrencyCell(
+                      primary: money.format(item.lineTotal),
+                      secondary: usdRate == null ? null : _usdFromRate(item.lineTotal, usdRate),
+                    ),
                   ],
                 ),
               if (includeSummary != null)
@@ -685,9 +727,18 @@ class PresupuestoPage extends ConsumerWidget {
             child: pw.SizedBox(
               width: 240,
               child: _pdfTotalsTable(
-                subtotal: money.format(quote.subtotal),
-                tax: money.format(quote.tax),
-                total: money.format(quote.total),
+                subtotal: money.format(quoteForPdf.subtotal),
+                tax: money.format(quoteForPdf.tax),
+                total: money.format(quoteForPdf.total),
+                subtotalUsd: quoteForPdf.finalSubtotalUsd != null
+                    ? _usdRoundedLabel(quoteForPdf.finalSubtotalUsd!)
+                    : (usdRate == null ? null : _usdFromRate(quoteForPdf.subtotal, usdRate)),
+                taxUsd: quoteForPdf.finalTaxUsd != null
+                    ? _usdRoundedLabel(quoteForPdf.finalTaxUsd!)
+                    : (usdRate == null ? null : _usdFromRate(quoteForPdf.tax, usdRate)),
+                totalUsd: quoteForPdf.finalTotalUsd != null
+                    ? _usdRoundedLabel(quoteForPdf.finalTotalUsd!)
+                    : (usdRate == null ? null : _usdFromRate(quoteForPdf.total, usdRate)),
               ),
             ),
           ),
@@ -698,6 +749,41 @@ class PresupuestoPage extends ConsumerWidget {
     );
 
     return Uint8List.fromList(await pdf.save());
+  }
+
+  Future<({QuoteRecord quote, QuoteCurrencyRate? rate})> _resolveQuoteCurrency({
+    required WidgetRef ref,
+    required QuoteRecord quote,
+    required bool freezeSnapshot,
+  }) async {
+    if (quote.hasFinalExchangeSnapshot) {
+      return (
+        quote: quote,
+        rate: QuoteCurrencyRate(
+          base: quote.finalExchangeBase ?? 'MXN',
+          target: quote.finalExchangeTarget ?? 'USD',
+          rate: quote.finalExchangeRate!,
+          provider: quote.finalExchangeProvider ?? 'snapshot',
+          fetchedAt: quote.finalExchangeCapturedAt ?? DateTime.now(),
+          isFallback: false,
+        ),
+      );
+    }
+
+    try {
+      final rate = await ref.read(quotesProvider.notifier).fetchUsdRate();
+      if (!freezeSnapshot) {
+        return (quote: quote, rate: rate);
+      }
+
+      final updated = await ref.read(quotesProvider.notifier).persistFinalUsdSnapshot(
+            quoteId: quote.id,
+            rate: rate,
+          );
+      return (quote: updated, rate: rate);
+    } catch (_) {
+      return (quote: quote, rate: null);
+    }
   }
 
   Future<pw.MemoryImage?> _loadHeaderLogo() async {
@@ -834,12 +920,13 @@ pw.Widget _pdfGeneralConceptsAndBankData() {
   );
 }
 
-class _BudgetView extends StatefulWidget {
+class _BudgetView extends ConsumerStatefulWidget {
   const _BudgetView({
     required this.quote,
     required this.items,
     required this.canEditItems,
     required this.contextState,
+    required this.usdRateState,
     required this.universeLabel,
     required this.projectTypeLabel,
     required this.onAddItem,
@@ -851,6 +938,7 @@ class _BudgetView extends StatefulWidget {
   final List<QuoteItemRecord> items;
   final bool canEditItems;
   final AsyncValue<QuoteContextInfo> contextState;
+  final AsyncValue<QuoteCurrencyRate> usdRateState;
   final String universeLabel;
   final String projectTypeLabel;
   final VoidCallback onAddItem;
@@ -858,12 +946,11 @@ class _BudgetView extends StatefulWidget {
   final ValueChanged<QuoteItemRecord> onDeleteItem;
 
   @override
-  State<_BudgetView> createState() => _BudgetViewState();
+  ConsumerState<_BudgetView> createState() => _BudgetViewState();
 }
 
-class _BudgetViewState extends State<_BudgetView> {
+class _BudgetViewState extends ConsumerState<_BudgetView> {
   late final ScrollController _tableScrollController;
-  bool _showHorizontalScrollbar = false;
 
   @override
   void initState() {
@@ -879,6 +966,19 @@ class _BudgetViewState extends State<_BudgetView> {
 
   @override
   Widget build(BuildContext context) {
+    final estimatedRate = widget.quote.hasFinalExchangeSnapshot
+      ? widget.quote.finalExchangeRate
+      : widget.usdRateState.valueOrNull?.rate;
+    final subtotalUsd = widget.quote.finalSubtotalUsd != null
+      ? _usdRoundedLabel(widget.quote.finalSubtotalUsd!)
+      : (estimatedRate == null ? null : _usdFromRate(widget.quote.subtotal, estimatedRate));
+    final taxUsd = widget.quote.finalTaxUsd != null
+      ? _usdRoundedLabel(widget.quote.finalTaxUsd!)
+      : (estimatedRate == null ? null : _usdFromRate(widget.quote.tax, estimatedRate));
+    final totalUsd = widget.quote.finalTotalUsd != null
+      ? _usdRoundedLabel(widget.quote.finalTotalUsd!)
+      : (estimatedRate == null ? null : _usdFromRate(widget.quote.total, estimatedRate));
+
     return Align(
       alignment: Alignment.topLeft,
       child: ConstrainedBox(
@@ -1016,8 +1116,18 @@ class _BudgetViewState extends State<_BudgetView> {
                           ),
                           DataCell(Text(item.unit)),
                           DataCell(Text(item.quantity.toStringAsFixed(2))),
-                          DataCell(Text(_money(item.unitPrice))),
-                          DataCell(Text(_money(item.lineTotal))),
+                          DataCell(
+                            _MoneyWithUsd(
+                              mxn: _money(item.unitPrice),
+                              usd: estimatedRate == null ? null : _usdFromRate(item.unitPrice, estimatedRate),
+                            ),
+                          ),
+                          DataCell(
+                            _MoneyWithUsd(
+                              mxn: _money(item.lineTotal),
+                              usd: estimatedRate == null ? null : _usdFromRate(item.lineTotal, estimatedRate),
+                            ),
+                          ),
                           DataCell(
                             Row(
                               children: [
@@ -1072,11 +1182,24 @@ class _BudgetViewState extends State<_BudgetView> {
                   );
                   final totalsCol = Column(
                     children: [
-                      _TotalRow(label: 'Subtotal', value: _money(widget.quote.subtotal)),
+                      _TotalRow(
+                        label: 'Subtotal',
+                        value: _money(widget.quote.subtotal),
+                        secondaryValue: subtotalUsd,
+                      ),
                       const SizedBox(height: 8),
-                      _TotalRow(label: 'IVA (16%)', value: _money(widget.quote.tax)),
+                      _TotalRow(
+                        label: 'IVA (16%)',
+                        value: _money(widget.quote.tax),
+                        secondaryValue: taxUsd,
+                      ),
                       const Divider(height: 24),
-                      _TotalRow(label: 'Total M.N.', value: _money(widget.quote.total), isStrong: true),
+                      _TotalRow(
+                        label: 'Total M.N.',
+                        value: _money(widget.quote.total),
+                        secondaryValue: totalUsd,
+                        isStrong: true,
+                      ),
                     ],
                   );
                   if (isMobile) {
@@ -1110,10 +1233,16 @@ class _BudgetViewState extends State<_BudgetView> {
 }
 
 class _TotalRow extends StatelessWidget {
-  const _TotalRow({required this.label, required this.value, this.isStrong = false});
+  const _TotalRow({
+    required this.label,
+    required this.value,
+    this.secondaryValue,
+    this.isStrong = false,
+  });
 
   final String label;
   final String value;
+  final String? secondaryValue;
   final bool isStrong;
 
   @override
@@ -1121,18 +1250,61 @@ class _TotalRow extends StatelessWidget {
     final style = isStrong
         ? Theme.of(context).textTheme.titleLarge?.copyWith(color: RemaColors.primaryDark)
         : Theme.of(context).textTheme.bodyMedium;
+    final secondaryStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: RemaColors.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+          fontSize: isStrong ? 13 : 12,
+        );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(child: Text(label, style: style)),
         const SizedBox(width: 12),
         Flexible(
-          child: Text(
-            value,
-            style: style?.copyWith(fontWeight: FontWeight.w700),
-            textAlign: TextAlign.right,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: style?.copyWith(fontWeight: FontWeight.w700),
+                textAlign: TextAlign.right,
+              ),
+              if (secondaryValue != null) ...[
+                const SizedBox(height: 2),
+                Text(secondaryValue!, style: secondaryStyle),
+              ],
+            ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _MoneyWithUsd extends StatelessWidget {
+  const _MoneyWithUsd({required this.mxn, this.usd});
+
+  final String mxn;
+  final String? usd;
+
+  @override
+  Widget build(BuildContext context) {
+    final usdStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: RemaColors.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(mxn),
+        if (usd != null) ...[
+          const SizedBox(height: 2),
+          Text(usd!, style: usdStyle),
+        ],
       ],
     );
   }
@@ -1506,6 +1678,15 @@ String _money(double value) {
   return formatter.format(value);
 }
 
+String _usdFromRate(double valueMxn, double rate) {
+  final usd = (valueMxn * rate).round();
+  return '$usd USD';
+}
+
+String _usdRoundedLabel(double value) {
+  return '${value.round()} USD';
+}
+
 String _date(DateTime value) => DateFormat('dd/MM/yyyy').format(value);
 
 pw.Widget _pdfCell(String value, {bool isHeader = false}) {
@@ -1518,6 +1699,31 @@ pw.Widget _pdfCell(String value, {bool isHeader = false}) {
         fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
       ),
       softWrap: true,
+    ),
+  );
+}
+
+pw.Widget _pdfCurrencyCell({
+  required String primary,
+  String? secondary,
+}) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.all(6),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.Text(
+          primary,
+          style: const pw.TextStyle(fontSize: 8),
+          textAlign: pw.TextAlign.right,
+        ),
+        if (secondary != null)
+          pw.Text(
+            secondary,
+            style: const pw.TextStyle(fontSize: 6.6, color: PdfColors.grey700),
+            textAlign: pw.TextAlign.right,
+          ),
+      ],
     ),
   );
 }
@@ -1540,23 +1746,13 @@ pw.Widget _pdfHeaderField(String label, String value) {
   );
 }
 
-pw.Widget _pdfTotalRow(String label, String value, {bool strong = false}) {
-  return pw.Padding(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3),
-    child: pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(label, style: pw.TextStyle(fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal)),
-        pw.Text(value, style: pw.TextStyle(fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal)),
-      ],
-    ),
-  );
-}
-
 pw.Widget _pdfTotalsTable({
   required String subtotal,
   required String tax,
   required String total,
+  String? subtotalUsd,
+  String? taxUsd,
+  String? totalUsd,
 }) {
   return pw.Table(
     border: pw.TableBorder.all(width: 0.6, color: PdfColors.black),
@@ -1565,9 +1761,9 @@ pw.Widget _pdfTotalsTable({
       1: const pw.FlexColumnWidth(1),
     },
     children: [
-      _pdfTotalsTableRow(label: 'Subtotal', value: subtotal),
-      _pdfTotalsTableRow(label: 'IVA (16%)', value: tax),
-      _pdfTotalsTableRow(label: 'Total', value: total, strong: true),
+      _pdfTotalsTableRow(label: 'Subtotal', value: subtotal, secondaryValue: subtotalUsd),
+      _pdfTotalsTableRow(label: 'IVA (16%)', value: tax, secondaryValue: taxUsd),
+      _pdfTotalsTableRow(label: 'Total', value: total, secondaryValue: totalUsd, strong: true),
     ],
   );
 }
@@ -1575,11 +1771,17 @@ pw.Widget _pdfTotalsTable({
 pw.TableRow _pdfTotalsTableRow({
   required String label,
   required String value,
+  String? secondaryValue,
   bool strong = false,
 }) {
   final textStyle = pw.TextStyle(
     fontSize: 9,
     fontWeight: strong ? pw.FontWeight.bold : pw.FontWeight.normal,
+  );
+  final secondaryStyle = pw.TextStyle(
+    fontSize: strong ? 8.2 : 7.8,
+    color: PdfColors.grey700,
+    fontWeight: pw.FontWeight.bold,
   );
   final rowDecoration = strong
       ? const pw.BoxDecoration(color: PdfColors.grey300)
@@ -1592,10 +1794,13 @@ pw.TableRow _pdfTotalsTableRow({
         child: pw.Text(label, style: textStyle),
       ),
       pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(value, style: textStyle),
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.Text(value, style: textStyle),
+            if (secondaryValue != null) pw.Text(secondaryValue, style: secondaryStyle),
+          ],
         ),
       ),
     ],
