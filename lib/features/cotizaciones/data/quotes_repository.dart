@@ -10,6 +10,11 @@ import '../domain/quote_models.dart';
 class QuotesRepository {
   static int _localProjectKeySeq = 1;
   static const String _actaBucket = 'acta-files';
+  static const String _quoteSelectFields =
+      'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, '
+      'approval_pdf_path, approval_pdf_uploaded_at, recipient_email, '
+      'final_exchange_rate, final_exchange_base, final_exchange_target, final_exchange_provider, final_exchange_captured_at, '
+      'final_subtotal_usd, final_tax_usd, final_total_usd, created_at';
 
   static final List<ProjectLookup> _localProjects = [];
 
@@ -187,29 +192,12 @@ class QuotesRepository {
     try {
       final rows = await client
           .from('quotes')
-          .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
-          )
+          .select(_quoteSelectFields)
           .order('created_at', ascending: false);
 
       final quotes = [
         for (final row in rows)
-          QuoteRecord(
-            id: row['id'] as String,
-            projectId: row['project_id'] as String? ?? '',
-            quoteNumber: _normalizeQuoteNumber(row['quote_number'] as String?),
-            status: row['status'] as String? ?? 'draft',
-            universeId: row['universe_id'] as String? ?? '',
-            projectTypeId: row['project_type_id'] as String? ?? '',
-            subtotal: _toDouble(row['subtotal']),
-            tax: _toDouble(row['tax']),
-            total: _toDouble(row['total']),
-            createdAt: _toDateTime(row['created_at']),
-            validUntil: _toDate(row['valid_until']),
-            approvalPdfPath: row['approval_pdf_path'] as String?,
-            approvalPdfUploadedAt: _toDateTime(row['approval_pdf_uploaded_at']),
-            recipientEmail: null,
-          ),
+          _quoteFromRow(row),
       ];
       if (quotes.isEmpty) {
         return _sortedLocalQuotes;
@@ -270,27 +258,10 @@ class QuotesRepository {
             'universe_id': universeId,
             'project_type_id': projectTypeId,
           })
-          .select(
-            'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, approval_pdf_path, approval_pdf_uploaded_at, created_at',
-          )
+          .select(_quoteSelectFields)
           .single();
 
-      return QuoteRecord(
-        id: inserted['id'] as String,
-        projectId: inserted['project_id'] as String? ?? '',
-        quoteNumber: _normalizeQuoteNumber(inserted['quote_number'] as String? ?? quoteNumber),
-        status: inserted['status'] as String? ?? 'draft',
-        universeId: inserted['universe_id'] as String? ?? universeId,
-        projectTypeId: inserted['project_type_id'] as String? ?? projectTypeId,
-        subtotal: _toDouble(inserted['subtotal']),
-        tax: _toDouble(inserted['tax']),
-        total: _toDouble(inserted['total']),
-        createdAt: _toDateTime(inserted['created_at']),
-        validUntil: _toDate(inserted['valid_until']),
-        approvalPdfPath: inserted['approval_pdf_path'] as String?,
-        approvalPdfUploadedAt: _toDateTime(inserted['approval_pdf_uploaded_at']),
-        recipientEmail: null,
-      );
+      return _quoteFromRow(inserted);
     } catch (error) {
       AppLogger.error('quotes_create_failed', data: {'error': error.toString()});
       final local = QuoteRecord(
@@ -337,6 +308,101 @@ class QuotesRepository {
       return updated;
     } catch (error) {
       AppLogger.error('quotes_update_totals_failed', data: {'error': error.toString()});
+      _replaceLocalQuote(updated);
+      return updated;
+    }
+  }
+
+  Future<QuoteCurrencyRate> fetchUsdRate({
+    String base = 'MXN',
+    String target = 'USD',
+  }) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null) {
+      throw StateError('Supabase no esta disponible para consultar tipo de cambio.');
+    }
+
+    // Función es pública (no requiere autenticación), pero incluir token si existe
+    final accessToken = client.auth.currentSession?.accessToken;
+    final headers = accessToken != null && accessToken.isNotEmpty
+        ? {'Authorization': 'Bearer $accessToken'}
+        : <String, String>{};
+
+    final response = await client.functions.invoke(
+      'exchange-rate',
+      headers: headers,
+      body: {
+        'base': base,
+        'target': target,
+      },
+    );
+
+    final data = response.data;
+    if (response.status >= 400) {
+      final message = data is Map<String, dynamic> && data['error'] != null
+          ? data['error'].toString()
+          : 'No fue posible consultar tipo de cambio.';
+      throw StateError(message);
+    }
+
+    if (data is! Map<String, dynamic>) {
+      throw StateError('Respuesta invalida del servicio de tipo de cambio.');
+    }
+
+    final rate = _toNullableDouble(data['rate']);
+    if (rate == null || rate <= 0) {
+      throw StateError('Tipo de cambio invalido.');
+    }
+
+    return QuoteCurrencyRate(
+      base: (data['base'] as String? ?? base).trim().toUpperCase(),
+      target: (data['target'] as String? ?? target).trim().toUpperCase(),
+      rate: rate,
+      provider: (data['provider'] as String? ?? 'exchangerate-api').trim(),
+      fetchedAt: _toDateTime(data['fetched_at']) ?? DateTime.now(),
+      isFallback: data['fallback'] == true,
+    );
+  }
+
+  Future<QuoteRecord> persistFinalUsdSnapshot({
+    required QuoteRecord quote,
+    required QuoteCurrencyRate rate,
+  }) async {
+    final subtotalUsd = (quote.subtotal * rate.rate).ceilToDouble();
+    final taxUsd = (quote.tax * rate.rate).ceilToDouble();
+    final totalUsd = (quote.total * rate.rate).ceilToDouble();
+
+    final updated = quote.copyWith(
+      finalExchangeRate: rate.rate,
+      finalExchangeBase: rate.base,
+      finalExchangeTarget: rate.target,
+      finalExchangeProvider: rate.provider,
+      finalExchangeCapturedAt: rate.fetchedAt,
+      finalSubtotalUsd: subtotalUsd,
+      finalTaxUsd: taxUsd,
+      finalTotalUsd: totalUsd,
+    );
+
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quote.id)) {
+      _replaceLocalQuote(updated);
+      return updated;
+    }
+
+    try {
+      await client.from('quotes').update({
+        'final_exchange_rate': rate.rate,
+        'final_exchange_base': rate.base,
+        'final_exchange_target': rate.target,
+        'final_exchange_provider': rate.provider,
+        'final_exchange_captured_at': rate.fetchedAt.toUtc().toIso8601String(),
+        'final_subtotal_usd': subtotalUsd,
+        'final_tax_usd': taxUsd,
+        'final_total_usd': totalUsd,
+      }).eq('id', quote.id);
+      return updated;
+    } catch (error) {
+      AppLogger.error('quotes_persist_final_usd_snapshot_failed', data: {'error': error.toString()});
       _replaceLocalQuote(updated);
       return updated;
     }
@@ -777,6 +843,33 @@ class QuotesRepository {
   bool _requiresApprovalPdfBySector(String? sectorLabel) {
     final normalized = (sectorLabel ?? '').trim().toLowerCase();
     return normalized.contains('hotel');
+  }
+
+  QuoteRecord _quoteFromRow(Map<String, dynamic> row) {
+    return QuoteRecord(
+      id: row['id'] as String,
+      projectId: row['project_id'] as String? ?? '',
+      quoteNumber: _normalizeQuoteNumber(row['quote_number'] as String?),
+      status: row['status'] as String? ?? 'draft',
+      universeId: row['universe_id'] as String? ?? '',
+      projectTypeId: row['project_type_id'] as String? ?? '',
+      subtotal: _toDouble(row['subtotal']),
+      tax: _toDouble(row['tax']),
+      total: _toDouble(row['total']),
+      createdAt: _toDateTime(row['created_at']),
+      validUntil: _toDate(row['valid_until']),
+      approvalPdfPath: row['approval_pdf_path'] as String?,
+      approvalPdfUploadedAt: _toDateTime(row['approval_pdf_uploaded_at']),
+      recipientEmail: row['recipient_email'] as String?,
+      finalExchangeRate: _toNullableDouble(row['final_exchange_rate']),
+      finalExchangeBase: row['final_exchange_base'] as String?,
+      finalExchangeTarget: row['final_exchange_target'] as String?,
+      finalExchangeProvider: row['final_exchange_provider'] as String?,
+      finalExchangeCapturedAt: _toDateTime(row['final_exchange_captured_at']),
+      finalSubtotalUsd: _toNullableDouble(row['final_subtotal_usd']),
+      finalTaxUsd: _toNullableDouble(row['final_tax_usd']),
+      finalTotalUsd: _toNullableDouble(row['final_total_usd']),
+    );
   }
 
   Future<({String? sectorLabel})?> _fetchClientSnapshotForQuote(String projectId) async {
@@ -1932,6 +2025,16 @@ class QuotesRepository {
       return value.toDouble();
     }
     return double.tryParse('$value') ?? 0;
+  }
+
+  double? _toNullableDouble(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse('$value');
   }
 
   DateTime? _toDate(Object? value) {

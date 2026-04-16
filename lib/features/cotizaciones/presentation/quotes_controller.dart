@@ -34,6 +34,10 @@ final projectSurveyEntriesProvider = FutureProvider.family<List<SurveyEntryRecor
   return ref.read(quotesRepositoryProvider).fetchSurveyEntries(projectId: projectId);
 });
 
+final quoteUsdRateProvider = FutureProvider<QuoteCurrencyRate>((ref) {
+  return ref.read(quotesProvider.notifier).fetchUsdRate();
+});
+
 final recentTemplateItemsProvider = FutureProvider.family<List<QuoteItemRecord>, String>((
   ref,
   templateId,
@@ -274,6 +278,42 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
       recipientEmail: recipientEmail,
       note: note,
     );
+  }
+
+  Future<QuoteCurrencyRate> fetchUsdRate({
+    String base = 'MXN',
+    String target = 'USD',
+  }) {
+    return _repository.fetchUsdRate(base: base, target: target);
+  }
+
+  Future<QuoteRecord> persistFinalUsdSnapshot({
+    required String quoteId,
+    required QuoteCurrencyRate rate,
+  }) async {
+    final current = state.valueOrNull ?? const <QuoteRecord>[];
+    QuoteRecord? quote;
+    for (final item in current) {
+      if (item.id == quoteId) {
+        quote = item;
+        break;
+      }
+    }
+    if (quote == null) {
+      throw StateError('No se encontro la cotizacion para guardar snapshot USD.');
+    }
+
+    final updated = await _repository.persistFinalUsdSnapshot(
+      quote: quote,
+      rate: rate,
+    );
+
+    state = AsyncData([
+      for (final item in current)
+        if (item.id == quoteId) updated else item,
+    ]);
+
+    return updated;
   }
 }
 
