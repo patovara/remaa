@@ -577,7 +577,10 @@ class QuotesRepository {
 
     final now = DateTime.now();
     final safeName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-    final objectPath = '${quote.id}/${now.millisecondsSinceEpoch}_$safeName';
+    final quoteFolder = _sanitizeStorageName(quote.quoteNumber).isEmpty
+        ? 'SIN_FOLIO'
+        : _sanitizeStorageName(quote.quoteNumber);
+    final objectPath = 'quotes/$quoteFolder/$safeName';
     final updated = quote.copyWith(
       approvalPdfPath: objectPath,
       approvalPdfUploadedAt: now,
