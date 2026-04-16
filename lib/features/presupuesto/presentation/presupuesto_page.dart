@@ -57,6 +57,7 @@ class PresupuestoPage extends ConsumerWidget {
                   ref,
                   currentQuote,
                   QuoteStatus.concluded,
+                  currentProject?.name,
                 ),
                 icon: const Icon(Icons.task_alt_outlined),
                 label: const Text('Concluir'),
@@ -71,6 +72,7 @@ class PresupuestoPage extends ConsumerWidget {
                   ref,
                   currentQuote,
                   QuoteStatus.draft,
+                  currentProject?.name,
                 ),
                 icon: const Icon(Icons.undo),
                 label: const Text('Reabrir'),
@@ -99,21 +101,39 @@ class PresupuestoPage extends ConsumerWidget {
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
-                ? () => _printQuote(context, ref: ref, quote: currentQuote, items: currentItems)
+                ? () => _printQuote(
+                      context,
+                      ref: ref,
+                      quote: currentQuote,
+                      items: currentItems,
+                      projectName: currentProject?.name,
+                    )
                 : null,
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Imprimir cotización',
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
-                ? () => _downloadQuote(context, ref: ref, quote: currentQuote, items: currentItems)
+                ? () => _downloadQuote(
+                      context,
+                      ref: ref,
+                      quote: currentQuote,
+                      items: currentItems,
+                      projectName: currentProject?.name,
+                    )
                 : null,
             icon: const Icon(Icons.download_outlined),
             tooltip: 'Descargar cotización',
           ),
           IconButton(
             onPressed: currentQuote != null && currentItems != null
-                ? () => _shareQuote(context, ref: ref, quote: currentQuote, items: currentItems)
+                ? () => _shareQuote(
+                      context,
+                      ref: ref,
+                      quote: currentQuote,
+                      items: currentItems,
+                      projectName: currentProject?.name,
+                    )
                 : null,
             icon: const Icon(Icons.share_outlined),
             tooltip: 'Compartir cotización',
@@ -175,6 +195,7 @@ class PresupuestoPage extends ConsumerWidget {
     WidgetRef ref,
     QuoteRecord quote,
     String nextStatus,
+    String? projectName,
   ) async {
     try {
       final currentItems = await ref.read(quoteItemsProvider(quote.id).future);
@@ -199,8 +220,10 @@ class PresupuestoPage extends ConsumerWidget {
             items: currentItems,
             freezeUsdSnapshot: true,
           );
-          final fileName =
-              'cotizacion_${_sanitizeFolioForFileName(updatedQuote.quoteNumber)}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final fileName = _quotePdfFileName(
+            projectName: projectName,
+            fallbackFolio: updatedQuote.quoteNumber,
+          );
           await ref.read(quotesProvider.notifier).attachApprovalPdf(
                 quoteId: updatedQuote.id,
                 bytes: pdfBytes,
@@ -321,6 +344,7 @@ class PresupuestoPage extends ConsumerWidget {
     required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
+    String? projectName,
   }) async {
     final bytes = await _buildQuotePdf(
       ref: ref,
@@ -328,11 +352,13 @@ class PresupuestoPage extends ConsumerWidget {
       items: items,
       freezeUsdSnapshot: false,
     );
-    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.layoutPdf(
       onLayout: (_) async => bytes,
       format: PdfPageFormat.letter,
-      name: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
+      name: _quotePdfFileName(
+        projectName: projectName,
+        fallbackFolio: quote.quoteNumber,
+      ),
     );
   }
 
@@ -341,6 +367,7 @@ class PresupuestoPage extends ConsumerWidget {
     required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
+    String? projectName,
   }) async {
     final bytes = await _buildQuotePdf(
       ref: ref,
@@ -348,10 +375,12 @@ class PresupuestoPage extends ConsumerWidget {
       items: items,
       freezeUsdSnapshot: false,
     );
-    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
+      filename: _quotePdfFileName(
+        projectName: projectName,
+        fallbackFolio: quote.quoteNumber,
+      ),
     );
     if (context.mounted) {
       showRemaMessage(context, 'Cotización lista para descarga.');
@@ -363,6 +392,7 @@ class PresupuestoPage extends ConsumerWidget {
     required WidgetRef ref,
     required QuoteRecord quote,
     required List<QuoteItemRecord> items,
+    String? projectName,
   }) async {
     final bytes = await _buildQuotePdf(
       ref: ref,
@@ -370,10 +400,12 @@ class PresupuestoPage extends ConsumerWidget {
       items: items,
       freezeUsdSnapshot: false,
     );
-    final folio = _displayQuoteFolio(quote.quoteNumber);
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'cotizacion_${_sanitizeFolioForFileName(folio)}.pdf',
+      filename: _quotePdfFileName(
+        projectName: projectName,
+        fallbackFolio: quote.quoteNumber,
+      ),
     );
     if (context.mounted) {
       showRemaMessage(context, 'Cotización lista para compartir.');
@@ -1514,9 +1546,14 @@ String _displayQuoteFolio(String value) {
   return structured ?? value.trim();
 }
 
-String _sanitizeFolioForFileName(String folio) {
-  final cleaned = folio.trim().replaceAll(RegExp(r'[^A-Za-z0-9-]'), '_');
-  return cleaned.isEmpty ? 'sin_folio' : cleaned;
+String _quotePdfFileName({String? projectName, String? fallbackFolio}) {
+  final rawProject = (projectName ?? '').trim();
+  final source = rawProject.isNotEmpty ? rawProject : _displayQuoteFolio(fallbackFolio ?? 'sin_folio');
+  final normalized = source.replaceAll(RegExp(r'\s+'), '_');
+  final cleaned = normalized.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+  final compact = cleaned.replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_|_$'), '');
+  final safe = compact.isEmpty ? 'SIN_NOMBRE' : compact.toUpperCase();
+  return 'PPTO-$safe.pdf';
 }
 
 class _EvidenceThumb extends StatelessWidget {
