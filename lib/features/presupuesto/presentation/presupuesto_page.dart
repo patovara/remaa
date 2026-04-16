@@ -583,6 +583,35 @@ class PresupuestoPage extends ConsumerWidget {
                   )
               : null,
         ),
+        footer: (context) => pw.Column(
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Text(
+                  'Página ${context.pageNumber} de ${context.pagesCount}',
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.Container(
+              height: 8,
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey400,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+              ),
+              child: pw.Row(
+                children: [
+                  pw.Expanded(child: pw.SizedBox()),
+                  pw.Container(width: 18, color: PdfColors.grey800),
+                  pw.Container(width: 10, color: PdfColors.amber),
+                ],
+              ),
+            ),
+          ],
+        ),
         build: (context) => [
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
