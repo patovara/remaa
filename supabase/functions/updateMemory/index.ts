@@ -30,12 +30,6 @@ Deno.serve(async (req: Request) => {
     return jsonError("Missing Supabase environment variables.", 500);
   }
 
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.replace("Bearer ", "").trim();
-  if (!token) {
-    return jsonError("Missing Authorization bearer token.", 401);
-  }
-
   let input: UpdateMemoryInput;
   try {
     input = (await req.json()) as UpdateMemoryInput;
@@ -57,20 +51,6 @@ Deno.serve(async (req: Request) => {
 
   if (stateUpdate !== undefined && !isPlainObject(stateUpdate)) {
     return jsonError("optional_state_update must be a JSON object.", 400);
-  }
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const {
-    data: { user },
-    error: userError,
-  } = await userClient.auth.getUser();
-
-  if (userError || !user) {
-    return jsonError("Unauthorized user.", 401);
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -286,7 +266,7 @@ function deepMerge(base: unknown, patch: unknown): any {
     return result;
   }
 
-  if (patch === undefined) {
+  if (patch === undefined || patch === null) {
     return base;
   }
 
