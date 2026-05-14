@@ -26,6 +26,39 @@ const _navItems = <_NavItem>[
   _NavItem('Ajustes', Icons.settings, '/ajustes'),
 ];
 
+Future<void> _handleMenuNavigation(
+  BuildContext context, {
+  required String currentLocation,
+  required String targetRoute,
+}) async {
+  if (currentLocation.startsWith('/actas') && !targetRoute.startsWith('/actas')) {
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Abandonar creacion de acta'),
+        content: const Text(
+          'Estas por salir del proceso de crear un acta.\n\n¿Seguro que quieres abandonar esta pantalla?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Seguir en actas'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Abandonar'),
+          ),
+        ],
+      ),
+    );
+    if (shouldLeave != true || !context.mounted) {
+      return;
+    }
+  }
+
+  context.go(targetRoute);
+}
+
 class RemaShell extends ConsumerWidget {
   const RemaShell({super.key, required this.location, required this.child});
 
@@ -104,6 +137,7 @@ class _DesktopNav extends StatelessWidget {
             _DesktopNavTile(
               item: item,
               isActive: location.startsWith(item.route),
+              location: location,
             ),
         ],
       ),
@@ -112,15 +146,24 @@ class _DesktopNav extends StatelessWidget {
 }
 
 class _DesktopNavTile extends StatelessWidget {
-  const _DesktopNavTile({required this.item, required this.isActive});
+  const _DesktopNavTile({
+    required this.item,
+    required this.isActive,
+    required this.location,
+  });
 
   final _NavItem item;
   final bool isActive;
+  final String location;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () => context.go(item.route),
+      onTap: () => _handleMenuNavigation(
+        context,
+        currentLocation: location,
+        targetRoute: item.route,
+      ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -193,6 +236,7 @@ class _MobileNav extends StatelessWidget {
                         item: item,
                         isActive: location.startsWith(item.route),
                         labelMode: labelMode,
+                        location: location,
                       ),
                     ),
                 ],
@@ -216,11 +260,13 @@ class _MobileNavTile extends StatelessWidget {
     required this.item,
     required this.isActive,
     required this.labelMode,
+    required this.location,
   });
 
   final _NavItem item;
   final bool isActive;
   final _MobileNavLabelMode labelMode;
+  final String location;
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +277,11 @@ class _MobileNavTile extends StatelessWidget {
     };
 
     return InkWell(
-      onTap: () => context.go(item.route),
+      onTap: () => _handleMenuNavigation(
+        context,
+        currentLocation: location,
+        targetRoute: item.route,
+      ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 2, vertical: mobileLabel == null ? 6 : 4),
         child: Column(

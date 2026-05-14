@@ -40715,7 +40715,7 @@ aE(a,b,c,d,e){var s,r=null,q=a.ak(t.c).f
 q.zy()
 s=A.S(b,r,r,r,r,r,r,r,r)
 q.n9(A.zU(d!=null&&e!=null?new A.Pe(d,e,r):r,r,r,r,B.iW,B.W,r,s,r,c,r,r,r,r,r,r,r,r,r,r))},
-akB(){var s=0,r=A.r(t.H),q=1,p=[],o,n,m,l,k,j,i,h,g,f,e,d,c
+akB(){var s=0,r=A.r(t.H),q=1,p=[],o,n,m,l,k,j,i,h,g,f,e,d
 var $async$akB=A.n(function(a,b){if(a===1){p.push(b)
 s=q}for(;;)switch(s){case 0:if($.ab==null)A.a7D()
 $.ab.toString
@@ -40728,19 +40728,18 @@ $.akA=!0
 $.aki=new A.aBX(m,B.xC)
 m=A.Qj()
 l=m.glJ(m).toLowerCase()
-k=B.f.n(l,"staging")||B.f.n(l,"develop")||B.f.n(l,"preview")
+if(!B.f.n(l,"staging"))if(!B.f.n(l,"develop"))B.f.n(l,"preview")
 m=A.b([],t.s)
-if(k)m.push(".env.staging")
-m.push(".env.production")
+m.push(".env.staging")
 m.push(".env.staging")
 m.push(".env.production")
 m.push(".env")
 m.push(".env.example")
 o=!1
-j=t.N,m=A.re(m,j),m=A.d_(m,m.r,A.t(m).c),i=m.$ti.c
+k=t.N,m=A.re(m,k),m=A.d_(m,m.r,A.t(m).c),j=m.$ti.c
 case 2:if(!m.q()){s=3
-break}h=m.d
-n=h==null?i.a(h):h
+break}i=m.d
+n=i==null?j.a(i):i
 q=5
 s=8
 return A.i($.Ig().Nt(0,n),$async$akB)
@@ -40751,7 +40750,7 @@ q=1
 s=7
 break
 case 5:q=4
-c=p.pop()
+d=p.pop()
 s=7
 break
 case 4:s=1
@@ -40775,26 +40774,26 @@ $.bkA.sF6(A.bzo($.Ig().gEO().h(0,"ENABLE_BILLING")))
 s=9
 return A.i(A.aLr(),$async$akB)
 case 9:m=$.bky.bj()
-i=$.b1?"enabled":"disabled"
-A.cQ("INFO","app_start",A.W(["env",m,"supabase",i,"billing",$.bkA.bj()?"enabled":"disabled"],j,t.X))
+j=$.b1?"enabled":"disabled"
+A.cQ("INFO","app_start",A.W(["env",m,"supabase",j,"billing",$.bkA.bj()?"enabled":"disabled"],k,t.X))
 if($.ab==null)A.a7D()
 m=$.ab
 m.toString
-j=$.bw().ges().b
-i=t.e8
-if(i.a(j.h(0,0))==null)A.a5(A.P('The app requested a view, but the platform did not provide one.\nThis is likely because the app called `runApp` to render its root widget, which expects the platform to provide a default view to render into (the "implicit" view).\nHowever, the platform likely has multi-view mode enabled, which does not create this default "implicit" view.\nTry using `runWidget` instead of `runApp` to start your app.\n`runWidget` allows you to provide a `View` widget, without requiring a default view.\nSee: https://flutter.dev/to/web-multiview-runwidget'))
-h=i.a(j.h(0,0))
-h.toString
-f=m.gOc()
-e=m.fr$
-if(e===$){j=i.a(j.h(0,0))
-j.toString
-d=new A.afB(B.az,j,null,A.aF())
-d.b3()
-d.ase(null,null,j)
+k=$.bw().ges().b
+j=t.e8
+if(j.a(k.h(0,0))==null)A.a5(A.P('The app requested a view, but the platform did not provide one.\nThis is likely because the app called `runApp` to render its root widget, which expects the platform to provide a default view to render into (the "implicit" view).\nHowever, the platform likely has multi-view mode enabled, which does not create this default "implicit" view.\nTry using `runWidget` instead of `runApp` to start your app.\n`runWidget` allows you to provide a `View` widget, without requiring a default view.\nSee: https://flutter.dev/to/web-multiview-runwidget'))
+i=j.a(k.h(0,0))
+i.toString
+g=m.gOc()
+f=m.fr$
+if(f===$){k=j.a(k.h(0,0))
+k.toString
+e=new A.afB(B.az,k,null,A.aF())
+e.b3()
+e.ase(null,null,k)
 m.fr$!==$&&A.ay()
-m.fr$=d
-e=d}m.al4(new A.Qq(h,B.b0s,f,e,null))
+m.fr$=e
+f=e}m.al4(new A.Qq(i,B.b0s,g,f,null))
 m.a0f()
 return A.p(null,r)
 case 1:return A.o(p.at(-1),r)}})
