@@ -362,6 +362,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   bool _isProcessingSinglePhoto = false;
   String? _processingSingleStage;
   bool _isProcessingDurantePhotos = false;
+  bool _isExitDialogOpen = false;
 
   bool get _isAdmin => ref.read(isAdminProvider);
 
@@ -1398,171 +1399,220 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
   }
 
+  Future<void> _handleBackNavigationAttempt() async {
+    if (!mounted || _isExitDialogOpen) {
+      return;
+    }
+
+    if (_actaFinalizada) {
+      context.go('/cotizaciones');
+      return;
+    }
+
+    _isExitDialogOpen = true;
+    try {
+      final shouldLeave = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Abandonar creacion de acta'),
+          content: const Text(
+            'Estas por salir del proceso de crear un acta.\n\n¿Seguro que quieres abandonar esta pantalla?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Seguir en actas'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Abandonar'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldLeave == true && mounted) {
+        context.go('/cotizaciones');
+      }
+    } finally {
+      _isExitDialogOpen = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PageFrame(
-      title: 'Actas de Entrega',
-      subtitle: 'Flujo final de cierre: cuerpo de acta y reporte fotografico.',
-      trailing: Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (widget.quoteId != null && widget.quoteId!.isNotEmpty && _isAdmin)
-            _actaFinalizada
-                ? Chip(
-                    avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
-                    label: const Text('ACTA FINALIZADA'),
-                    backgroundColor: const Color(0xFFDFF4DD),
-                    side: BorderSide.none,
-                  )
-                : ElevatedButton.icon(
-                    onPressed: _isGeneratingPdf ? null : _finalizeActa,
-                    icon: const Icon(Icons.task_alt),
-                    label: const Text('Finalizar Acta'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) {
+          return;
+        }
+        _handleBackNavigationAttempt();
+      },
+      child: PageFrame(
+        title: 'Actas de Entrega',
+        subtitle: 'Flujo final de cierre: cuerpo de acta y reporte fotografico.',
+        trailing: Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (widget.quoteId != null && widget.quoteId!.isNotEmpty && _isAdmin)
+              _actaFinalizada
+                  ? Chip(
+                      avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                      label: const Text('ACTA FINALIZADA'),
+                      backgroundColor: const Color(0xFFDFF4DD),
+                      side: BorderSide.none,
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _isGeneratingPdf ? null : _finalizeActa,
+                      icon: const Icon(Icons.task_alt),
+                      label: const Text('Finalizar Acta'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                  ),
-          OutlinedButton.icon(
-            onPressed: _isGeneratingPdf ? null : _previewPdf,
-            icon: const Icon(Icons.print_outlined),
-            label: const Text('Previsualizar'),
-          ),
-          ElevatedButton.icon(
-            onPressed: _isGeneratingPdf ? null : _downloadPdf,
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            label: const Text('Descargar PDF'),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_missingResponsiblesError != null) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFEBEE),
-                border: Border.all(color: Colors.red.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber, color: Colors.red.shade700),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Responsables Incompletos',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red.shade700,
+            OutlinedButton.icon(
+              onPressed: _isGeneratingPdf ? null : _previewPdf,
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('Previsualizar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: _isGeneratingPdf ? null : _downloadPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Descargar PDF'),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_missingResponsiblesError != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEBEE),
+                  border: Border.all(color: Colors.red.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.red.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Responsables Incompletos',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade700,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _missingResponsiblesError!,
-                          style: TextStyle(color: Colors.red.shade700),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text(
+                            _missingResponsiblesError!,
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(height: 20),
+            ],
+            _RoleAndSteps(
+              step: _step,
+              onStepChanged: (step) => setState(() => _step = step),
             ),
+            if (_isLoadingClient) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(minHeight: 3),
+            ],
+            if (_isGeneratingPdf) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  border: Border.all(color: const Color(0xFFFFCC80)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _pdfGenerationMessage ?? 'Tu documento se esta generando, te notificaremos cuando este listo.',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 10),
+                    const LinearProgressIndicator(minHeight: 3),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
-          ],
-          _RoleAndSteps(
-            step: _step,
-            onStepChanged: (step) => setState(() => _step = step),
-          ),
-          if (_isLoadingClient) ...[
-            const SizedBox(height: 12),
-            const LinearProgressIndicator(minHeight: 3),
-          ],
-          if (_isGeneratingPdf) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF3E0),
-                border: Border.all(color: const Color(0xFFFFCC80)),
-                borderRadius: BorderRadius.circular(8),
+            if (_step == 0)
+              _ActaBodyStep(
+                isAdmin: _isAdmin,
+                isLoadingClient: _isLoadingClient,
+                clienteController: _clienteController,
+                razonSocialController: _razonSocialController,
+                direccionController: _direccionController,
+                servicioController: _servicioController,
+                gerenteClienteController: _gerenteClienteController,
+                responsableController: _responsableController,
+                puestoGerenteController: _puestoGerenteController,
+                puestoResponsableController: _puestoResponsableController,
+                fechaInicioController: _fechaInicioController,
+                fechaConclusionController: _fechaConclusionController,
+                numeroPedidoController: _numeroPedidoController,
+                fechaAprobacionPedidoController: _fechaAprobacionPedidoController,
+                ubicacionController: _ubicacionController,
+                horaEstablecidaController: _horaEstablecidaController,
+                actaTemplateController: _actaTemplateController,
+                onPickDate: _selectDate,
+                onRefreshClientData: _refreshClientData,
+              )
+            else
+              _PhotoReportStep(
+                isAdmin: _isAdmin,
+                fotoIngreso: _fotoIngreso,
+                fotoAntes: _fotoAntes,
+                fotoDespues: _fotoDespues,
+                fotosDurante: _fotosDurante,
+                isProcessingSinglePhoto: _isProcessingSinglePhoto,
+                processingSingleStage: _processingSingleStage,
+                isProcessingDurantePhotos: _isProcessingDurantePhotos,
+                onPickIngreso: () => _pickSinglePhoto(stage: 'ingreso', setTarget: (value) => _fotoIngreso = value),
+                onPickAntes: () => _pickSinglePhoto(stage: 'antes', setTarget: (value) => _fotoAntes = value),
+                onPickDespues: () => _pickSinglePhoto(stage: 'despues', setTarget: (value) => _fotoDespues = value),
+                onPickDurante: _pickMultipleDurante,
+                onRemoveDurante: (item) => setState(() => _fotosDurante.remove(item)),
+                onClearSingle: (stage) {
+                  setState(() {
+                    switch (stage) {
+                      case 'ingreso':
+                        _fotoIngreso = null;
+                        break;
+                      case 'antes':
+                        _fotoAntes = null;
+                        break;
+                      case 'despues':
+                        _fotoDespues = null;
+                        break;
+                    }
+                  });
+                },
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _pdfGenerationMessage ?? 'Tu documento se esta generando, te notificaremos cuando este listo.',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 10),
-                  const LinearProgressIndicator(minHeight: 3),
-                ],
-              ),
-            ),
           ],
-          const SizedBox(height: 20),
-          if (_step == 0)
-            _ActaBodyStep(
-              isAdmin: _isAdmin,
-              isLoadingClient: _isLoadingClient,
-              clienteController: _clienteController,
-              razonSocialController: _razonSocialController,
-              direccionController: _direccionController,
-              servicioController: _servicioController,
-              gerenteClienteController: _gerenteClienteController,
-              responsableController: _responsableController,
-              puestoGerenteController: _puestoGerenteController,
-              puestoResponsableController: _puestoResponsableController,
-              fechaInicioController: _fechaInicioController,
-              fechaConclusionController: _fechaConclusionController,
-              numeroPedidoController: _numeroPedidoController,
-              fechaAprobacionPedidoController: _fechaAprobacionPedidoController,
-              ubicacionController: _ubicacionController,
-              horaEstablecidaController: _horaEstablecidaController,
-              actaTemplateController: _actaTemplateController,
-              onPickDate: _selectDate,
-              onRefreshClientData: _refreshClientData,
-            )
-          else
-            _PhotoReportStep(
-              isAdmin: _isAdmin,
-              fotoIngreso: _fotoIngreso,
-              fotoAntes: _fotoAntes,
-              fotoDespues: _fotoDespues,
-              fotosDurante: _fotosDurante,
-              isProcessingSinglePhoto: _isProcessingSinglePhoto,
-              processingSingleStage: _processingSingleStage,
-              isProcessingDurantePhotos: _isProcessingDurantePhotos,
-              onPickIngreso: () => _pickSinglePhoto(stage: 'ingreso', setTarget: (value) => _fotoIngreso = value),
-              onPickAntes: () => _pickSinglePhoto(stage: 'antes', setTarget: (value) => _fotoAntes = value),
-              onPickDespues: () => _pickSinglePhoto(stage: 'despues', setTarget: (value) => _fotoDespues = value),
-              onPickDurante: _pickMultipleDurante,
-              onRemoveDurante: (item) => setState(() => _fotosDurante.remove(item)),
-              onClearSingle: (stage) {
-                setState(() {
-                  switch (stage) {
-                    case 'ingreso':
-                      _fotoIngreso = null;
-                      break;
-                    case 'antes':
-                      _fotoAntes = null;
-                      break;
-                    case 'despues':
-                      _fotoDespues = null;
-                      break;
-                  }
-                });
-              },
-            ),
-        ],
+        ),
       ),
     );
   }
