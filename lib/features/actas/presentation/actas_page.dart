@@ -321,6 +321,13 @@ class ActasPage extends ConsumerStatefulWidget {
 }
 
 class _ActasPageState extends ConsumerState<ActasPage> {
+    // Controladores nuevos para búsqueda y campos manuales
+    final _clienteSearchController = TextEditingController();
+    final _proyectoNombreController = TextEditingController();
+    final _descripcionActaController = TextEditingController();
+    List<ClientRecord> _clientesDisponibles = [];
+    bool _isLoadingClientes = false;
+    ClientRecord? _selectedCliente;
   final _formatter = DateFormat('dd/MM/yyyy');
   final _responsiblesRepository = ClientResponsiblesRepository();
   final _quotesRepository = QuotesRepository();
@@ -377,7 +384,43 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     // Cargar automáticamente evidencia del levantamiento o desde registros persistidos
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadEvidenceForActa();
+      _loadClientesDisponibles();
     });
+  }
+
+  Future<void> _loadClientesDisponibles() async {
+    setState(() => _isLoadingClientes = true);
+    try {
+      final client = SupabaseBootstrap.client;
+      if (client == null) return;
+      final rows = await client
+          .from('clients')
+          .select('id, business_name, contact_name, city, state, address_line')
+          .order('business_name', ascending: true);
+      setState(() {
+        _clientesDisponibles = [
+          for (final row in rows)
+            ClientRecord(
+              id: row['id'] ?? '',
+              name: row['business_name'] ?? '',
+              contactName: row['contact_name'] ?? '',
+              sector: '',
+              badge: '',
+              activeProjects: '',
+              months: '',
+              icon: Icons.business,
+              contactEmail: '',
+              phone: '',
+              address: row['address_line'] ?? '',
+              responsibles: const [],
+            ),
+        ];
+      });
+    } catch (_) {
+      // Silencioso
+    } finally {
+      setState(() => _isLoadingClientes = false);
+    }
   }
 
   Future<void> _loadServiceDescriptionFromQuote(String quoteId) async {
@@ -1489,6 +1532,78 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // --- NUEVO: Búsqueda/autocompletado de cliente ---
+            RemaPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const RemaSectionHeader(title: 'Buscar cliente existente o capturar manual'),
+                  const SizedBox(height: 10),
+                  Autocomplete<ClientRecord>(
+                    optionsBuilder: (textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<ClientRecord>.empty();
+                      }
+                      return _clientesDisponibles.where((c) =>
+                        c.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
+                        (c.contactName ?? '').toLowerCase().contains(textEditingValue.text.toLowerCase())
+                      );
+                    },
+                    displayStringForOption: (c) => c.contactName?.isNotEmpty == true ? c.contactName! : c.name,
+                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                      _clienteSearchController.text = controller.text;
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Buscar cliente',
+                          suffixIcon: _isLoadingClientes
+                              ? const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    controller.clear();
+                                    setState(() {
+                                      _selectedCliente = null;
+                                      _loadedClient = null;
+                                      _clienteController.clear();
+                                      _razonSocialController.clear();
+                                      _direccionController.clear();
+                                      _ubicacionController.clear();
+                                    });
+                                  },
+                                ),
+                        ),
+                        onChanged: (value) {
+                          if (value.isEmpty) {
+                            setState(() {
+                              _selectedCliente = null;
+                              _loadedClient = null;
+                              _clienteController.clear();
+                              _razonSocialController.clear();
+                              _direccionController.clear();
+                              _ubicacionController.clear();
+                            });
+                          }
+                        },
+                      );
+                    },
+                    onSelected: (ClientRecord selected) async {
+                      setState(() {
+                        _selectedCliente = selected;
+                      });
+                      await _loadSupabaseClient(selected.id);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Text('O captura los datos manualmente si no encuentras el cliente.'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
             if (_missingResponsiblesError != null) ...[
               Container(
                 width: double.infinity,
@@ -1579,6 +1694,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                 actaTemplateController: _actaTemplateController,
                 onPickDate: _selectDate,
                 onRefreshClientData: _refreshClientData,
+                // NUEVOS CAMPOS
+                proyectoNombreController: _proyectoNombreController,
+                descripcionActaController: _descripcionActaController,
               )
             else
               _PhotoReportStep(
@@ -1838,6 +1956,8 @@ class _ActaBodyStep extends StatelessWidget {
     required this.actaTemplateController,
     required this.onPickDate,
     required this.onRefreshClientData,
+    required this.proyectoNombreController,
+    required this.descripcionActaController,
   });
 
   final bool isAdmin;
@@ -1859,6 +1979,8 @@ class _ActaBodyStep extends StatelessWidget {
   final TextEditingController actaTemplateController;
   final ValueChanged<TextEditingController> onPickDate;
   final Future<void> Function({bool showFeedback}) onRefreshClientData;
+  final TextEditingController proyectoNombreController;
+  final TextEditingController descripcionActaController;
 
   @override
   Widget build(BuildContext context) {
@@ -1880,6 +2002,19 @@ class _ActaBodyStep extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _ActaField(label: 'Cliente', controller: clienteController),
+              const SizedBox(height: 16),
+              // --- NUEVO: Campos manuales de proyecto y descripción ---
+              _ActaField(
+                label: 'Nombre del proyecto',
+                controller: proyectoNombreController,
+                maxLines: 1,
+              ),
+              const SizedBox(height: 16),
+              _ActaField(
+                label: 'Descripción del acta/proyecto',
+                controller: descripcionActaController,
+                maxLines: 4,
+              ),
               const SizedBox(height: 16),
               _ActaField(label: 'Razon social', controller: razonSocialController),
               const SizedBox(height: 16),
