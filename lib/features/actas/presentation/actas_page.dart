@@ -36,13 +36,13 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
       watermarkBytes != null && watermarkBytes.isNotEmpty ? pw.MemoryImage(watermarkBytes) : null;
 
   final ingresoBytes = payload['ingresoBytes'] as Uint8List?;
-  final antesBytes = payload['antesBytes'] as Uint8List?;
-  final despuesBytes = payload['despuesBytes'] as Uint8List?;
+  final antesBytes = (payload['antesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
+  final despuesBytes = (payload['despuesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
   final duranteBytes = (payload['duranteBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
 
   final ingresoImage = ingresoBytes != null && ingresoBytes.isNotEmpty ? pw.MemoryImage(ingresoBytes) : null;
-  final antesImage = antesBytes != null && antesBytes.isNotEmpty ? pw.MemoryImage(antesBytes) : null;
-  final despuesImage = despuesBytes != null && despuesBytes.isNotEmpty ? pw.MemoryImage(despuesBytes) : null;
+  final antesImages = [for (final bytes in antesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
+  final despuesImages = [for (final bytes in despuesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
   final duranteImages = [
     for (final bytes in duranteBytes)
       if (bytes.isNotEmpty) pw.MemoryImage(bytes),
@@ -113,72 +113,34 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
     ),
   );
   pdf.addPage(
-    _buildPhotoPage(
+    _buildPhotoPageWithDynamicGrid(
       logo: logo,
       brandName: brandName,
       legalName: legalName,
       title: 'REPORTE FOTOGRAFICO - ANTES',
-      image: antesImage,
+      images: antesImages,
       page: 3,
     ),
   );
 
   pdf.addPage(
-    pw.Page(
-      pageFormat: PdfPageFormat.letter,
-      margin: const pw.EdgeInsets.all(36),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
-            pw.SizedBox(height: 20),
-            pw.Text(
-              'REPORTE FOTOGRAFICO - DURANTE',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Wrap(
-              alignment: pw.WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final image in duranteImages)
-                  pw.Container(
-                    width: 240,
-                    height: 140,
-                    alignment: pw.Alignment.center,
-                    decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
-                    child: pw.Image(image, fit: pw.BoxFit.contain),
-                  ),
-                if (duranteImages.isEmpty)
-                  pw.Container(
-                    width: 240,
-                    height: 140,
-                    alignment: pw.Alignment.center,
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.grey300),
-                      color: PdfColors.grey100,
-                    ),
-                    child: pw.Text('Sin evidencia cargada'),
-                  ),
-              ],
-            ),
-            pw.Spacer(),
-            _buildPageFooter(4),
-          ],
-        );
-      },
+    _buildPhotoPageWithDynamicGrid(
+      logo: logo,
+      brandName: brandName,
+      legalName: legalName,
+      title: 'REPORTE FOTOGRAFICO - DURANTE',
+      images: duranteImages,
+      page: 4,
     ),
   );
 
   pdf.addPage(
-    _buildPhotoPage(
+    _buildPhotoPageWithDynamicGrid(
       logo: logo,
       brandName: brandName,
       legalName: legalName,
       title: 'REPORTE FOTOGRAFICO - DESPUÉS',
-      image: despuesImage,
+      images: despuesImages,
       page: 5,
     ),
   );
@@ -285,6 +247,113 @@ pw.Widget _buildPhotoSection(String title, pw.MemoryImage? image) {
   );
 }
 
+pw.Page _buildPhotoPageWithDynamicGrid({
+  required pw.MemoryImage? logo,
+  required String brandName,
+  required String legalName,
+  required String title,
+  required List<pw.MemoryImage> images,
+  required int page,
+}) {
+  return pw.Page(
+    pageFormat: PdfPageFormat.letter,
+    margin: const pw.EdgeInsets.all(36),
+    build: (context) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+          pw.SizedBox(height: 20),
+          pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          _buildDynamicPhotoLayout(images),
+          pw.Spacer(),
+          _buildPageFooter(page),
+        ],
+      );
+    },
+  );
+}
+
+pw.Widget _buildDynamicPhotoLayout(List<pw.MemoryImage> images) {
+  pw.Widget tile(pw.MemoryImage image, {required double width, required double height}) {
+    return pw.Container(
+      width: width,
+      height: height,
+      alignment: pw.Alignment.center,
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        color: PdfColors.grey100,
+      ),
+      child: pw.Image(image, fit: pw.BoxFit.contain),
+    );
+  }
+
+  if (images.isEmpty) {
+    return pw.Container(
+      width: double.infinity,
+      height: 380,
+      alignment: pw.Alignment.center,
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        color: PdfColors.grey100,
+      ),
+      child: pw.Text('Sin evidencia cargada'),
+    );
+  }
+
+  if (images.length == 1) {
+    return tile(images[0], width: double.infinity, height: 380);
+  }
+
+  if (images.length == 2) {
+    return pw.Row(
+      children: [
+        pw.Expanded(child: tile(images[0], width: double.infinity, height: 380)),
+        pw.SizedBox(width: 8),
+        pw.Expanded(child: tile(images[1], width: double.infinity, height: 380)),
+      ],
+    );
+  }
+
+  if (images.length == 3) {
+    return pw.Column(
+      children: [
+        tile(images[0], width: double.infinity, height: 186),
+        pw.SizedBox(height: 8),
+        pw.Row(
+          children: [
+            pw.Expanded(child: tile(images[1], width: double.infinity, height: 186)),
+            pw.SizedBox(width: 8),
+            pw.Expanded(child: tile(images[2], width: double.infinity, height: 186)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  final limited = images.take(4).toList();
+  return pw.Column(
+    children: [
+      pw.Row(
+        children: [
+          pw.Expanded(child: tile(limited[0], width: double.infinity, height: 186)),
+          pw.SizedBox(width: 8),
+          pw.Expanded(child: tile(limited[1], width: double.infinity, height: 186)),
+        ],
+      ),
+      pw.SizedBox(height: 8),
+      pw.Row(
+        children: [
+          pw.Expanded(child: tile(limited[2], width: double.infinity, height: 186)),
+          pw.SizedBox(width: 8),
+          pw.Expanded(child: tile(limited[3], width: double.infinity, height: 186)),
+        ],
+      ),
+    ],
+  );
+}
+
 pw.Widget _buildSignatureBlock(String title, String subtitle) {
   return pw.Container(
     width: 165,
@@ -324,7 +393,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     // Controladores nuevos para búsqueda y campos manuales
     final _clienteSearchController = TextEditingController();
     final _proyectoNombreController = TextEditingController();
-    final _descripcionActaController = TextEditingController();
     List<ClientRecord> _clientesDisponibles = [];
     bool _isLoadingClientes = false;
     ClientRecord? _selectedCliente;
@@ -354,8 +422,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   int _step = 0;
 
   _PickedMedia? _fotoIngreso;
-  _PickedMedia? _fotoAntes;
-  _PickedMedia? _fotoDespues;
+  final List<_PickedMedia> _fotosAntes = [];
+  final List<_PickedMedia> _fotosDespues = [];
   final List<_PickedMedia> _fotosDurante = [];
 
   ClientRecord? _loadedClient;
@@ -612,11 +680,15 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
 
     setState(() {
-      _fotoAntes ??= _PickedMedia(
-          name: 'antes_${DateTime.now().millisecondsSinceEpoch}.png',
-          bytes: evidenceList.first,
-          size: evidenceList.first.length,
+      if (_fotosAntes.isEmpty) {
+        _fotosAntes.add(
+          _PickedMedia(
+            name: 'antes_${DateTime.now().millisecondsSinceEpoch}.png',
+            bytes: evidenceList.first,
+            size: evidenceList.first.length,
+          ),
         );
+      }
 
       if (_fotosDurante.isEmpty && evidenceList.length > 1) {
         for (var index = 1; index < evidenceList.length; index++) {
@@ -870,6 +942,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   @override
   void dispose() {
     _pdfProgressTimer?.cancel();
+    _clienteSearchController.dispose();
+    _proyectoNombreController.dispose();
     _clienteController.dispose();
     _razonSocialController.dispose();
     _direccionController.dispose();
@@ -886,6 +960,89 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     _fechaAprobacionPedidoController.dispose();
     _actaTemplateController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickMultipleForStage({
+    required String stage,
+    required List<_PickedMedia> target,
+    required int maxItems,
+  }) async {
+    if (target.length >= maxItems) {
+      if (mounted) {
+        showRemaMessage(context, 'Solo se permiten hasta $maxItems fotos en $stage.');
+      }
+      return;
+    }
+
+    setState(() {
+      _isProcessingSinglePhoto = true;
+      _processingSingleStage = stage;
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true,
+      );
+
+      if (!mounted || result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final available = maxItems - target.length;
+      final selected = result.files.where((item) => item.bytes != null).take(available).toList();
+      final optimizedMedia = <_PickedMedia>[];
+      final rejectedMessages = <String>[];
+
+      for (final file in selected) {
+        try {
+          final optimized = await optimizeImageForDocument(
+            inputBytes: file.bytes!,
+            fileName: file.name,
+            profile: ImageOptimizationProfile.gridDocument,
+          );
+          optimizedMedia.add(
+            _PickedMedia(
+              name: optimized.fileName,
+              bytes: optimized.bytes,
+              size: optimized.bytes.length,
+              mimeType: optimized.mimeType,
+            ),
+          );
+        } on ImageOptimizationException catch (error) {
+          rejectedMessages.add('${file.name}: ${error.message}');
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      if (optimizedMedia.isNotEmpty) {
+        setState(() {
+          target.addAll(optimizedMedia);
+        });
+      }
+
+      if (optimizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
+        showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos optimizadas.');
+      } else if (optimizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
+        showRemaMessage(
+          context,
+          'Se agregaron ${optimizedMedia.length} fotos optimizadas. ${rejectedMessages.first}',
+        );
+      } else if (rejectedMessages.isNotEmpty) {
+        showRemaMessage(context, rejectedMessages.first);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingSinglePhoto = false;
+          _processingSingleStage = null;
+        });
+      }
+    }
   }
 
   Future<void> _pickSinglePhoto({
@@ -1162,7 +1319,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     missing.addAll(_collectDateValidationErrors());
 
-    if (_fotoIngreso == null && _fotoAntes == null && _fotoDespues == null && _fotosDurante.isEmpty) {
+    if (_fotoIngreso == null && _fotosAntes.isEmpty && _fotosDespues.isEmpty && _fotosDurante.isEmpty) {
       missing.add('Registro fotografico');
     }
 
@@ -1260,8 +1417,13 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
 
     addPhoto('ingreso', _fotoIngreso);
-    addPhoto('antes', _fotoAntes);
-    addPhoto('despues', _fotoDespues);
+    for (var index = 0; index < _fotosAntes.length; index++) {
+      addPhoto('antes_${index + 1}', _fotosAntes[index]);
+    }
+
+    for (var index = 0; index < _fotosDespues.length; index++) {
+      addPhoto('despues_${index + 1}', _fotosDespues[index]);
+    }
 
     for (var index = 0; index < _fotosDurante.length; index++) {
       addPhoto('durante_${index + 1}', _fotosDurante[index]);
@@ -1288,8 +1450,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         'logoBytes': logoBytes,
         'watermarkBytes': watermarkBytes,
         'ingresoBytes': _fotoIngreso?.bytes,
-        'antesBytes': _fotoAntes?.bytes,
-        'despuesBytes': _fotoDespues?.bytes,
+        'antesBytes': [for (final media in _fotosAntes.take(4)) media.bytes],
+        'despuesBytes': [for (final media in _fotosDespues.take(4)) media.bytes],
         'duranteBytes': [for (final media in _fotosDurante.take(4)) media.bytes],
         'renderedActa': _renderTemplate(_actaTemplateController.text, _templateValues),
         'gerenteNombre': _gerenteClienteController.text.trim().isEmpty
@@ -1696,22 +1858,23 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                 onRefreshClientData: _refreshClientData,
                 // NUEVOS CAMPOS
                 proyectoNombreController: _proyectoNombreController,
-                descripcionActaController: _descripcionActaController,
               )
             else
               _PhotoReportStep(
                 isAdmin: _isAdmin,
                 fotoIngreso: _fotoIngreso,
-                fotoAntes: _fotoAntes,
-                fotoDespues: _fotoDespues,
+                fotosAntes: _fotosAntes,
+                fotosDespues: _fotosDespues,
                 fotosDurante: _fotosDurante,
                 isProcessingSinglePhoto: _isProcessingSinglePhoto,
                 processingSingleStage: _processingSingleStage,
                 isProcessingDurantePhotos: _isProcessingDurantePhotos,
                 onPickIngreso: () => _pickSinglePhoto(stage: 'ingreso', setTarget: (value) => _fotoIngreso = value),
-                onPickAntes: () => _pickSinglePhoto(stage: 'antes', setTarget: (value) => _fotoAntes = value),
-                onPickDespues: () => _pickSinglePhoto(stage: 'despues', setTarget: (value) => _fotoDespues = value),
+                onPickAntes: () => _pickMultipleForStage(stage: 'antes', target: _fotosAntes, maxItems: 4),
+                onPickDespues: () => _pickMultipleForStage(stage: 'despues', target: _fotosDespues, maxItems: 4),
                 onPickDurante: _pickMultipleDurante,
+                onRemoveAntes: (item) => setState(() => _fotosAntes.remove(item)),
+                onRemoveDespues: (item) => setState(() => _fotosDespues.remove(item)),
                 onRemoveDurante: (item) => setState(() => _fotosDurante.remove(item)),
                 onClearSingle: (stage) {
                   setState(() {
@@ -1720,10 +1883,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                         _fotoIngreso = null;
                         break;
                       case 'antes':
-                        _fotoAntes = null;
+                        _fotosAntes.clear();
                         break;
                       case 'despues':
-                        _fotoDespues = null;
+                        _fotosDespues.clear();
                         break;
                     }
                   });
@@ -1957,7 +2120,6 @@ class _ActaBodyStep extends StatelessWidget {
     required this.onPickDate,
     required this.onRefreshClientData,
     required this.proyectoNombreController,
-    required this.descripcionActaController,
   });
 
   final bool isAdmin;
@@ -1980,7 +2142,6 @@ class _ActaBodyStep extends StatelessWidget {
   final ValueChanged<TextEditingController> onPickDate;
   final Future<void> Function({bool showFeedback}) onRefreshClientData;
   final TextEditingController proyectoNombreController;
-  final TextEditingController descripcionActaController;
 
   @override
   Widget build(BuildContext context) {
@@ -2008,12 +2169,6 @@ class _ActaBodyStep extends StatelessWidget {
                 label: 'Nombre del proyecto',
                 controller: proyectoNombreController,
                 maxLines: 1,
-              ),
-              const SizedBox(height: 16),
-              _ActaField(
-                label: 'Descripción del acta/proyecto',
-                controller: descripcionActaController,
-                maxLines: 4,
               ),
               const SizedBox(height: 16),
               _ActaField(label: 'Razon social', controller: razonSocialController),
@@ -2148,7 +2303,7 @@ class _ActaBodyStep extends StatelessWidget {
               _ActaField(
                 label: 'Plantilla base del acta (motor de reemplazo)',
                 controller: actaTemplateController,
-                maxLines: 10,
+                maxLines: 15,
                 forceUppercase: false,
               ),
             ],
@@ -2163,8 +2318,8 @@ class _PhotoReportStep extends StatelessWidget {
   const _PhotoReportStep({
     required this.isAdmin,
     required this.fotoIngreso,
-    required this.fotoAntes,
-    required this.fotoDespues,
+    required this.fotosAntes,
+    required this.fotosDespues,
     required this.fotosDurante,
     required this.isProcessingSinglePhoto,
     required this.processingSingleStage,
@@ -2173,14 +2328,16 @@ class _PhotoReportStep extends StatelessWidget {
     required this.onPickAntes,
     required this.onPickDespues,
     required this.onPickDurante,
+    required this.onRemoveAntes,
+    required this.onRemoveDespues,
     required this.onRemoveDurante,
     required this.onClearSingle,
   });
 
   final bool isAdmin;
   final _PickedMedia? fotoIngreso;
-  final _PickedMedia? fotoAntes;
-  final _PickedMedia? fotoDespues;
+  final List<_PickedMedia> fotosAntes;
+  final List<_PickedMedia> fotosDespues;
   final List<_PickedMedia> fotosDurante;
   final bool isProcessingSinglePhoto;
   final String? processingSingleStage;
@@ -2189,6 +2346,8 @@ class _PhotoReportStep extends StatelessWidget {
   final VoidCallback onPickAntes;
   final VoidCallback onPickDespues;
   final VoidCallback onPickDurante;
+  final ValueChanged<_PickedMedia> onRemoveAntes;
+  final ValueChanged<_PickedMedia> onRemoveDespues;
   final ValueChanged<_PickedMedia> onRemoveDurante;
   final ValueChanged<String> onClearSingle;
 
@@ -2211,22 +2370,28 @@ class _PhotoReportStep extends StatelessWidget {
                 onClear: () => onClearSingle('ingreso'),
               ),
               const SizedBox(height: 12),
-              _SinglePhotoCard(
+              // Permitir hasta 4 fotos en Antes
+              _MultiPhotoCard(
                 title: 'Antes (levantamiento)',
                 subtitle: 'Pagina 3',
-                media: fotoAntes,
+                mediaList: fotosAntes,
                 isProcessing: isProcessingSinglePhoto && processingSingleStage == 'antes',
                 onPick: onPickAntes,
                 onClear: () => onClearSingle('antes'),
+                onRemoveItem: onRemoveAntes,
+                maxPhotos: 4,
               ),
               const SizedBox(height: 12),
-              _SinglePhotoCard(
+              // Permitir hasta 4 fotos en Después
+              _MultiPhotoCard(
                 title: 'Despues (entrega final)',
                 subtitle: 'Pagina 5',
-                media: fotoDespues,
+                mediaList: fotosDespues,
                 isProcessing: isProcessingSinglePhoto && processingSingleStage == 'despues',
                 onPick: onPickDespues,
                 onClear: () => onClearSingle('despues'),
+                onRemoveItem: onRemoveDespues,
+                maxPhotos: 4,
               ),
               const SizedBox(height: 16),
               Row(
@@ -2312,7 +2477,9 @@ class _ActaField extends StatelessWidget {
       controller: controller,
       maxLines: maxLines,
       enabled: enabled,
-      keyboardType: isHour24 ? TextInputType.datetime : TextInputType.text,
+      keyboardType: isHour24
+          ? TextInputType.datetime
+          : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
       textCapitalization: forceUppercase ? TextCapitalization.characters : TextCapitalization.sentences,
       inputFormatters: [
         if (allowOnlyText)
@@ -2483,6 +2650,94 @@ class _SinglePhotoCard extends StatelessWidget {
                     ),
                   ],
                 ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MultiPhotoCard extends StatelessWidget {
+  const _MultiPhotoCard({
+    required this.title,
+    required this.subtitle,
+    required this.mediaList,
+    required this.isProcessing,
+    required this.onPick,
+    required this.onClear,
+    required this.onRemoveItem,
+    required this.maxPhotos,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<_PickedMedia> mediaList;
+  final bool isProcessing;
+  final VoidCallback onPick;
+  final VoidCallback onClear;
+  final ValueChanged<_PickedMedia> onRemoveItem;
+  final int maxPhotos;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: RemaColors.surfaceLow,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$title · $subtitle',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: (isProcessing || mediaList.length >= maxPhotos) ? null : onPick,
+                icon: isProcessing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file_outlined),
+                label: Text(
+                  isProcessing
+                      ? 'Cargando...'
+                      : mediaList.length >= maxPhotos
+                          ? 'Max $maxPhotos'
+                          : 'Cargar',
+                ),
+              ),
+              IconButton(
+                onPressed: mediaList.isEmpty ? null : onClear,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                tooltip: 'Limpiar todas',
+              ),
+            ],
+          ),
+          if (mediaList.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text('Sin imagenes seleccionadas.'),
+            )
+          else
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final item in mediaList)
+                  _ThumbPhoto(
+                    media: item,
+                    onRemove: () => onRemoveItem(item),
+                  ),
               ],
             ),
         ],
