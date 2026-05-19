@@ -237,7 +237,7 @@ pw.Widget _buildPhotoSection(String title, pw.MemoryImage? image) {
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
           border: pw.Border.all(color: PdfColors.grey300),
-          color: PdfColors.grey100,
+          color: PdfColors.white,
         ),
         child: image != null
             ? pw.Image(image, fit: pw.BoxFit.contain)
@@ -283,7 +283,7 @@ pw.Widget _buildDynamicPhotoLayout(List<pw.MemoryImage> images) {
       alignment: pw.Alignment.center,
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey300),
-        color: PdfColors.grey100,
+        color: PdfColors.white,
       ),
       child: pw.Image(image, fit: pw.BoxFit.contain),
     );
@@ -296,7 +296,7 @@ pw.Widget _buildDynamicPhotoLayout(List<pw.MemoryImage> images) {
       alignment: pw.Alignment.center,
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey300),
-        color: PdfColors.grey100,
+        color: PdfColors.white,
       ),
       child: pw.Text('Sin evidencia cargada'),
     );
@@ -1913,7 +1913,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           alignment: pw.Alignment.center,
           decoration: pw.BoxDecoration(
             border: pw.Border.all(color: PdfColors.grey300),
-            color: PdfColors.grey100,
+            color: PdfColors.white,
           ),
           child: image != null
               ? pw.Image(image, fit: pw.BoxFit.contain)
