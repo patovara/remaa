@@ -1537,6 +1537,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       task: _buildPdfBytes,
       estimatedDuration: const Duration(seconds: 7),
     );
+    await _autoSaveGeneratedActa(bytes);
     if (!mounted) {
       return;
     }
@@ -1558,6 +1559,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       task: _buildPdfBytes,
       estimatedDuration: const Duration(seconds: 8),
     );
+    await _autoSaveGeneratedActa(bytes);
     final rawOrder = _numeroPedidoController.text.trim();
     final order = rawOrder.isEmpty ? 'sin_pedido' : rawOrder.replaceAll(' ', '_');
 
@@ -1570,6 +1572,43 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       return;
     }
     showRemaMessage(context, 'Acta PDF lista para descarga/compartir.');
+  }
+
+  Future<void> _autoSaveGeneratedActa(Uint8List bytes) async {
+    final quoteId = widget.quoteId?.trim();
+    if (quoteId == null || quoteId.isEmpty || bytes.isEmpty) {
+      return;
+    }
+
+    final rawOrder = _numeroPedidoController.text.trim();
+    final order = rawOrder.isEmpty ? quoteId : rawOrder.replaceAll(' ', '_');
+
+    try {
+      final savedInSupabase = await ref.read(quotesRepositoryProvider).saveActaDocument(
+            quoteId: quoteId,
+            bytes: bytes,
+            fileName: 'acta_entrega_$order.pdf',
+            photos: _buildActaPhotoInputs(),
+          );
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(
+        context,
+        savedInSupabase
+            ? 'Acta en borrador guardada en Supabase.'
+            : 'Acta en borrador guardada localmente.',
+      );
+    } catch (error) {
+      AppLogger.error(
+        'actas_autosave_generated_pdf_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(context, 'No se pudo guardar el borrador del acta.');
+    }
   }
 
   Future<T> _runPdfGeneration<T>({

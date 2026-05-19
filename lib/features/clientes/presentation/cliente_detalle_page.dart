@@ -1990,7 +1990,7 @@ class _QuoteRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final formatter = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
-    final canOpenFinalActa = quote.isActaFinalizada || quote.isPaid;
+    final canOpenSavedActa = !quote.isDeclined;
 
     return ListTile(
       dense: true,
@@ -2009,7 +2009,7 @@ class _QuoteRow extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (canOpenFinalActa) ...[
+            if (canOpenSavedActa) ...[
               const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Previsualizar acta',
@@ -2036,7 +2036,7 @@ class _QuoteRow extends ConsumerWidget {
     final document = await _loadFinalActaDocument(ref, quote);
     if (document == null) {
       if (context.mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+        showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       }
       return;
     }
@@ -2048,14 +2048,14 @@ class _QuoteRow extends ConsumerWidget {
     final document = await _loadFinalActaDocument(ref, quote);
     if (document == null) {
       if (context.mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+        showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       }
       return;
     }
 
     await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
     if (context.mounted) {
-      showRemaMessage(context, 'Acta final lista para descarga.');
+      showRemaMessage(context, 'Acta guardada lista para descarga.');
     }
   }
 
