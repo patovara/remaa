@@ -131402,7 +131402,7 @@ return A.nj(B.jj,A.Lm(a,B.hG,s),s,r,b,s,c)},
 $S:717}
 A.Il.prototype={
 ah(){var s=$.aa(),r=A.b([],t.mL),q=A.JX("dd/MM/yyyy"),p=t.b8
-return new A.QD(new A.b8(B.ar,s),new A.b8(B.ar,s),r,q,new A.qy(),new A.py(),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(new A.br("A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se re\xfanen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel V\xe1zquez, Representante de Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V. y el {titulo_del_responsable_del_cliente} {nombre_del_responsable_del_cliente}, {nombre_del_puesto_del_responsable_del_cliente} del {nombre_del_cliente}.\n\n  Para la Revisi\xf3n de la Entrega-Recepci\xf3n de Servicio de \n  {descripcion_del_servicio}\n\n  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, \n  Facturado a: {nombre_del_cliente}\n\n  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.\n\n  Se hace constar la Terminaci\xf3n del Proyecto de conformidad.\n\n  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un A\xf1o sin Costo Alguno para: {nombre_del_cliente}, \n\n  Se Firma de Conformidad de Ambas partes:\n\n  \n  \n  ",B.aQ,B.al),s),A.b([],p),A.b([],p),A.b([],p))}}
+return new A.QD(new A.b8(B.ar,s),new A.b8(B.ar,s),r,q,new A.qy(),new A.py(),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(B.ar,s),new A.b8(new A.br("A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se re\xfanen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel V\xe1zquez, Representante de Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.\n\n  Para la Revisi\xf3n de la Entrega-Recepci\xf3n de Servicio de \n  {descripcion_del_servicio}\n\n  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, \n  Facturado a: {nombre_del_cliente}\n\n  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.\n\n  Se hace constar la Terminaci\xf3n del Proyecto de conformidad.\n\n  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un A\xf1o sin Costo Alguno para: {nombre_del_cliente}, \n\n  Se Firma de Conformidad de Ambas partes:\n\n  \n  \n  ",B.aQ,B.al),s),A.b([],p),A.b([],p),A.b([],p))}}
 A.QD.prototype={
 aB(){var s,r=this
 r.aO()
@@ -132146,16 +132146,16 @@ if(B.f.e7(r,".png"))return"image/png"
 if(B.f.e7(r,".webp"))return"image/webp"
 if(B.f.e7(r,".jpg")||B.f.e7(r,".jpeg"))return s
 return s},
-Bq(){var s=0,r=A.r(t.D),q,p=this,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,b0,b1,b2
-var $async$Bq=A.n(function(b3,b4){if(b3===1)return A.o(b4,r)
+Bq(){var s=0,r=A.r(t.D),q,p=this,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8
+var $async$Bq=A.n(function(a9,b0){if(a9===1)return A.o(b0,r)
 for(;;)switch(s){case 0:s=3
 return A.h(p.CI("assets/images/logo_remaa.png"),$async$Bq)
-case 3:b0=b4
+case 3:a6=b0
 s=4
 return A.h(p.CI("assets/images/marca_agua_remaa.png"),$async$Bq)
-case 4:b1=b4
-b2=p.k4
-b2=b2==null?null:b2.b
+case 4:a7=b0
+a8=p.k4
+a8=a8==null?null:a8.b
 o=t.XE
 n=A.b([],o)
 for(m=p.ok,l=t.S,m=A.eP(m,0,A.iT(4,"count",l),A.Z(m).c),k=m.$ti,m=new A.b7(m,m.gu(0),k.i("b7<aA.E>")),k=k.i("aA.E");m.q();){j=m.d
@@ -132174,26 +132174,22 @@ e=B.f.t(p.db.a.a)
 d=B.f.t(p.id.a.a)
 c=B.f.t(p.k1.a.a)
 b=B.f.t(p.ch.a.a)
-a=p.fx
+a=p.dx
 a0=B.f.t(a.a.a)
-a1=p.dx
+a1=p.dy
 a2=B.f.t(a1.a.a)
-a3=p.fr
-a4=B.f.t(a3.a.a)
-a5=p.dy
-a6=B.f.t(a5.a.a)
-a7=B.f.t(p.fy.a.a)
-a8=B.f.t(p.go.a.a)
-a9=t.N
-a8=p.aLF(l,A.W(["hora_establecida_por_usuario",k,"fecha_actual",j,"fecha_acutal",i,"nombre_del_cliente",h,"direccion_del_cliente",g,"ubicacion_del_cliente",f,"descripcion_del_servicio",e,"numero_de_pedido",d,"fecha_aprobacion_del_pedido",c,"fecha_aprobacion_pedido",c,"razon_social_del_cliente",b,"titulo_del_responsable_del_cliente",a0,"titulo_del_supervisor_del_cliente",a0,"razon_social_facturacion",b,"nombre_del_gerente_del_cliente",a2,"nombre_del_supervisor_del_cliente",a4,"nombre_del_responsable_del_cliente",a4,"nombre_del_titulo_del_responsable_del_cliente",a0,"nombre_del_titulo_del_supervisor_del_cliente",a0,"nombre_del_puesto_del_gerente_del_cliente",a6,"nombre_del_puesto_del_supervisor_del_cliente",a0,"nombre_del_puesto_del_responsable_del_cliente",a0,"fecha_de_inicio",a7,"fecha_de_conclusion",a8,"fecha_inicio",a7,"fecha_conclusion",a8],a9,a9))
-l=B.f.t(a1.a.a)
+a3=B.f.t(p.fy.a.a)
+a4=B.f.t(p.go.a.a)
+a5=t.N
+a4=p.aLF(l,A.W(["hora_establecida_por_usuario",k,"fecha_actual",j,"fecha_acutal",i,"nombre_del_cliente",h,"direccion_del_cliente",g,"ubicacion_del_cliente",f,"descripcion_del_servicio",e,"numero_de_pedido",d,"fecha_aprobacion_del_pedido",c,"fecha_aprobacion_pedido",c,"razon_social_del_cliente",b,"razon_social_facturacion",b,"nombre_del_gerente_del_cliente",a0,"nombre_del_puesto_del_gerente_del_cliente",a2,"fecha_de_inicio",a3,"fecha_de_conclusion",a4,"fecha_inicio",a3,"fecha_conclusion",a4],a5,a5))
+l=B.f.t(a.a.a)
 if(l.length===0)l="{nombre_del_gerente_del_cliente}"
-k=B.f.t(a5.a.a)
+k=B.f.t(a1.a.a)
 if(k.length===0)k=u.ca
-j=B.f.t(a3.a.a)
+j=B.f.t(p.fr.a.a)
 if(j.length===0)j="{nombre_del_responsable_del_cliente}"
-i=B.f.t(a.a.a)
-q=A.bbR(A.bKF(),A.W(["logoBytes",b0,"watermarkBytes",b1,"ingresoBytes",b2,"antesBytes",n,"despuesBytes",m,"duranteBytes",o,"renderedActa",a8,"gerenteNombre",l,"gerentePuesto",k,"responsableNombre",j,"responsablePuesto",i.length===0?u.a3:i,"brandName","REMAA","legalName",u.I],a9,t.X),null,t.xE,t.D)
+i=B.f.t(p.fx.a.a)
+q=A.bbR(A.bKF(),A.W(["logoBytes",a6,"watermarkBytes",a7,"ingresoBytes",a8,"antesBytes",n,"despuesBytes",m,"duranteBytes",o,"renderedActa",a4,"gerenteNombre",l,"gerentePuesto",k,"responsableNombre",j,"responsablePuesto",i.length===0?u.a3:i,"brandName","REMAA","legalName",u.I],a5,t.X),null,t.xE,t.D)
 s=1
 break
 case 1:return A.p(q,r)}})

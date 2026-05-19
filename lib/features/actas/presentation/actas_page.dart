@@ -1494,17 +1494,17 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       'fecha_aprobacion_del_pedido': _fechaAprobacionPedidoController.text.trim(),
         'fecha_aprobacion_pedido': _fechaAprobacionPedidoController.text.trim(),
       'razon_social_del_cliente': _razonSocialController.text.trim(),
-      'titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
-      'titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
-        'razon_social_facturacion': _razonSocialController.text.trim(),
+      // 'titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+      // 'titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+      'razon_social_facturacion': _razonSocialController.text.trim(),
       'nombre_del_gerente_del_cliente': _gerenteClienteController.text.trim(),
-      'nombre_del_supervisor_del_cliente': _responsableController.text.trim(),
-      'nombre_del_responsable_del_cliente': _responsableController.text.trim(),
-      'nombre_del_titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
-      'nombre_del_titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+      // 'nombre_del_supervisor_del_cliente': _responsableController.text.trim(),
+      // 'nombre_del_responsable_del_cliente': _responsableController.text.trim(),
+      // 'nombre_del_titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+      // 'nombre_del_titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
       'nombre_del_puesto_del_gerente_del_cliente': _puestoGerenteController.text.trim(),
-      'nombre_del_puesto_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
-      'nombre_del_puesto_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+      // 'nombre_del_puesto_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+      // 'nombre_del_puesto_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
       'fecha_de_inicio': _fechaInicioController.text.trim(),
       'fecha_de_conclusion': _fechaConclusionController.text.trim(),
         'fecha_inicio': _fechaInicioController.text.trim(),
@@ -2042,7 +2042,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   }
 }
 
-const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se reúnen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel Vázquez, Representante de Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V. y el {titulo_del_responsable_del_cliente} {nombre_del_responsable_del_cliente}, {nombre_del_puesto_del_responsable_del_cliente} del {nombre_del_cliente}.
+const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se reúnen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel Vázquez, Representante de Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.
 
   Para la Revisión de la Entrega-Recepción de Servicio de 
   {descripcion_del_servicio}
