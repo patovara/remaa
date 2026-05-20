@@ -40,6 +40,8 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
   bool _didOpenComposerFromRoute = false;
   late final Future<List<ClientOption>> _clientOptionsFuture;
 
+  bool _canOpenSavedActa(QuoteRecord quote) => !quote.isDeclined;
+
   @override
   void initState() {
     super.initState();
@@ -151,13 +153,13 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                     onPreviewPdf: entry.quote.hasApprovalPdf
                                         ? () => _previewApprovalPdf(context, entry.quote)
                                         : null,
-                                    onPreviewActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                    onPreviewActa: _canOpenSavedActa(entry.quote)
                                         ? () => _previewFinalActa(context, entry.quote)
                                         : null,
-                                    onDownloadActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                    onDownloadActa: _canOpenSavedActa(entry.quote)
                                         ? () => _downloadFinalActa(context, entry.quote)
                                         : null,
-                                    onShareActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                    onShareActa: _canOpenSavedActa(entry.quote)
                                         ? () => _shareFinalActa(context, entry.quote)
                                         : null,
                                     onMarkPaid: entry.quote.isActaFinalizada
@@ -242,13 +244,13 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
                                     onPreviewPdf: entry.quote.hasApprovalPdf
                                         ? () => _previewApprovalPdf(context, entry.quote)
                                         : null,
-                                    onPreviewActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                    onPreviewActa: _canOpenSavedActa(entry.quote)
                                         ? () => _previewFinalActa(context, entry.quote)
                                         : null,
-                                    onDownloadActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                    onDownloadActa: _canOpenSavedActa(entry.quote)
                                         ? () => _downloadFinalActa(context, entry.quote)
                                         : null,
-                                    onShareActa: entry.quote.isActaFinalizada || entry.quote.isPaid
+                                    onShareActa: _canOpenSavedActa(entry.quote)
                                         ? () => _shareFinalActa(context, entry.quote)
                                         : null,
                                     onMarkPaid: entry.quote.isActaFinalizada
@@ -687,7 +689,7 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     final document = await _loadFinalActaDocument(quote);
     if (!context.mounted) return;
     if (document == null) {
-      showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       return;
     }
     await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
@@ -697,12 +699,12 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     final document = await _loadFinalActaDocument(quote);
     if (!context.mounted) return;
     if (document == null) {
-      showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       return;
     }
     await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
     if (context.mounted) {
-      showRemaMessage(context, 'Acta final lista para descarga.');
+      showRemaMessage(context, 'Acta guardada lista para descarga.');
     }
   }
 
@@ -710,12 +712,12 @@ class _CotizacionesPageState extends ConsumerState<CotizacionesPage> {
     final document = await _loadFinalActaDocument(quote);
     if (!context.mounted) return;
     if (document == null) {
-      showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+      showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       return;
     }
     await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
     if (context.mounted) {
-      showRemaMessage(context, 'Acta final lista para compartir.');
+      showRemaMessage(context, 'Acta guardada lista para compartir.');
     }
   }
 

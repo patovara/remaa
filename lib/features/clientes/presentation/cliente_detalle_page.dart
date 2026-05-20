@@ -435,6 +435,8 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                             clientId: widget.clientId,
                             onCreateQuote: () => context.go('/cotizaciones?clientId=${widget.clientId}&new=1'),
                           ),
+                          const SizedBox(height: 24),
+                          _ClientActasPanel(clientId: widget.clientId),
                         ],
                       ),
                     ),
@@ -454,6 +456,8 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                     clientId: widget.clientId,
                     onCreateQuote: () => context.go('/cotizaciones?clientId=${widget.clientId}&new=1'),
                   ),
+                  const SizedBox(height: 20),
+                  _ClientActasPanel(clientId: widget.clientId),
                 ],
               );
             },
@@ -1990,7 +1994,7 @@ class _QuoteRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final formatter = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
-    final canOpenFinalActa = quote.isActaFinalizada || quote.isPaid;
+    final canOpenSavedActa = !quote.isDeclined;
 
     return ListTile(
       dense: true,
@@ -2009,7 +2013,7 @@ class _QuoteRow extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (canOpenFinalActa) ...[
+            if (canOpenSavedActa) ...[
               const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Previsualizar acta',
@@ -2036,7 +2040,7 @@ class _QuoteRow extends ConsumerWidget {
     final document = await _loadFinalActaDocument(ref, quote);
     if (document == null) {
       if (context.mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+        showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       }
       return;
     }
@@ -2048,14 +2052,14 @@ class _QuoteRow extends ConsumerWidget {
     final document = await _loadFinalActaDocument(ref, quote);
     if (document == null) {
       if (context.mounted) {
-        showRemaMessage(context, 'No hay acta final guardada para esta cotizacion.');
+        showRemaMessage(context, 'No hay acta guardada para esta cotizacion.');
       }
       return;
     }
 
     await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
     if (context.mounted) {
-      showRemaMessage(context, 'Acta final lista para descarga.');
+      showRemaMessage(context, 'Acta guardada lista para descarga.');
     }
   }
 
@@ -2067,6 +2071,206 @@ class _QuoteRow extends ConsumerWidget {
         return 'Aprobada';
       case 'declined':
         return 'Declinada';
+      case 'acta_finalizada':
+        return 'Por cobrar';
+      case 'paid':
+        return 'Pagada';
+      default:
+        return 'Pendiente';
+    }
+  }
+}
+
+// ─── Client actas panel ────────────────────────────────────────────────────────
+
+class _ClientActasPanel extends ConsumerStatefulWidget {
+  const _ClientActasPanel({required this.clientId});
+  final String clientId;
+
+  @override
+  ConsumerState<_ClientActasPanel> createState() => _ClientActasPanelState();
+}
+
+class _ClientActasPanelState extends ConsumerState<_ClientActasPanel> {
+  List<ActaDocumentMeta>? _metas;
+  bool _isLoadingMetas = false;
+  Map<String, QuoteRecord> _quoteById = {};
+  List<String> _lastQuoteIds = const [];
+
+  Future<void> _loadMetas(List<String> quoteIds, Map<String, QuoteRecord> quoteById) async {
+    if (_isLoadingMetas) return;
+    setState(() {
+      _isLoadingMetas = true;
+      _lastQuoteIds = quoteIds;
+      _quoteById = quoteById;
+    });
+    final metas = await ref.read(quotesRepositoryProvider).fetchActaDocumentMetasForQuotes(quoteIds);
+    if (mounted) {
+      setState(() {
+        _metas = metas;
+        _isLoadingMetas = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final quotesAsync = ref.watch(quotesProvider);
+    final projectsAsync = ref.watch(quoteProjectsProvider);
+
+    final projectIds = projectsAsync.valueOrNull
+            ?.where((p) => p.clientId == widget.clientId)
+            .map((p) => p.id)
+            .toSet() ??
+        const <String>{};
+
+    final clientQuotes = quotesAsync.valueOrNull
+            ?.where((q) => projectIds.contains(q.projectId) && !q.isDeclined)
+            .toList() ??
+        const <QuoteRecord>[];
+
+    final quoteById = {for (final q in clientQuotes) q.id: q};
+    final quoteIds = clientQuotes.map((q) => q.id).toList();
+
+    // Trigger load when quote IDs are available and not yet loaded.
+    if (_metas == null && !_isLoadingMetas && quoteIds.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMetas(quoteIds, quoteById));
+    }
+
+    return RemaPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RemaSectionHeader(
+            title: 'Actas de Entrega',
+            icon: Icons.assignment_outlined,
+            trailing: _isLoadingMetas
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    tooltip: 'Actualizar actas',
+                    icon: const Icon(Icons.refresh_outlined),
+                    onPressed: quoteIds.isEmpty
+                        ? null
+                        : () {
+                            setState(() => _metas = null);
+                            _loadMetas(quoteIds, quoteById);
+                          },
+                  ),
+          ),
+          const SizedBox(height: 12),
+          if (quotesAsync.isLoading || projectsAsync.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (quoteIds.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Sin cotizaciones asociadas para mostrar actas.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+              ),
+            )
+          else if (_isLoadingMetas)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_metas == null || _metas!.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'No hay actas guardadas para este cliente.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+              ),
+            )
+          else
+            for (final meta in _metas!) ...[
+              _ActaMetaRow(
+                meta: meta,
+                quote: _quoteById[meta.quoteId],
+              ),
+              if (meta != _metas!.last) const Divider(height: 1),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ActaMetaRow extends ConsumerWidget {
+  const _ActaMetaRow({required this.meta, this.quote});
+
+  final ActaDocumentMeta meta;
+  final QuoteRecord? quote;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final dateLabel = DateFormat('dd/MM/yyyy HH:mm').format(meta.createdAt.toLocal());
+    final statusText = quote != null ? _statusLabel(quote!.status) : '';
+
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.picture_as_pdf_outlined),
+      title: Text(meta.fileName),
+      subtitle: Text('${statusText.isNotEmpty ? "$statusText · " : ""}$dateLabel'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Previsualizar acta',
+            icon: const Icon(Icons.visibility_outlined),
+            onPressed: () => _previewActa(context, ref),
+          ),
+          IconButton(
+            tooltip: 'Descargar acta',
+            icon: const Icon(Icons.download_outlined),
+            onPressed: () => _downloadActa(context, ref),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _previewActa(BuildContext context, WidgetRef ref) async {
+    final document = await ref.read(quotesRepositoryProvider).fetchActaDocument(meta.quoteId);
+    if (!context.mounted) return;
+    if (document == null) {
+      showRemaMessage(context, 'No se pudo cargar el acta.');
+      return;
+    }
+    await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
+  }
+
+  Future<void> _downloadActa(BuildContext context, WidgetRef ref) async {
+    final document = await ref.read(quotesRepositoryProvider).fetchActaDocument(meta.quoteId);
+    if (!context.mounted) return;
+    if (document == null) {
+      showRemaMessage(context, 'No se pudo cargar el acta.');
+      return;
+    }
+    await Printing.sharePdf(bytes: document.bytes, filename: document.fileName);
+    if (context.mounted) {
+      showRemaMessage(context, 'Acta lista para descarga.');
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'concluded':
+        return 'Concluida';
+      case 'approved':
+        return 'Aprobada';
       case 'acta_finalizada':
         return 'Por cobrar';
       case 'paid':

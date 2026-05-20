@@ -747,6 +747,36 @@ class QuotesRepository {
     }
   }
 
+  /// Fetches lightweight acta metadata for multiple quotes in a single DB call.
+  /// Returns only the rows that exist in quote_acta_assets — no bytes downloaded.
+  Future<List<ActaDocumentMeta>> fetchActaDocumentMetasForQuotes(List<String> quoteIds) async {
+    if (quoteIds.isEmpty) return const [];
+    final validIds = quoteIds.where(_isUuid).toList();
+    if (validIds.isEmpty) return const [];
+
+    final client = SupabaseBootstrap.client;
+    if (client == null) return const [];
+
+    try {
+      final rows = await client
+          .from('quote_acta_assets')
+          .select('quote_id, pdf_file_name, created_at, pdf_object_path')
+          .inFilter('quote_id', validIds);
+      return [
+        for (final row in rows)
+          ActaDocumentMeta(
+            quoteId: row['quote_id'] as String? ?? '',
+            fileName: row['pdf_file_name'] as String? ?? 'acta.pdf',
+            createdAt: _toDateTime(row['created_at']) ?? DateTime.now(),
+            objectPath: row['pdf_object_path'] as String?,
+          ),
+      ].where((m) => m.quoteId.isNotEmpty).toList();
+    } catch (error) {
+      AppLogger.error('acta_metas_fetch_failed', data: {'error': error.toString()});
+      return const [];
+    }
+  }
+
   Future<void> _ensureApprovalPdfCanBeAttached(QuoteRecord quote) async {
     final issues = <String>[];
 

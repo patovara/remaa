@@ -331,6 +331,21 @@ class ActaDocumentRecord {
   final List<ActaPhotoAssetMeta> photoAssets;
 }
 
+/// Metadata only — no bytes. Used for listing saved actas without downloading.
+class ActaDocumentMeta {
+  const ActaDocumentMeta({
+    required this.quoteId,
+    required this.fileName,
+    required this.createdAt,
+    this.objectPath,
+  });
+
+  final String quoteId;
+  final String fileName;
+  final DateTime createdAt;
+  final String? objectPath;
+}
+
 class ActaPhotoAssetInput {
   const ActaPhotoAssetInput({
     required this.slot,
