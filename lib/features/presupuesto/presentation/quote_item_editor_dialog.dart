@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../cotizaciones/domain/concept_generation.dart';
 import '../../cotizaciones/domain/quote_models.dart';
@@ -42,13 +42,11 @@ class _QuoteItemEditorDialogState extends ConsumerState<QuoteItemEditorDialog> {
   final _unitController = TextEditingController();
   final _quantityController = TextEditingController();
   final _unitPriceController = TextEditingController();
-  final NumberFormat _moneyInputFormat = NumberFormat('#,##0.##', 'en_US');
 
   ConceptTemplateCatalogItem? _selectedTemplate;
   final Map<String, String> _attributeSelection = {};
   GeneratedConceptResult? _preview;
   bool _manualDescriptionEdit = false;
-  bool _formattingUnitPrice = false;
   String _selectedPartida = 'Muros';
   String? _selectedRecentItemId;
 
@@ -420,11 +418,11 @@ class _QuoteItemEditorDialogState extends ConsumerState<QuoteItemEditorDialog> {
                       child: TextFormField(
                         controller: _unitPriceController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: const [_DecimalInputFormatter(maxDecimals: 2)],
                         decoration: const InputDecoration(
                           labelText: 'Precio unitario',
                           hintText: 'Ej. 1250.00',
                         ),
-                        onChanged: _onUnitPriceChanged,
                         validator: (value) {
                           final parsed = _parseMoneyInput(value ?? '');
                           if (parsed == null || parsed < 0) {
@@ -541,34 +539,52 @@ class _QuoteItemEditorDialogState extends ConsumerState<QuoteItemEditorDialog> {
     Navigator.of(context).pop(QuoteItemEditorResult(item: item));
   }
 
-  void _onUnitPriceChanged(String value) {
-    if (_formattingUnitPrice) {
-      return;
-    }
-    final parsed = _parseMoneyInput(value);
-    if (parsed == null) {
-      return;
-    }
-    final formatted = _formatMoneyInput(parsed);
-    if (formatted == value) {
-      return;
-    }
-    _formattingUnitPrice = true;
-    _unitPriceController.value = _unitPriceController.value.copyWith(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
-    _formattingUnitPrice = false;
-  }
-
-  String _formatMoneyInput(double value) => _moneyInputFormat.format(value);
+  String _formatMoneyInput(double value) => value.toStringAsFixed(2);
 
   double? _parseMoneyInput(String raw) {
-    final clean = raw.replaceAll(',', '').trim();
+    var clean = raw.trim();
     if (clean.isEmpty) {
       return null;
     }
+    clean = clean.replaceAll(' ', '');
+
+    final hasComma = clean.contains(',');
+    final hasDot = clean.contains('.');
+    if (hasComma && hasDot) {
+      final lastComma = clean.lastIndexOf(',');
+      final lastDot = clean.lastIndexOf('.');
+      if (lastComma > lastDot) {
+        // 1.234,56 -> 1234.56
+        clean = clean.replaceAll('.', '').replaceAll(',', '.');
+      } else {
+        // 1,234.56 -> 1234.56
+        clean = clean.replaceAll(',', '');
+      }
+    } else if (hasComma) {
+      clean = clean.replaceAll(',', '.');
+    }
+
     return double.tryParse(clean);
+  }
+}
+
+class _DecimalInputFormatter extends TextInputFormatter {
+  const _DecimalInputFormatter({required this.maxDecimals});
+
+  final int maxDecimals;
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text;
+    if (text.isEmpty) {
+      return newValue;
+    }
+
+    final decimalPattern = RegExp('^\\d*([\\.,]\\d{0,$maxDecimals})?\$');
+    if (decimalPattern.hasMatch(text)) {
+      return newValue;
+    }
+    return oldValue;
   }
 }
 
