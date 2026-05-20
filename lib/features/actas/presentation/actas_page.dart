@@ -446,6 +446,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     super.initState();
     _refreshClientData(showFeedback: false);
     if (widget.quoteId != null && widget.quoteId!.isNotEmpty) {
+      _loadProjectNameFromQuote(widget.quoteId!);
       _loadServiceDescriptionFromQuote(widget.quoteId!);
       _checkActaStatus(widget.quoteId!);
     }
@@ -509,6 +510,44 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     } catch (error) {
       AppLogger.error(
         'actas_load_service_description_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
+    }
+  }
+
+  Future<void> _loadProjectNameFromQuote(String quoteId) async {
+    final client = SupabaseBootstrap.client;
+    if (client == null || !_isUuid(quoteId)) {
+      return;
+    }
+
+    try {
+      final quoteRow = await client
+          .from('quotes')
+          .select('project_id')
+          .eq('id', quoteId)
+          .maybeSingle();
+      final projectId = (quoteRow?['project_id'] as String? ?? '').trim();
+      if (projectId.isEmpty || !_isUuid(projectId)) {
+        return;
+      }
+
+      final projectRow = await client
+          .from('projects')
+          .select('name')
+          .eq('id', projectId)
+          .maybeSingle();
+      final projectName = (projectRow?['name'] as String? ?? '').trim();
+      if (!mounted || projectName.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _proyectoNombreController.text = projectName;
+      });
+    } catch (error) {
+      AppLogger.error(
+        'actas_load_project_name_failed',
         data: {'quoteId': quoteId, 'error': error.toString()},
       );
     }
@@ -1486,6 +1525,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       'fecha_actual': DateFormat('dd/MM/yyyy').format(DateTime.now()),
       // Alias legacy para plantillas viejas.
       'fecha_acutal': DateFormat('dd/MM/yyyy').format(DateTime.now()),
+        'nombre_del_proyecto': _proyectoNombreController.text.trim(),
+        'proyecto': _proyectoNombreController.text.trim(),
         'nombre_del_cliente': _clienteController.text.trim(),
         'direccion_del_cliente': _direccionController.text.trim(),
         'ubicacion_del_cliente': _ubicacionController.text.trim(),
