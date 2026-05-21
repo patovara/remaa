@@ -40842,7 +40842,7 @@ at(a,b,c,d,e){var s,r=null,q=a.ak(t.c).f
 q.zB()
 s=A.Q(b,r,r,r,r,r,r,r,r)
 q.n9(A.zW(d!=null&&e!=null?new A.Pi(d,e,r):r,r,r,r,B.iY,B.W,r,s,r,c,r,r,r,r,r,r,r,r,r,r))},
-akF(){var s=0,r=A.r(t.H),q=1,p=[],o,n,m,l,k,j,i,h,g,f,e,d
+akF(){var s=0,r=A.r(t.H),q=1,p=[],o,n,m,l,k,j,i,h,g,f,e,d,c
 var $async$akF=A.n(function(a,b){if(a===1){p.push(b)
 s=q}for(;;)switch(s){case 0:if($.ac==null)A.a7H()
 $.ac.toString
@@ -40855,18 +40855,19 @@ $.akE=!0
 $.akl=new A.aC1(m,B.xG)
 m=A.Qn()
 l=m.glK(m).toLowerCase()
-if(!B.f.n(l,"staging"))if(!B.f.n(l,"develop"))B.f.n(l,"preview")
+k=B.f.n(l,"staging")||B.f.n(l,"develop")||B.f.n(l,"preview")
 m=A.b([],t.s)
-m.push(".env.staging")
+if(k)m.push(".env.staging")
+m.push(".env.production")
 m.push(".env.staging")
 m.push(".env.production")
 m.push(".env")
 m.push(".env.example")
 o=!1
-k=t.N,m=A.rf(m,k),m=A.d_(m,m.r,A.t(m).c),j=m.$ti.c
+j=t.N,m=A.rf(m,j),m=A.d_(m,m.r,A.t(m).c),i=m.$ti.c
 case 2:if(!m.q()){s=3
-break}i=m.d
-n=i==null?j.a(i):i
+break}h=m.d
+n=h==null?i.a(h):h
 q=5
 s=8
 return A.f($.Ik().NF(0,n),$async$akF)
@@ -40877,7 +40878,7 @@ q=1
 s=7
 break
 case 5:q=4
-d=p.pop()
+c=p.pop()
 s=7
 break
 case 4:s=1
@@ -40901,26 +40902,26 @@ $.blj.sFc(A.bA8($.Ik().gEU().h(0,"ENABLE_BILLING")))
 s=9
 return A.f(A.aLx(),$async$akF)
 case 9:m=$.blh.bi()
-j=$.b0?"enabled":"disabled"
-A.cF("INFO","app_start",A.V(["env",m,"supabase",j,"billing",$.blj.bi()?"enabled":"disabled"],k,t.X))
+i=$.b0?"enabled":"disabled"
+A.cF("INFO","app_start",A.V(["env",m,"supabase",i,"billing",$.blj.bi()?"enabled":"disabled"],j,t.X))
 if($.ac==null)A.a7H()
 m=$.ac
 m.toString
-k=$.bw().gev().b
-j=t.e8
-if(j.a(k.h(0,0))==null)A.a5(A.P('The app requested a view, but the platform did not provide one.\nThis is likely because the app called `runApp` to render its root widget, which expects the platform to provide a default view to render into (the "implicit" view).\nHowever, the platform likely has multi-view mode enabled, which does not create this default "implicit" view.\nTry using `runWidget` instead of `runApp` to start your app.\n`runWidget` allows you to provide a `View` widget, without requiring a default view.\nSee: https://flutter.dev/to/web-multiview-runwidget'))
-i=j.a(k.h(0,0))
-i.toString
-g=m.gOn()
-f=m.fr$
-if(f===$){k=j.a(k.h(0,0))
-k.toString
-e=new A.afF(B.az,k,null,A.aG())
-e.b3()
-e.ass(null,null,k)
+j=$.bw().gev().b
+i=t.e8
+if(i.a(j.h(0,0))==null)A.a5(A.P('The app requested a view, but the platform did not provide one.\nThis is likely because the app called `runApp` to render its root widget, which expects the platform to provide a default view to render into (the "implicit" view).\nHowever, the platform likely has multi-view mode enabled, which does not create this default "implicit" view.\nTry using `runWidget` instead of `runApp` to start your app.\n`runWidget` allows you to provide a `View` widget, without requiring a default view.\nSee: https://flutter.dev/to/web-multiview-runwidget'))
+h=i.a(j.h(0,0))
+h.toString
+f=m.gOn()
+e=m.fr$
+if(e===$){j=i.a(j.h(0,0))
+j.toString
+d=new A.afF(B.az,j,null,A.aG())
+d.b3()
+d.ass(null,null,j)
 m.fr$!==$&&A.az()
-m.fr$=e
-f=e}m.ali(new A.Qu(i,B.b0G,g,f,null))
+m.fr$=d
+e=d}m.ali(new A.Qu(h,B.b0G,f,e,null))
 m.a0q()
 return A.p(null,r)
 case 1:return A.o(p.at(-1),r)}})
@@ -131444,7 +131445,7 @@ return A.nk(B.jj,A.Lp(a,B.hG,s),s,r,b,s,c)},
 $S:717}
 A.Ip.prototype={
 ag(){var s=$.ab(),r=A.b([],t.mL),q=A.CG("dd/MM/yyyy"),p=t.b8
-return new A.QG(new A.b9(B.ar,s),new A.b9(B.ar,s),r,q,new A.qz(),new A.pz(),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(new A.bs("A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se re\xfanen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel V\xe1zquez, Representante de Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.\n\n  Para la Revisi\xf3n de la Entrega-Recepci\xf3n de Servicio de \n  {descripcion_del_servicio}\n\n  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, \n  Facturado a: {nombre_del_cliente}\n\n  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.\n\n  Se hace constar la Terminaci\xf3n del Proyecto de conformidad.\n\n  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un A\xf1o sin Costo Alguno para: {nombre_del_cliente}, \n\n  Se Firma de Conformidad de Ambas partes:\n\n  \n  \n  ",B.aQ,B.al),s),A.b([],p),A.b([],p),A.b([],p))}}
+return new A.QG(new A.b9(B.ar,s),new A.b9(B.ar,s),r,q,new A.qz(),new A.pz(),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(new A.bs("A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se re\xfanen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel V\xe1zquez, Representante de Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.\n\n  Para la Revisi\xf3n de la Entrega-Recepci\xf3n de Servicio de \n  {descripcion_del_servicio}\n\n  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, \n  Facturado a: {razon_social_del_cliente}\n\n  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.\n\n  Se hace constar la Terminaci\xf3n del Proyecto de conformidad.\n\n  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un A\xf1o sin Costo Alguno para: {nombre_del_cliente}, \n\n  Se Firma de Conformidad de Ambas partes:\n\n  \n  \n  ",B.aQ,B.al),s),A.b([],p),A.b([],p),A.b([],p))}}
 A.QG.prototype={
 aB(){var s,r=this
 r.aO()

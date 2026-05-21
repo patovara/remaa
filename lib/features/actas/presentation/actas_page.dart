@@ -2128,7 +2128,7 @@ const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs 
   {descripcion_del_servicio}
 
   Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, 
-  Facturado a: {nombre_del_cliente}
+  Facturado a: {razon_social_del_cliente}
 
   Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.
 
