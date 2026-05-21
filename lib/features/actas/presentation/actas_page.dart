@@ -1553,7 +1553,12 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       };
 
   String _renderTemplate(String template, Map<String, String> values) {
-    return template.replaceAllMapped(RegExp(r'\{[^{}]+\}'), (match) {
+    final normalizedTemplate = template.replaceAll(
+      'Facturado a: {nombre_del_cliente}',
+      'Facturado a: {razon_social_del_cliente}',
+    );
+
+    return normalizedTemplate.replaceAllMapped(RegExp(r'\{[^{}]+\}'), (match) {
       final token = match.group(0)!;
       final key = token.substring(1, token.length - 1);
       final value = values[key];
