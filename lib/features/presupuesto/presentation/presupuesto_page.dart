@@ -893,10 +893,11 @@ pw.Widget _pdfEvidenceBlocks({
           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5),
         ),
         pw.SizedBox(height: 6),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.start,
+        pw.Wrap(
+          spacing: 6,
+          runSpacing: 6,
           children: [
-            for (final image in allImages) ...[
+            for (final image in allImages)
               pw.Container(
                 width: 120,
                 height: 90,
@@ -905,8 +906,6 @@ pw.Widget _pdfEvidenceBlocks({
                 ),
                 child: pw.Image(image, fit: pw.BoxFit.cover),
               ),
-              pw.SizedBox(width: 6),
-            ],
           ],
         ),
       ],
