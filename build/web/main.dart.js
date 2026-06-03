@@ -131444,7 +131444,7 @@ return A.nk(B.jj,A.Lp(a,B.hG,s),s,r,b,s,c)},
 $S:717}
 A.Ip.prototype={
 ag(){var s=$.ab(),r=A.b([],t.mL),q=A.CG("dd/MM/yyyy"),p=t.b8
-return new A.QG(new A.b9(B.ar,s),new A.b9(B.ar,s),r,q,new A.qz(),new A.pz(),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(new A.bs("A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se re\xfanen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel V\xe1zquez, Representante de Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.\n\n  Para la Revisi\xf3n de la Entrega-Recepci\xf3n de Servicio de \n  {descripcion_del_servicio}\n\n  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, \n  FACTURADO A: {razon_social_del_cliente}\n\n  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.\n\n  Se hace constar la Terminaci\xf3n del Proyecto de conformidad.\n\n  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un A\xf1o sin Costo Alguno para: {nombre_del_cliente}, \n\n  Se Firma de Conformidad de Ambas partes:\n\n  \n  \n  ",B.aQ,B.al),s),A.b([],p),A.b([],p),A.b([],p))}}
+return new A.QG(new A.b9(B.ar,s),new A.b9(B.ar,s),r,q,new A.qz(),new A.pz(),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(B.ar,s),new A.b9(new A.bs("A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se re\xfanen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel V\xe1zquez, Representante de Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.\n\n  Para la Revisi\xf3n de la Entrega-Recepci\xf3n de Servicio de \n  {descripcion_del_servicio}\n\n  Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, \n  Facturado a: {razon_social_del_cliente}\n\n  Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.\n\n  Se hace constar la Terminaci\xf3n del Proyecto de conformidad.\n\n  La Presente Acta No exime a Soluciones Integrales Sustentables Inteligentes y Din\xe1micas REMA, S.A.S. de C.V., de los Vicios Ocultos que Resultaran y se Obliga por la Presente a Corregir las Deficiencias por el Periodo de Un A\xf1o sin Costo Alguno para: {nombre_del_cliente}, \n\n  Se Firma de Conformidad de Ambas partes:\n\n  \n  \n  ",B.aQ,B.al),s),A.b([],p),A.b([],p),A.b([],p))}}
 A.QG.prototype={
 aB(){var s,r=this
 r.aO()
@@ -132308,12 +132308,12 @@ break
 case 6:case 1:return A.p(q,r)
 case 2:return A.o(o.at(-1),r)}})
 return A.q($async$CL,r)},
-aLU(a,b){var s,r=A.X("(?im)^\\s*facturado\\s*a\\s*:\\s*.*$",!0,!1,!1),q=A.ar(a,r,"FACTURADO A: {razon_social_del_cliente}")
+aLU(a,b){var s,r=A.X("(?im)^\\s*facturado\\s*a\\s*:\\s*.*$",!0,!1,!1),q=A.ar(a,r,"Facturado a: {razon_social_del_cliente}")
 r=A.X("(?im)^\\s*facturado\\s*a\\s*:",!0,!1,!1)
 if(!r.b.test(q)){s=A.X("(?im)^\\s*confirmado\\s+con\\s+el\\s+pedido[^\\n]*$",!0,!1,!1).fT(q)
 if(s!=null){r=s.b[0]
 r.toString
-q=B.f.qT(q,r,r+"\nFACTURADO A: {razon_social_del_cliente}")}}return A.akL(q,A.X("\\{[^{}]+\\}",!0,!1,!1),new A.aPm(b),null)},
+q=B.f.qT(q,r,r+"\nFacturado a: {razon_social_del_cliente}")}}return A.akL(q,A.X("\\{[^{}]+\\}",!0,!1,!1),new A.aPm(b),null)},
 yf(){var s=0,r=A.r(t.H),q,p=this,o,n
 var $async$yf=A.n(function(a,b){if(a===1)return A.o(b,r)
 for(;;)switch(s){case 0:if(!p.gba().al(0,$.tH(),t.y)){o=p.c
