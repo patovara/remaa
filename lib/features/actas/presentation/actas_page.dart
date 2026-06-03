@@ -1553,10 +1553,26 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       };
 
   String _renderTemplate(String template, Map<String, String> values) {
-    final normalizedTemplate = template.replaceAll(
-      'Facturado a: {nombre_del_cliente}',
-      'Facturado a: {razon_social_del_cliente}',
+    var normalizedTemplate = template;
+
+    // Normaliza cualquier variante legacy para forzar razon social en facturacion.
+    normalizedTemplate = normalizedTemplate.replaceAll(
+      RegExp(r'(?im)^\s*facturado\s*a\s*:\s*.*$'),
+      'FACTURADO A: {razon_social_del_cliente}',
     );
+
+    // Si la linea no existe en una plantilla vieja, se inserta junto al bloque de pedido.
+    if (!RegExp(r'(?im)^\s*facturado\s*a\s*:').hasMatch(normalizedTemplate)) {
+      final confirmedMatch = RegExp(r'(?im)^\s*confirmado\s+con\s+el\s+pedido[^\n]*$')
+          .firstMatch(normalizedTemplate);
+      if (confirmedMatch != null) {
+        final line = confirmedMatch.group(0)!;
+        normalizedTemplate = normalizedTemplate.replaceFirst(
+          line,
+          '$line\nFACTURADO A: {razon_social_del_cliente}',
+        );
+      }
+    }
 
     return normalizedTemplate.replaceAllMapped(RegExp(r'\{[^{}]+\}'), (match) {
       final token = match.group(0)!;
@@ -2133,7 +2149,7 @@ const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs 
   {descripcion_del_servicio}
 
   Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, 
-  Facturado a: {razon_social_del_cliente}
+  FACTURADO A: {razon_social_del_cliente}
 
   Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.
 
