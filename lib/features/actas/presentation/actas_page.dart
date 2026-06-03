@@ -39,6 +39,11 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
   final antesBytes = (payload['antesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
   final despuesBytes = (payload['despuesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
   final duranteBytes = (payload['duranteBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
+  final ingresoFecha = payload['ingresoFecha'] as String? ?? '';
+  final ingresoTrabajo = payload['ingresoTrabajo'] as String? ?? '';
+  final antesTrabajo = payload['antesTrabajo'] as String? ?? '';
+  final duranteTrabajo = payload['duranteTrabajo'] as String? ?? '';
+  final despuesTrabajo = payload['despuesTrabajo'] as String? ?? '';
 
   final ingresoImage = ingresoBytes != null && ingresoBytes.isNotEmpty ? pw.MemoryImage(ingresoBytes) : null;
   final antesImages = [for (final bytes in antesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
@@ -108,6 +113,11 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
       brandName: brandName,
       legalName: legalName,
       title: 'REPORTE FOTOGRAFICO - INGRESO A INSTALACIONES',
+      subtitle: _buildPhotoReportSubtitle(
+        dateLabel: ingresoFecha,
+        workText: ingresoTrabajo,
+        includeDateLabel: true,
+      ),
       image: ingresoImage,
       page: 2,
     ),
@@ -118,6 +128,7 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
       brandName: brandName,
       legalName: legalName,
       title: 'REPORTE FOTOGRAFICO - ANTES',
+      subtitle: _buildPhotoReportSubtitle(workText: antesTrabajo),
       images: antesImages,
       page: 3,
     ),
@@ -129,6 +140,7 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
       brandName: brandName,
       legalName: legalName,
       title: 'REPORTE FOTOGRAFICO - DURANTE',
+      subtitle: _buildPhotoReportSubtitle(workText: duranteTrabajo),
       images: duranteImages,
       page: 4,
     ),
@@ -140,6 +152,7 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
       brandName: brandName,
       legalName: legalName,
       title: 'REPORTE FOTOGRAFICO - DESPUÉS',
+      subtitle: _buildPhotoReportSubtitle(workText: despuesTrabajo),
       images: despuesImages,
       page: 5,
     ),
@@ -192,6 +205,25 @@ pw.Widget _buildPdfHeader({
   );
 }
 
+String _buildPhotoReportSubtitle({
+  String? dateLabel,
+  String? workText,
+  bool includeDateLabel = false,
+}) {
+  final lines = <String>[];
+  final normalizedDate = dateLabel?.trim() ?? '';
+  final normalizedWork = workText?.trim() ?? '';
+
+  if (includeDateLabel && normalizedDate.isNotEmpty) {
+    lines.add('Fecha de ingreso: $normalizedDate');
+  }
+  if (normalizedWork.isNotEmpty) {
+    lines.add(normalizedWork);
+  }
+
+  return lines.join('\n');
+}
+
 pw.Widget _buildPageFooter(int page) {
   return pw.Align(
     alignment: pw.Alignment.centerRight,
@@ -204,6 +236,7 @@ pw.Page _buildPhotoPage({
   required String brandName,
   required String legalName,
   required String title,
+  required String subtitle,
   required pw.MemoryImage? image,
   required int page,
 }) {
@@ -216,7 +249,7 @@ pw.Page _buildPhotoPage({
         children: [
           _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
           pw.SizedBox(height: 20),
-          _buildPhotoSection(title, image),
+            _buildPhotoSection(title, subtitle, image),
           pw.Spacer(),
           _buildPageFooter(page),
         ],
@@ -225,11 +258,20 @@ pw.Page _buildPhotoPage({
   );
 }
 
-pw.Widget _buildPhotoSection(String title, pw.MemoryImage? image) {
+pw.Widget _buildPhotoSection(String title, String subtitle, pw.MemoryImage? image) {
+  final normalizedSubtitle = subtitle.trim();
+
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      if (normalizedSubtitle.isNotEmpty) ...[
+        pw.SizedBox(height: 4),
+        pw.Text(
+          normalizedSubtitle,
+          style: const pw.TextStyle(fontSize: 9),
+        ),
+      ],
       pw.SizedBox(height: 6),
       pw.Container(
         width: double.infinity,
@@ -252,6 +294,7 @@ pw.Page _buildPhotoPageWithDynamicGrid({
   required String brandName,
   required String legalName,
   required String title,
+  required String subtitle,
   required List<pw.MemoryImage> images,
   required int page,
 }) {
@@ -265,6 +308,10 @@ pw.Page _buildPhotoPageWithDynamicGrid({
           _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
           pw.SizedBox(height: 20),
           pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+            if (subtitle.trim().isNotEmpty) ...[
+              pw.SizedBox(height: 4),
+              pw.Text(subtitle, style: const pw.TextStyle(fontSize: 9)),
+            ],
           pw.SizedBox(height: 8),
           _buildDynamicPhotoLayout(images),
           pw.Spacer(),
@@ -418,6 +465,11 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   final _numeroPedidoController = TextEditingController();
   final _fechaAprobacionPedidoController = TextEditingController();
   final _actaTemplateController = TextEditingController(text: _defaultActaTemplate);
+  final _ingresoFechaController = TextEditingController();
+  final _ingresoTrabajoController = TextEditingController();
+  final _antesTrabajoController = TextEditingController();
+  final _duranteTrabajoController = TextEditingController();
+  final _despuesTrabajoController = TextEditingController();
 
   int _step = 0;
 
@@ -998,6 +1050,11 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     _numeroPedidoController.dispose();
     _fechaAprobacionPedidoController.dispose();
     _actaTemplateController.dispose();
+    _ingresoFechaController.dispose();
+    _ingresoTrabajoController.dispose();
+    _antesTrabajoController.dispose();
+    _duranteTrabajoController.dispose();
+    _despuesTrabajoController.dispose();
     super.dispose();
   }
 
@@ -1492,6 +1549,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         'antesBytes': [for (final media in _fotosAntes.take(4)) media.bytes],
         'despuesBytes': [for (final media in _fotosDespues.take(4)) media.bytes],
         'duranteBytes': [for (final media in _fotosDurante.take(4)) media.bytes],
+        ..._photoReportValues,
         'renderedActa': _renderTemplate(_actaTemplateController.text, _templateValues),
         'gerenteNombre': _gerenteClienteController.text.trim().isEmpty
             ? '{nombre_del_gerente_del_cliente}'
@@ -1550,6 +1608,14 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       'fecha_de_conclusion': _fechaConclusionController.text.trim(),
         'fecha_inicio': _fechaInicioController.text.trim(),
         'fecha_conclusion': _fechaConclusionController.text.trim(),
+      };
+
+  Map<String, String> get _photoReportValues => {
+        'ingresoFecha': _ingresoFechaController.text.trim(),
+        'ingresoTrabajo': _ingresoTrabajoController.text.trim(),
+        'antesTrabajo': _antesTrabajoController.text.trim(),
+        'duranteTrabajo': _duranteTrabajoController.text.trim(),
+        'despuesTrabajo': _despuesTrabajoController.text.trim(),
       };
 
   String _renderTemplate(String template, Map<String, String> values) {
@@ -1964,6 +2030,12 @@ class _ActasPageState extends ConsumerState<ActasPage> {
               _PhotoReportStep(
                 isAdmin: _isAdmin,
                 fotoIngreso: _fotoIngreso,
+                onPickIngresoDate: () => _selectDate(_ingresoFechaController),
+                ingresoFechaController: _ingresoFechaController,
+                ingresoTrabajoController: _ingresoTrabajoController,
+                antesTrabajoController: _antesTrabajoController,
+                duranteTrabajoController: _duranteTrabajoController,
+                despuesTrabajoController: _despuesTrabajoController,
                 fotosAntes: _fotosAntes,
                 fotosDespues: _fotosDespues,
                 fotosDurante: _fotosDurante,
@@ -2419,6 +2491,12 @@ class _PhotoReportStep extends StatelessWidget {
   const _PhotoReportStep({
     required this.isAdmin,
     required this.fotoIngreso,
+    required this.onPickIngresoDate,
+    required this.ingresoFechaController,
+    required this.ingresoTrabajoController,
+    required this.antesTrabajoController,
+    required this.duranteTrabajoController,
+    required this.despuesTrabajoController,
     required this.fotosAntes,
     required this.fotosDespues,
     required this.fotosDurante,
@@ -2437,6 +2515,12 @@ class _PhotoReportStep extends StatelessWidget {
 
   final bool isAdmin;
   final _PickedMedia? fotoIngreso;
+  final VoidCallback onPickIngresoDate;
+  final TextEditingController ingresoFechaController;
+  final TextEditingController ingresoTrabajoController;
+  final TextEditingController antesTrabajoController;
+  final TextEditingController duranteTrabajoController;
+  final TextEditingController despuesTrabajoController;
   final List<_PickedMedia> fotosAntes;
   final List<_PickedMedia> fotosDespues;
   final List<_PickedMedia> fotosDurante;
@@ -2470,6 +2554,29 @@ class _PhotoReportStep extends StatelessWidget {
                 onPick: onPickIngreso,
                 onClear: () => onClearSingle('ingreso'),
               ),
+              const SizedBox(height: 10),
+              _ActaField(
+                label: 'Fecha de ingreso',
+                controller: ingresoFechaController,
+                readOnly: true,
+                forceUppercase: false,
+                hintText: 'Selecciona la fecha de ingreso',
+                helperText: 'Unico campo con fecha en el reporte fotografico.',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  tooltip: 'Seleccionar fecha',
+                  onPressed: onPickIngresoDate,
+                ),
+                onTap: onPickIngresoDate,
+              ),
+              const SizedBox(height: 10),
+              _ActaField(
+                label: 'Trabajo a realizar',
+                controller: ingresoTrabajoController,
+                maxLines: 3,
+                forceUppercase: false,
+                hintText: 'Describe el trabajo a realizar en el ingreso',
+              ),
               const SizedBox(height: 12),
               // Permitir hasta 4 fotos en Antes
               _MultiPhotoCard(
@@ -2482,6 +2589,14 @@ class _PhotoReportStep extends StatelessWidget {
                 onRemoveItem: onRemoveAntes,
                 maxPhotos: 4,
               ),
+              const SizedBox(height: 10),
+              _ActaField(
+                label: 'Trabajo a realizar antes',
+                controller: antesTrabajoController,
+                maxLines: 3,
+                forceUppercase: false,
+                hintText: 'Describe el trabajo previo o el estado inicial',
+              ),
               const SizedBox(height: 12),
               // Permitir hasta 4 fotos en Después
               _MultiPhotoCard(
@@ -2493,6 +2608,14 @@ class _PhotoReportStep extends StatelessWidget {
                 onClear: () => onClearSingle('despues'),
                 onRemoveItem: onRemoveDespues,
                 maxPhotos: 4,
+              ),
+              const SizedBox(height: 10),
+              _ActaField(
+                label: 'Trabajo a realizar después',
+                controller: despuesTrabajoController,
+                maxLines: 3,
+                forceUppercase: false,
+                hintText: 'Describe el trabajo o resultado final',
               ),
               const SizedBox(height: 16),
               Row(
@@ -2535,6 +2658,14 @@ class _PhotoReportStep extends StatelessWidget {
                   color: RemaColors.surfaceLow,
                   child: const Text('Sin evidencia DURANTE cargada.'),
                 ),
+              const SizedBox(height: 10),
+              _ActaField(
+                label: 'Trabajo a realizar durante',
+                controller: duranteTrabajoController,
+                maxLines: 3,
+                forceUppercase: false,
+                hintText: 'Describe el trabajo o avance durante la ejecucion',
+              ),
               if (!isAdmin) ...[
                 const SizedBox(height: 16),
                 const Text(
@@ -2556,10 +2687,13 @@ class _ActaField extends StatelessWidget {
     this.maxLines = 1,
     this.enabled = true,
     this.forceUppercase = true,
+    this.readOnly = false,
+    this.onTap,
     this.helperText,
     this.hintText,
     this.allowOnlyText = false,
     this.isHour24 = false,
+    this.suffixIcon,
   });
 
   final String label;
@@ -2567,10 +2701,13 @@ class _ActaField extends StatelessWidget {
   final int maxLines;
   final bool enabled;
   final bool forceUppercase;
+  final bool readOnly;
+  final VoidCallback? onTap;
   final String? helperText;
   final String? hintText;
   final bool allowOnlyText;
   final bool isHour24;
+  final Widget? suffixIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -2578,6 +2715,8 @@ class _ActaField extends StatelessWidget {
       controller: controller,
       maxLines: maxLines,
       enabled: enabled,
+      readOnly: readOnly,
+      onTap: onTap,
       keyboardType: isHour24
           ? TextInputType.datetime
           : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
@@ -2592,6 +2731,7 @@ class _ActaField extends StatelessWidget {
         labelText: label,
         hintText: hintText ?? 'Ingresa $label',
         helperText: helperText,
+        suffixIcon: suffixIcon,
       ),
     );
   }
