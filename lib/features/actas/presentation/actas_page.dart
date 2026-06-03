@@ -1558,7 +1558,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     // Normaliza cualquier variante legacy para forzar razon social en facturacion.
     normalizedTemplate = normalizedTemplate.replaceAll(
       RegExp(r'(?im)^\s*facturado\s*a\s*:\s*.*$'),
-      'FACTURADO A: {razon_social_del_cliente}',
+      'Facturado a: {razon_social_del_cliente}',
     );
 
     // Si la linea no existe en una plantilla vieja, se inserta junto al bloque de pedido.
@@ -1569,7 +1569,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         final line = confirmedMatch.group(0)!;
         normalizedTemplate = normalizedTemplate.replaceFirst(
           line,
-          '$line\nFACTURADO A: {razon_social_del_cliente}',
+            '$line\nFacturado a: {razon_social_del_cliente}',
         );
       }
     }
@@ -2149,7 +2149,7 @@ const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs 
   {descripcion_del_servicio}
 
   Confirmado con el Pedido No. {numero_de_pedido} de fecha {fecha_aprobacion_del_pedido}, 
-  FACTURADO A: {razon_social_del_cliente}
+  Facturado a: {razon_social_del_cliente}
 
   Dicho servicio dio inicio el {fecha_de_inicio} y concluyendo el {fecha_de_conclusion}.
 
