@@ -36,6 +36,7 @@ class QuoteRecord {
     this.finalSubtotalUsd,
     this.finalTaxUsd,
     this.finalTotalUsd,
+    this.showUsd = false,
   });
 
   final String id;
@@ -60,6 +61,7 @@ class QuoteRecord {
   final double? finalSubtotalUsd;
   final double? finalTaxUsd;
   final double? finalTotalUsd;
+  final bool showUsd;
 
   bool get isDraft => status == QuoteStatus.draft;
   bool get isConcluded => status == QuoteStatus.concluded;
@@ -98,6 +100,7 @@ class QuoteRecord {
     double? finalSubtotalUsd,
     double? finalTaxUsd,
     double? finalTotalUsd,
+    bool? showUsd,
   }) {
     return QuoteRecord(
       id: id ?? this.id,
@@ -122,6 +125,7 @@ class QuoteRecord {
       finalSubtotalUsd: finalSubtotalUsd ?? this.finalSubtotalUsd,
       finalTaxUsd: finalTaxUsd ?? this.finalTaxUsd,
       finalTotalUsd: finalTotalUsd ?? this.finalTotalUsd,
+      showUsd: showUsd ?? this.showUsd,
     );
   }
 }

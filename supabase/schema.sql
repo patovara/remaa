@@ -280,6 +280,7 @@ create table if not exists public.quotes (
   final_subtotal_usd numeric(14,0),
   final_tax_usd numeric(14,0),
   final_total_usd numeric(14,0),
+  show_usd boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (quote_number),
@@ -391,6 +392,9 @@ alter table public.quotes
 
 alter table public.quotes
   add column if not exists final_total_usd numeric(14,0);
+
+alter table public.quotes
+  add column if not exists show_usd boolean not null default false;
 
 alter table public.quotes
   drop constraint if exists quotes_final_exchange_rate_positive_check;
