@@ -35,7 +35,7 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
   final watermark =
       watermarkBytes != null && watermarkBytes.isNotEmpty ? pw.MemoryImage(watermarkBytes) : null;
 
-  final ingresoBytes = payload['ingresoBytes'] as Uint8List?;
+  final ingresoBytes = (payload['ingresoBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
   final antesBytes = (payload['antesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
   final despuesBytes = (payload['despuesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
   final duranteBytes = (payload['duranteBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
@@ -45,7 +45,7 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
   final duranteTrabajo = payload['duranteTrabajo'] as String? ?? '';
   final despuesTrabajo = payload['despuesTrabajo'] as String? ?? '';
 
-  final ingresoImage = ingresoBytes != null && ingresoBytes.isNotEmpty ? pw.MemoryImage(ingresoBytes) : null;
+  final ingresoImages = [for (final bytes in ingresoBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
   final antesImages = [for (final bytes in antesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
   final despuesImages = [for (final bytes in despuesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
   final duranteImages = [
@@ -60,6 +60,30 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
   final responsablePuesto = payload['responsablePuesto'] as String? ?? '{nombre_del_puesto_del_responsable_del_cliente}';
   final brandName = payload['brandName'] as String? ?? CompanyProfile.brandName;
   final legalName = payload['legalName'] as String? ?? CompanyProfile.legalName;
+
+  final groupedSections = <_PhotoSectionData>[
+    _PhotoSectionData(
+      key: 'antes',
+      title: 'ANTES',
+      subtitle: _buildPhotoReportSubtitle(workText: antesTrabajo),
+      images: antesImages,
+    ),
+    _PhotoSectionData(
+      key: 'durante',
+      title: 'DURANTE',
+      subtitle: _buildPhotoReportSubtitle(workText: duranteTrabajo),
+      images: duranteImages,
+    ),
+    _PhotoSectionData(
+      key: 'despues',
+      title: 'DESPUÉS',
+      subtitle: _buildPhotoReportSubtitle(workText: despuesTrabajo),
+      images: despuesImages,
+    ),
+  ];
+  final ingresoPagesCount = _countSectionGridPages(ingresoImages.length);
+  final combinedPhotosPageCount = _countCombinedSectionPages(groupedSections);
+  final totalPages = 1 + ingresoPagesCount + combinedPhotosPageCount;
 
   pdf.addPage(
     pw.Page(
@@ -98,7 +122,7 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
                   ],
                 ),
                 pw.SizedBox(height: 16),
-                _buildPageFooter(1),
+                _buildPageFooter(page: 1, totalPages: totalPages),
               ],
             ),
           ],
@@ -107,56 +131,35 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
     ),
   );
 
-  pdf.addPage(
-    _buildPhotoPage(
-      logo: logo,
-      brandName: brandName,
-      legalName: legalName,
-      title: 'REPORTE FOTOGRAFICO - INGRESO A INSTALACIONES',
-      subtitle: _buildPhotoReportSubtitle(
-        dateLabel: ingresoFecha,
-        workText: ingresoTrabajo,
-        includeDateLabel: true,
-      ),
-      image: ingresoImage,
-      page: 2,
+  final ingresoPages = _buildIngresoSectionPages(
+    logo: logo,
+    brandName: brandName,
+    legalName: legalName,
+    title: 'REPORTE FOTOGRAFICO - INGRESO A INSTALACIONES',
+    subtitle: _buildPhotoReportSubtitle(
+      dateLabel: ingresoFecha,
+      workText: ingresoTrabajo,
+      includeDateLabel: true,
     ),
+    images: ingresoImages,
+    startPage: 2,
+    totalPages: totalPages,
   );
-  pdf.addPage(
-    _buildPhotoPageWithDynamicGrid(
-      logo: logo,
-      brandName: brandName,
-      legalName: legalName,
-      title: 'REPORTE FOTOGRAFICO - ANTES',
-      subtitle: _buildPhotoReportSubtitle(workText: antesTrabajo),
-      images: antesImages,
-      page: 3,
-    ),
-  );
+  for (final page in ingresoPages) {
+    pdf.addPage(page);
+  }
 
-  pdf.addPage(
-    _buildPhotoPageWithDynamicGrid(
-      logo: logo,
-      brandName: brandName,
-      legalName: legalName,
-      title: 'REPORTE FOTOGRAFICO - DURANTE',
-      subtitle: _buildPhotoReportSubtitle(workText: duranteTrabajo),
-      images: duranteImages,
-      page: 4,
-    ),
+  final combinedPages = _buildCombinedSectionPages(
+    logo: logo,
+    brandName: brandName,
+    legalName: legalName,
+    sections: groupedSections,
+    startPage: 2 + ingresoPagesCount,
+    totalPages: totalPages,
   );
-
-  pdf.addPage(
-    _buildPhotoPageWithDynamicGrid(
-      logo: logo,
-      brandName: brandName,
-      legalName: legalName,
-      title: 'REPORTE FOTOGRAFICO - DESPUÉS',
-      subtitle: _buildPhotoReportSubtitle(workText: despuesTrabajo),
-      images: despuesImages,
-      page: 5,
-    ),
-  );
+  for (final page in combinedPages) {
+    pdf.addPage(page);
+  }
 
   return pdf.save();
 }
@@ -224,180 +227,331 @@ String _buildPhotoReportSubtitle({
   return lines.join('\n');
 }
 
-pw.Widget _buildPageFooter(int page) {
-  return pw.Align(
-    alignment: pw.Alignment.centerRight,
-    child: pw.Text('Pagina $page de 5', style: const pw.TextStyle(fontSize: 9)),
-  );
+class _PhotoSectionData {
+  const _PhotoSectionData({
+    required this.key,
+    required this.title,
+    required this.subtitle,
+    required this.images,
+  });
+
+  final String key;
+  final String title;
+  final String subtitle;
+  final List<pw.MemoryImage> images;
 }
 
-pw.Page _buildPhotoPage({
-  required pw.MemoryImage? logo,
-  required String brandName,
-  required String legalName,
-  required String title,
-  required String subtitle,
-  required pw.MemoryImage? image,
-  required int page,
-}) {
-  return pw.Page(
-    pageFormat: PdfPageFormat.letter,
-    margin: const pw.EdgeInsets.all(36),
-    build: (context) {
-      return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
-          pw.SizedBox(height: 20),
-            _buildPhotoSection(title, subtitle, image),
-          pw.Spacer(),
-          _buildPageFooter(page),
-        ],
-      );
-    },
-  );
+class _PhotoGridEntry {
+  const _PhotoGridEntry({
+    required this.sectionKey,
+    required this.sectionTitle,
+    required this.order,
+    required this.image,
+  });
+
+  final String sectionKey;
+  final String sectionTitle;
+  final int order;
+  final pw.MemoryImage image;
 }
 
-pw.Widget _buildPhotoSection(String title, String subtitle, pw.MemoryImage? image) {
-  final normalizedSubtitle = subtitle.trim();
-
-  return pw.Column(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
-    children: [
-      pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-      if (normalizedSubtitle.isNotEmpty) ...[
-        pw.SizedBox(height: 4),
-        pw.Text(
-          normalizedSubtitle,
-          style: const pw.TextStyle(fontSize: 9),
-        ),
-      ],
-      pw.SizedBox(height: 6),
-      pw.Container(
-        width: double.infinity,
-        height: 380,
-        alignment: pw.Alignment.center,
-        decoration: pw.BoxDecoration(
-          border: pw.Border.all(color: PdfColors.grey300),
-          color: PdfColors.white,
-        ),
-        child: image != null
-            ? pw.Image(image, fit: pw.BoxFit.contain)
-            : pw.Center(child: pw.Text('Sin evidencia cargada')),
-      ),
-    ],
-  );
+int _countCombinedSectionPages(List<_PhotoSectionData> sections) {
+  final count = sections.fold<int>(0, (sum, section) => sum + section.images.length);
+  return _countSectionGridPages(count);
 }
 
-pw.Page _buildPhotoPageWithDynamicGrid({
+int _countSectionGridPages(int imageCount) {
+  if (imageCount <= 0) {
+    return 1;
+  }
+  return ((imageCount - 1) ~/ 4) + 1;
+}
+
+List<pw.Page> _buildIngresoSectionPages({
   required pw.MemoryImage? logo,
   required String brandName,
   required String legalName,
   required String title,
   required String subtitle,
   required List<pw.MemoryImage> images,
-  required int page,
+  required int startPage,
+  required int totalPages,
 }) {
-  return pw.Page(
-    pageFormat: PdfPageFormat.letter,
-    margin: const pw.EdgeInsets.all(36),
-    build: (context) {
-      return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
-          pw.SizedBox(height: 20),
-          pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-            if (subtitle.trim().isNotEmpty) ...[
-              pw.SizedBox(height: 4),
-              pw.Text(subtitle, style: const pw.TextStyle(fontSize: 9)),
+  final entries = <_PhotoGridEntry>[
+    for (var index = 0; index < images.length; index++)
+      _PhotoGridEntry(
+        sectionKey: 'ingreso',
+        sectionTitle: 'INGRESO',
+        order: index + 1,
+        image: images[index],
+      ),
+  ];
+
+  if (entries.isEmpty) {
+    return [
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(36),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              pw.SizedBox(height: 20),
+              pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              if (subtitle.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(subtitle, style: const pw.TextStyle(fontSize: 9)),
+              ],
+              pw.SizedBox(height: 8),
+              pw.Container(
+                width: double.infinity,
+                height: 380,
+                alignment: pw.Alignment.center,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  color: PdfColors.white,
+                ),
+                child: pw.Text('Sin evidencia cargada en Ingreso.'),
+              ),
+              pw.Spacer(),
+              _buildPageFooter(page: startPage, totalPages: totalPages),
             ],
-          pw.SizedBox(height: 8),
-          _buildDynamicPhotoLayout(images),
-          pw.Spacer(),
-          _buildPageFooter(page),
-        ],
+          );
+        },
+      ),
+    ];
+  }
+
+  final pages = <pw.Page>[];
+  var pageNumber = startPage;
+  for (var index = 0; index < entries.length; index += 4) {
+    final chunk = entries.sublist(index, (index + 4).clamp(0, entries.length));
+    final currentPageNumber = pageNumber;
+    pages.add(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(36),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              pw.SizedBox(height: 20),
+              pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              if (subtitle.trim().isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(subtitle, style: const pw.TextStyle(fontSize: 9)),
+              ],
+              pw.SizedBox(height: 8),
+              _buildPhotoGrid(chunk),
+              pw.Spacer(),
+              _buildPageFooter(page: currentPageNumber, totalPages: totalPages),
+            ],
+          );
+        },
+      ),
+    );
+    pageNumber += 1;
+  }
+
+  return pages;
+}
+
+List<pw.Page> _buildCombinedSectionPages({
+  required pw.MemoryImage? logo,
+  required String brandName,
+  required String legalName,
+  required List<_PhotoSectionData> sections,
+  required int startPage,
+  required int totalPages,
+}) {
+  final sectionByKey = {for (final section in sections) section.key: section};
+  final entries = <_PhotoGridEntry>[];
+
+  for (final section in sections) {
+    for (var index = 0; index < section.images.length; index++) {
+      entries.add(
+        _PhotoGridEntry(
+          sectionKey: section.key,
+          sectionTitle: section.title,
+          order: index + 1,
+          image: section.images[index],
+        ),
       );
-    },
+    }
+  }
+
+  if (entries.isEmpty) {
+    return [
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(36),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'REPORTE FOTOGRAFICO - ANTES / DURANTE / DESPUÉS',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Container(
+                width: double.infinity,
+                height: 380,
+                alignment: pw.Alignment.center,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  color: PdfColors.white,
+                ),
+                child: pw.Text('Sin evidencia cargada en Antes, Durante o Después.'),
+              ),
+              pw.Spacer(),
+              _buildPageFooter(page: startPage, totalPages: totalPages),
+            ],
+          );
+        },
+      ),
+    ];
+  }
+
+  final pages = <pw.Page>[];
+  var pageNumber = startPage;
+
+  for (var index = 0; index < entries.length; index += 4) {
+    final chunk = entries.sublist(index, (index + 4).clamp(0, entries.length));
+    final chunkSectionKeys = <String>[];
+    final chunkSections = <_PhotoSectionData>[];
+    for (final entry in chunk) {
+      if (!chunkSectionKeys.contains(entry.sectionKey)) {
+        chunkSectionKeys.add(entry.sectionKey);
+        final section = sectionByKey[entry.sectionKey];
+        if (section != null) {
+          chunkSections.add(section);
+        }
+      }
+    }
+    final title = 'REPORTE FOTOGRAFICO - ${chunkSections.map((section) => section.title).join(' / ')}';
+    final currentPageNumber = pageNumber;
+
+    pages.add(
+      pw.Page(
+        pageFormat: PdfPageFormat.letter,
+        margin: const pw.EdgeInsets.all(36),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              pw.SizedBox(height: 20),
+              pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
+              _buildSectionSummary(chunkSections),
+              pw.SizedBox(height: 8),
+              _buildPhotoGrid(chunk),
+              pw.Spacer(),
+              _buildPageFooter(page: currentPageNumber, totalPages: totalPages),
+            ],
+          );
+        },
+      ),
+    );
+
+    pageNumber += 1;
+  }
+
+  return pages;
+}
+
+pw.Widget _buildSectionSummary(List<_PhotoSectionData> sections) {
+  final lines = <String>[];
+  for (final section in sections) {
+    final subtitle = section.subtitle.trim();
+    if (subtitle.isEmpty) {
+      lines.add(section.title);
+      continue;
+    }
+    final compact = subtitle.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    final trimmed = compact.length > 130 ? '${compact.substring(0, 130)}...' : compact;
+    lines.add('${section.title}: $trimmed');
+  }
+
+  return pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      for (final line in lines)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 2),
+          child: pw.Text(line, style: const pw.TextStyle(fontSize: 9)),
+        ),
+    ],
   );
 }
 
-pw.Widget _buildDynamicPhotoLayout(List<pw.MemoryImage> images) {
-  pw.Widget tile(pw.MemoryImage image, {required double width, required double height}) {
+pw.Widget _buildPhotoGrid(List<_PhotoGridEntry> entries) {
+  pw.Widget tile(_PhotoGridEntry entry) {
     return pw.Container(
-      width: width,
-      height: height,
-      alignment: pw.Alignment.center,
+      height: 186,
+      padding: const pw.EdgeInsets.all(6),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey300),
         color: PdfColors.white,
       ),
-      child: pw.Image(image, fit: pw.BoxFit.contain),
-    );
-  }
-
-  if (images.isEmpty) {
-    return pw.Container(
-      width: double.infinity,
-      height: 380,
-      alignment: pw.Alignment.center,
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey300),
-        color: PdfColors.white,
-      ),
-      child: pw.Text('Sin evidencia cargada'),
-    );
-  }
-
-  if (images.length == 1) {
-    return tile(images[0], width: double.infinity, height: 380);
-  }
-
-  if (images.length == 2) {
-    return pw.Row(
-      children: [
-        pw.Expanded(child: tile(images[0], width: double.infinity, height: 380)),
-        pw.SizedBox(width: 8),
-        pw.Expanded(child: tile(images[1], width: double.infinity, height: 380)),
-      ],
-    );
-  }
-
-  if (images.length == 3) {
-    return pw.Column(
-      children: [
-        tile(images[0], width: double.infinity, height: 186),
-        pw.SizedBox(height: 8),
-        pw.Row(
-          children: [
-            pw.Expanded(child: tile(images[1], width: double.infinity, height: 186)),
-            pw.SizedBox(width: 8),
-            pw.Expanded(child: tile(images[2], width: double.infinity, height: 186)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  final limited = images.take(4).toList();
-  return pw.Column(
-    children: [
-      pw.Row(
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Expanded(child: tile(limited[0], width: double.infinity, height: 186)),
-          pw.SizedBox(width: 8),
-          pw.Expanded(child: tile(limited[1], width: double.infinity, height: 186)),
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            color: PdfColors.grey200,
+            child: pw.Text(
+              '${entry.sectionTitle} ${entry.order}',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Expanded(
+            child: pw.Container(
+              width: double.infinity,
+              alignment: pw.Alignment.center,
+              child: pw.Image(entry.image, fit: pw.BoxFit.contain),
+            ),
+          ),
         ],
       ),
-      pw.SizedBox(height: 8),
+    );
+  }
+
+  final rows = <pw.Widget>[];
+  for (var index = 0; index < entries.length; index += 2) {
+    final rightIndex = index + 1;
+    rows.add(
       pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Expanded(child: tile(limited[2], width: double.infinity, height: 186)),
+          pw.Expanded(child: tile(entries[index])),
           pw.SizedBox(width: 8),
-          pw.Expanded(child: tile(limited[3], width: double.infinity, height: 186)),
+          pw.Expanded(
+            child: rightIndex < entries.length
+                ? tile(entries[rightIndex])
+                : pw.SizedBox(height: 186),
+          ),
         ],
       ),
-    ],
+    );
+    if (rightIndex < entries.length - 1) {
+      rows.add(pw.SizedBox(height: 8));
+    }
+  }
+
+  return pw.Column(children: rows);
+}
+
+pw.Widget _buildPageFooter({required int page, required int totalPages}) {
+  return pw.Align(
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text('Pagina $page de $totalPages', style: const pw.TextStyle(fontSize: 9)),
   );
 }
 
@@ -473,7 +627,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
   int _step = 0;
 
-  _PickedMedia? _fotoIngreso;
+  final List<_PickedMedia> _fotosIngreso = [];
   final List<_PickedMedia> _fotosAntes = [];
   final List<_PickedMedia> _fotosDespues = [];
   final List<_PickedMedia> _fotosDurante = [];
@@ -1061,15 +1215,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   Future<void> _pickMultipleForStage({
     required String stage,
     required List<_PickedMedia> target,
-    required int maxItems,
   }) async {
-    if (target.length >= maxItems) {
-      if (mounted) {
-        showRemaMessage(context, 'Solo se permiten hasta $maxItems fotos en $stage.');
-      }
-      return;
-    }
-
     setState(() {
       _isProcessingSinglePhoto = true;
       _processingSingleStage = stage;
@@ -1086,8 +1232,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         return;
       }
 
-      final available = maxItems - target.length;
-      final selected = result.files.where((item) => item.bytes != null).take(available).toList();
+      final selected = result.files.where((item) => item.bytes != null).toList();
       final optimizedMedia = <_PickedMedia>[];
       final rejectedMessages = <String>[];
 
@@ -1131,65 +1276,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       } else if (rejectedMessages.isNotEmpty) {
         showRemaMessage(context, rejectedMessages.first);
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessingSinglePhoto = false;
-          _processingSingleStage = null;
-        });
-      }
-    }
-  }
-
-  Future<void> _pickSinglePhoto({
-    required String stage,
-    required void Function(_PickedMedia?) setTarget,
-  }) async {
-    setState(() {
-      _isProcessingSinglePhoto = true;
-      _processingSingleStage = stage;
-    });
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-        withData: true,
-      );
-
-      if (!mounted || result == null || result.files.isEmpty) {
-        return;
-      }
-
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null) {
-        showRemaMessage(context, 'No se pudo leer la imagen seleccionada.');
-        return;
-      }
-      OptimizedImageResult optimized;
-      try {
-        optimized = await optimizeImageForDocument(
-          inputBytes: bytes,
-          fileName: file.name,
-          profile: ImageOptimizationProfile.mainDocument,
-        );
-      } on ImageOptimizationException catch (error) {
-        if (mounted) {
-          showRemaMessage(context, error.message);
-        }
-        return;
-      }
-
-      setState(() {
-        setTarget(
-          _PickedMedia(
-            name: optimized.fileName,
-            bytes: optimized.bytes,
-            size: optimized.bytes.length,
-            mimeType: optimized.mimeType,
-          ),
-        );
-      });
     } finally {
       if (mounted) {
         setState(() {
@@ -1415,7 +1501,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     missing.addAll(_collectDateValidationErrors());
 
-    if (_fotoIngreso == null && _fotosAntes.isEmpty && _fotosDespues.isEmpty && _fotosDurante.isEmpty) {
+    if (_fotosIngreso.isEmpty && _fotosAntes.isEmpty && _fotosDespues.isEmpty && _fotosDurante.isEmpty) {
       missing.add('Registro fotografico');
     }
 
@@ -1512,7 +1598,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       );
     }
 
-    addPhoto('ingreso', _fotoIngreso);
+    for (var index = 0; index < _fotosIngreso.length; index++) {
+      addPhoto('ingreso_${index + 1}', _fotosIngreso[index]);
+    }
     for (var index = 0; index < _fotosAntes.length; index++) {
       addPhoto('antes_${index + 1}', _fotosAntes[index]);
     }
@@ -1545,10 +1633,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       <String, Object?>{
         'logoBytes': logoBytes,
         'watermarkBytes': watermarkBytes,
-        'ingresoBytes': _fotoIngreso?.bytes,
-        'antesBytes': [for (final media in _fotosAntes.take(4)) media.bytes],
-        'despuesBytes': [for (final media in _fotosDespues.take(4)) media.bytes],
-        'duranteBytes': [for (final media in _fotosDurante.take(4)) media.bytes],
+        'ingresoBytes': [for (final media in _fotosIngreso) media.bytes],
+        'antesBytes': [for (final media in _fotosAntes) media.bytes],
+        'despuesBytes': [for (final media in _fotosDespues) media.bytes],
+        'duranteBytes': [for (final media in _fotosDurante) media.bytes],
         ..._photoReportValues,
         'renderedActa': _renderTemplate(_actaTemplateController.text, _templateValues),
         'gerenteNombre': _gerenteClienteController.text.trim().isEmpty
@@ -2029,7 +2117,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
             else
               _PhotoReportStep(
                 isAdmin: _isAdmin,
-                fotoIngreso: _fotoIngreso,
+                fotosIngreso: _fotosIngreso,
                 onPickIngresoDate: () => _selectDate(_ingresoFechaController),
                 ingresoFechaController: _ingresoFechaController,
                 ingresoTrabajoController: _ingresoTrabajoController,
@@ -2042,10 +2130,11 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                 isProcessingSinglePhoto: _isProcessingSinglePhoto,
                 processingSingleStage: _processingSingleStage,
                 isProcessingDurantePhotos: _isProcessingDurantePhotos,
-                onPickIngreso: () => _pickSinglePhoto(stage: 'ingreso', setTarget: (value) => _fotoIngreso = value),
-                onPickAntes: () => _pickMultipleForStage(stage: 'antes', target: _fotosAntes, maxItems: 4),
-                onPickDespues: () => _pickMultipleForStage(stage: 'despues', target: _fotosDespues, maxItems: 4),
+                onPickIngreso: () => _pickMultipleForStage(stage: 'ingreso', target: _fotosIngreso),
+                onPickAntes: () => _pickMultipleForStage(stage: 'antes', target: _fotosAntes),
+                onPickDespues: () => _pickMultipleForStage(stage: 'despues', target: _fotosDespues),
                 onPickDurante: _pickMultipleDurante,
+                onRemoveIngreso: (item) => setState(() => _fotosIngreso.remove(item)),
                 onRemoveAntes: (item) => setState(() => _fotosAntes.remove(item)),
                 onRemoveDespues: (item) => setState(() => _fotosDespues.remove(item)),
                 onRemoveDurante: (item) => setState(() => _fotosDurante.remove(item)),
@@ -2053,7 +2142,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                   setState(() {
                     switch (stage) {
                       case 'ingreso':
-                        _fotoIngreso = null;
+                        _fotosIngreso.clear();
                         break;
                       case 'antes':
                         _fotosAntes.clear();
@@ -2490,7 +2579,7 @@ class _ActaBodyStep extends StatelessWidget {
 class _PhotoReportStep extends StatelessWidget {
   const _PhotoReportStep({
     required this.isAdmin,
-    required this.fotoIngreso,
+    required this.fotosIngreso,
     required this.onPickIngresoDate,
     required this.ingresoFechaController,
     required this.ingresoTrabajoController,
@@ -2507,6 +2596,7 @@ class _PhotoReportStep extends StatelessWidget {
     required this.onPickAntes,
     required this.onPickDespues,
     required this.onPickDurante,
+    required this.onRemoveIngreso,
     required this.onRemoveAntes,
     required this.onRemoveDespues,
     required this.onRemoveDurante,
@@ -2514,7 +2604,7 @@ class _PhotoReportStep extends StatelessWidget {
   });
 
   final bool isAdmin;
-  final _PickedMedia? fotoIngreso;
+  final List<_PickedMedia> fotosIngreso;
   final VoidCallback onPickIngresoDate;
   final TextEditingController ingresoFechaController;
   final TextEditingController ingresoTrabajoController;
@@ -2531,6 +2621,7 @@ class _PhotoReportStep extends StatelessWidget {
   final VoidCallback onPickAntes;
   final VoidCallback onPickDespues;
   final VoidCallback onPickDurante;
+  final ValueChanged<_PickedMedia> onRemoveIngreso;
   final ValueChanged<_PickedMedia> onRemoveAntes;
   final ValueChanged<_PickedMedia> onRemoveDespues;
   final ValueChanged<_PickedMedia> onRemoveDurante;
@@ -2546,13 +2637,14 @@ class _PhotoReportStep extends StatelessWidget {
             children: [
               const RemaSectionHeader(title: 'Paginas 2-5 / Reporte Fotografico'),
               const SizedBox(height: 18),
-              _SinglePhotoCard(
+              _MultiPhotoCard(
                 title: 'Ingreso a las instalaciones',
-                subtitle: 'Pagina 2',
-                media: fotoIngreso,
+                subtitle: 'Seccion exclusiva',
+                mediaList: fotosIngreso,
                 isProcessing: isProcessingSinglePhoto && processingSingleStage == 'ingreso',
                 onPick: onPickIngreso,
                 onClear: () => onClearSingle('ingreso'),
+                onRemoveItem: onRemoveIngreso,
               ),
               const SizedBox(height: 10),
               _ActaField(
@@ -2578,7 +2670,6 @@ class _PhotoReportStep extends StatelessWidget {
                 hintText: 'Describe el trabajo a realizar en el ingreso',
               ),
               const SizedBox(height: 12),
-              // Permitir hasta 4 fotos en Antes
               _MultiPhotoCard(
                 title: 'Antes (levantamiento)',
                 subtitle: 'Pagina 3',
@@ -2587,7 +2678,6 @@ class _PhotoReportStep extends StatelessWidget {
                 onPick: onPickAntes,
                 onClear: () => onClearSingle('antes'),
                 onRemoveItem: onRemoveAntes,
-                maxPhotos: 4,
               ),
               const SizedBox(height: 10),
               _ActaField(
@@ -2598,7 +2688,6 @@ class _PhotoReportStep extends StatelessWidget {
                 hintText: 'Describe el trabajo previo o el estado inicial',
               ),
               const SizedBox(height: 12),
-              // Permitir hasta 4 fotos en Después
               _MultiPhotoCard(
                 title: 'Despues (entrega final)',
                 subtitle: 'Pagina 5',
@@ -2607,7 +2696,6 @@ class _PhotoReportStep extends StatelessWidget {
                 onPick: onPickDespues,
                 onClear: () => onClearSingle('despues'),
                 onRemoveItem: onRemoveDespues,
-                maxPhotos: 4,
               ),
               const SizedBox(height: 10),
               _ActaField(
@@ -2811,22 +2899,24 @@ class _DateField extends StatelessWidget {
   }
 }
 
-class _SinglePhotoCard extends StatelessWidget {
-  const _SinglePhotoCard({
+class _MultiPhotoCard extends StatelessWidget {
+  const _MultiPhotoCard({
     required this.title,
     required this.subtitle,
-    required this.media,
+    required this.mediaList,
     required this.isProcessing,
     required this.onPick,
     required this.onClear,
+    required this.onRemoveItem,
   });
 
   final String title;
   final String subtitle;
-  final _PickedMedia? media;
+  final List<_PickedMedia> mediaList;
   final bool isProcessing;
   final VoidCallback onPick;
   final VoidCallback onClear;
+  final ValueChanged<_PickedMedia> onRemoveItem;
 
   @override
   Widget build(BuildContext context) {
@@ -2857,104 +2947,8 @@ class _SinglePhotoCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.upload_file_outlined),
-                label: Text(isProcessing ? 'Cargando...' : 'Cargar'),
-              ),
-            ],
-          ),
-          if (media == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text('Sin imagen seleccionada.'),
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.memory(
-                    media!.bytes,
-                    height: 140,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(child: Text(media!.name, overflow: TextOverflow.ellipsis)),
-                    IconButton(
-                      onPressed: onClear,
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Quitar imagen',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MultiPhotoCard extends StatelessWidget {
-  const _MultiPhotoCard({
-    required this.title,
-    required this.subtitle,
-    required this.mediaList,
-    required this.isProcessing,
-    required this.onPick,
-    required this.onClear,
-    required this.onRemoveItem,
-    required this.maxPhotos,
-  });
-
-  final String title;
-  final String subtitle;
-  final List<_PickedMedia> mediaList;
-  final bool isProcessing;
-  final VoidCallback onPick;
-  final VoidCallback onClear;
-  final ValueChanged<_PickedMedia> onRemoveItem;
-  final int maxPhotos;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: RemaColors.surfaceLow,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '$title · $subtitle',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: (isProcessing || mediaList.length >= maxPhotos) ? null : onPick,
-                icon: isProcessing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.upload_file_outlined),
                 label: Text(
-                  isProcessing
-                      ? 'Cargando...'
-                      : mediaList.length >= maxPhotos
-                          ? 'Max $maxPhotos'
-                          : 'Cargar',
+                  isProcessing ? 'Cargando...' : 'Cargar',
                 ),
               ),
               IconButton(
