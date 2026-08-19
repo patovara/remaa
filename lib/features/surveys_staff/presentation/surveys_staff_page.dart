@@ -178,33 +178,42 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                firstSurvey.quoteStatus.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
+            Flexible(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      firstSurvey.quoteStatus.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                  if (isDraft)
+                    FilledButton.tonalIcon(
+                      onPressed: () => _openEditSurveyDialog(firstSurvey),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Editar'),
+                    ),
+                ],
               ),
             ),
-            if (isDraft) ...[
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: () => _openEditSurveyDialog(firstSurvey),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                ),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Editar'),
-              ),
-            ],
           ],
         ),
         subtitle: Text(
