@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/utils/image_optimizer.dart';
 import '../../../core/config/supabase_bootstrap.dart';
+import '../../cotizaciones/domain/quote_models.dart';
 
 /// Data transfer object for survey with quote context
 class SurveyWithQuoteContext {
@@ -192,5 +194,142 @@ class SurveysStaffRepository {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<SurveyWithQuoteContext> updateSurveyEntry({
+    required SurveyWithQuoteContext survey,
+    required String projectName,
+    required String description,
+    required List<Map<String, dynamic>> retainedEvidenceMetadata,
+    required List<String> retainedEvidencePaths,
+    required List<SurveyEvidenceInput> newEvidenceInputs,
+  }) async {
+    final cleanProjectName = projectName.trim();
+    final cleanDescription = description.trim();
+    if (cleanProjectName.isEmpty) {
+      throw StateError('El proyecto debe tener nombre.');
+    }
+
+    final currentEvidencePaths = {
+      ...survey.evidencePaths.where((path) => path.trim().isNotEmpty).map((path) => path.trim()),
+    };
+    final nextRetainedPaths = retainedEvidencePaths
+        .map((path) => path.trim())
+        .where((path) => path.isNotEmpty)
+        .toList();
+    if (nextRetainedPaths.length + newEvidenceInputs.length > 2) {
+      throw StateError('Solo se permiten hasta 2 fotos por levantamiento.');
+    }
+
+    final removedPaths = currentEvidencePaths.difference(nextRetainedPaths.toSet()).toList();
+    final uploadedPaths = <String>[];
+    final uploadedMetadata = <Map<String, dynamic>>[];
+    final now = DateTime.now();
+    final timestamp = now.millisecondsSinceEpoch;
+    final quoteFolder = _sanitizeStorageName(
+      survey.quoteId.trim().isNotEmpty ? survey.quoteId.trim() : 'no-quote',
+    );
+
+    for (var index = 0; index < newEvidenceInputs.length; index++) {
+      final input = newEvidenceInputs[index];
+      if (input.bytes.isEmpty) {
+        continue;
+      }
+
+      final optimized = await optimizeImageForDocument(
+        inputBytes: input.bytes,
+        fileName: input.originalName,
+        profile: ImageOptimizationProfile.gridDocument,
+      );
+      final ext = _guessImageExtension(optimized.fileName);
+      final objectPath = '${survey.projectId}/$quoteFolder/${timestamp}_edit_$index.$ext';
+      await _client.storage.from('survey-photos').uploadBinary(
+            objectPath,
+            optimized.bytes,
+            fileOptions: FileOptions(
+              contentType: optimized.mimeType,
+              upsert: true,
+            ),
+          );
+      uploadedPaths.add(objectPath);
+      uploadedMetadata.add({
+        'object_path': objectPath,
+        'original_name': optimized.fileName,
+        'mime_type': optimized.mimeType,
+        'file_size_bytes': optimized.bytes.length,
+        'sort_order': nextRetainedPaths.length + index,
+        'width_px': optimized.widthPx,
+        'height_px': optimized.heightPx,
+        'taken_at': null,
+      });
+    }
+
+    final retainedMetadata = [
+      for (final meta in retainedEvidenceMetadata)
+        if (meta['object_path'] is String && nextRetainedPaths.contains((meta['object_path'] as String).trim()))
+          meta,
+    ];
+    final nextEvidenceMetadata = <Map<String, dynamic>>[
+      ...retainedMetadata,
+      ...uploadedMetadata,
+    ];
+    final nextEvidencePaths = <String>[
+      ...nextRetainedPaths,
+      ...uploadedPaths,
+    ];
+
+    try {
+      if (removedPaths.isNotEmpty) {
+        await _client.storage.from('survey-photos').remove(removedPaths);
+      }
+    } catch (_) {
+      // Best effort cleanup.
+    }
+
+    await _client.from('projects').update({
+      'name': cleanProjectName,
+      'description': cleanDescription,
+    }).eq('id', survey.projectId);
+
+    await _client.from('project_survey_entries').update({
+      'description': cleanDescription,
+      'evidence_paths': nextEvidencePaths,
+      'evidence_meta': nextEvidenceMetadata,
+    }).eq('id', survey.surveyId);
+
+    return SurveyWithQuoteContext(
+      surveyId: survey.surveyId,
+      projectId: survey.projectId,
+      quoteId: survey.quoteId,
+      description: cleanDescription,
+      evidencePaths: nextEvidencePaths,
+      evidenceMetadata: nextEvidenceMetadata,
+      createdAt: survey.createdAt,
+      quoteNumber: survey.quoteNumber,
+      quoteStatus: survey.quoteStatus,
+      quoteTotal: survey.quoteTotal,
+      quoteCreatedAt: survey.quoteCreatedAt,
+      projectName: cleanProjectName,
+      projectCode: survey.projectCode,
+      projectDescription: cleanDescription,
+      projectSiteAddress: survey.projectSiteAddress,
+      clientName: survey.clientName,
+    );
+  }
+
+  String _guessImageExtension(String originalName) {
+    final parts = originalName.toLowerCase().split('.');
+    if (parts.length > 1) {
+      final ext = parts.last.trim();
+      if (ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'webp') {
+        return ext;
+      }
+    }
+    return 'jpg';
+  }
+
+  String _sanitizeStorageName(String value) {
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), '_');
+    return normalized.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '');
   }
 }
