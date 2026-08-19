@@ -153,6 +153,7 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
 
     final firstSurvey = widget.surveys.first;
     final statusColor = _getStatusColor(firstSurvey.quoteStatus);
+    final isDraft = firstSurvey.quoteStatus.toLowerCase() == 'draft';
 
     return Card(
       elevation: 2,
@@ -192,6 +193,18 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
                 ),
               ),
             ),
+            if (isDraft) ...[
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => _openEditSurveyDialog(firstSurvey),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Editar'),
+              ),
+            ],
           ],
         ),
         subtitle: Text(
