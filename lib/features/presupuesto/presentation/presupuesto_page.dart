@@ -522,13 +522,17 @@ class PresupuestoPage extends ConsumerWidget {
     required List<QuoteItemRecord> items,
     required bool freezeUsdSnapshot,
   }) async {
-    final currencyState = await _resolveQuoteCurrency(
-      ref: ref,
-      quote: quote,
-      freezeSnapshot: freezeUsdSnapshot,
-    );
+    final currencyState = quote.showUsd
+        ? await _resolveQuoteCurrency(
+            ref: ref,
+            quote: quote,
+            freezeSnapshot: freezeUsdSnapshot,
+          )
+        : (quote: quote, rate: null);
     final quoteForPdf = currencyState.quote;
-    final usdRate = currencyState.rate?.rate ?? quoteForPdf.finalExchangeRate;
+    final usdRate = quoteForPdf.showUsd
+        ? (currencyState.rate?.rate ?? quoteForPdf.finalExchangeRate)
+        : null;
     final pdf = pw.Document();
     final logo = await _loadHeaderLogo();
     final watermark = await _loadWatermarkImage();
@@ -761,11 +765,15 @@ class PresupuestoPage extends ConsumerWidget {
                     _pdfCell(item.quantity.toStringAsFixed(2)),
                     _pdfCurrencyCell(
                       primary: money.format(item.unitPrice),
-                      secondary: usdRate == null ? null : _usdFromRate(item.unitPrice, usdRate),
+                      secondary: !quoteForPdf.showUsd || usdRate == null
+                          ? null
+                          : _usdFromRate(item.unitPrice, usdRate),
                     ),
                     _pdfCurrencyCell(
                       primary: money.format(item.lineTotal),
-                      secondary: usdRate == null ? null : _usdFromRate(item.lineTotal, usdRate),
+                      secondary: !quoteForPdf.showUsd || usdRate == null
+                          ? null
+                          : _usdFromRate(item.lineTotal, usdRate),
                     ),
                   ],
                 ),
@@ -791,13 +799,19 @@ class PresupuestoPage extends ConsumerWidget {
                 subtotal: money.format(quoteForPdf.subtotal),
                 tax: money.format(quoteForPdf.tax),
                 total: money.format(quoteForPdf.total),
-                subtotalUsd: quoteForPdf.finalSubtotalUsd != null
+                subtotalUsd: !quoteForPdf.showUsd
+                  ? null
+                  : quoteForPdf.finalSubtotalUsd != null
                     ? _usdRoundedLabel(quoteForPdf.finalSubtotalUsd!)
                     : (usdRate == null ? null : _usdFromRate(quoteForPdf.subtotal, usdRate)),
-                taxUsd: quoteForPdf.finalTaxUsd != null
+                taxUsd: !quoteForPdf.showUsd
+                  ? null
+                  : quoteForPdf.finalTaxUsd != null
                     ? _usdRoundedLabel(quoteForPdf.finalTaxUsd!)
                     : (usdRate == null ? null : _usdFromRate(quoteForPdf.tax, usdRate)),
-                totalUsd: quoteForPdf.finalTotalUsd != null
+                totalUsd: !quoteForPdf.showUsd
+                  ? null
+                  : quoteForPdf.finalTotalUsd != null
                     ? _usdRoundedLabel(quoteForPdf.finalTotalUsd!)
                     : (usdRate == null ? null : _usdFromRate(quoteForPdf.total, usdRate)),
               ),
@@ -1012,6 +1026,7 @@ class _BudgetView extends ConsumerStatefulWidget {
 
 class _BudgetViewState extends ConsumerState<_BudgetView> {
   late final ScrollController _tableScrollController;
+  bool _isUpdatingUsdVisibility = false;
 
   @override
   void initState() {
@@ -1027,16 +1042,17 @@ class _BudgetViewState extends ConsumerState<_BudgetView> {
 
   @override
   Widget build(BuildContext context) {
-    final estimatedRate = widget.quote.hasFinalExchangeSnapshot
+    final showUsd = widget.quote.showUsd;
+    final estimatedRate = showUsd && widget.quote.hasFinalExchangeSnapshot
       ? widget.quote.finalExchangeRate
-      : widget.usdRateState.valueOrNull?.rate;
-    final subtotalUsd = widget.quote.finalSubtotalUsd != null
+      : (showUsd ? widget.usdRateState.valueOrNull?.rate : null);
+    final subtotalUsd = showUsd && widget.quote.finalSubtotalUsd != null
       ? _usdRoundedLabel(widget.quote.finalSubtotalUsd!)
       : (estimatedRate == null ? null : _usdFromRate(widget.quote.subtotal, estimatedRate));
-    final taxUsd = widget.quote.finalTaxUsd != null
+    final taxUsd = showUsd && widget.quote.finalTaxUsd != null
       ? _usdRoundedLabel(widget.quote.finalTaxUsd!)
       : (estimatedRate == null ? null : _usdFromRate(widget.quote.tax, estimatedRate));
-    final totalUsd = widget.quote.finalTotalUsd != null
+    final totalUsd = showUsd && widget.quote.finalTotalUsd != null
       ? _usdRoundedLabel(widget.quote.finalTotalUsd!)
       : (estimatedRate == null ? null : _usdFromRate(widget.quote.total, estimatedRate));
 
@@ -1134,6 +1150,24 @@ class _BudgetViewState extends ConsumerState<_BudgetView> {
                     onPressed: widget.canEditItems ? widget.onAddItem : null,
                     icon: const Icon(Icons.add),
                     label: const Text('Agregar concepto'),
+                  ),
+                  const Spacer(),
+                  IgnorePointer(
+                    ignoring: _isUpdatingUsdVisibility,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Mostrar USD',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(width: 8),
+                        Switch.adaptive(
+                          value: showUsd,
+                          onChanged: _onUsdVisibilityChanged,
+                        ),
+                      ],
+                    ),
                   ),
                   if (!widget.canEditItems) ...[
                     const SizedBox(width: 12),
@@ -1290,6 +1324,37 @@ class _BudgetViewState extends ConsumerState<_BudgetView> {
         ),
       ),
     );
+  }
+
+  Future<void> _onUsdVisibilityChanged(bool value) async {
+    if (_isUpdatingUsdVisibility) {
+      return;
+    }
+
+    setState(() => _isUpdatingUsdVisibility = true);
+    try {
+      await ref.read(quotesProvider.notifier).setUsdVisibility(
+            quoteId: widget.quote.id,
+            showUsd: value,
+          );
+      if (!mounted) {
+        return;
+      }
+      showRemaMessage(
+        context,
+        value
+            ? 'USD activado en pantalla y PDF de la cotización.'
+            : 'USD desactivado. La cotización mostrará solo MXN.',
+      );
+    } catch (error) {
+      if (mounted) {
+        showRemaMessage(context, '$error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingUsdVisibility = false);
+      }
+    }
   }
 }
 

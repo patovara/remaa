@@ -14,7 +14,7 @@ class QuotesRepository {
       'id, project_id, quote_number, status, universe_id, project_type_id, subtotal, tax, total, valid_until, '
       'approval_pdf_path, approval_pdf_uploaded_at, recipient_email, '
       'final_exchange_rate, final_exchange_base, final_exchange_target, final_exchange_provider, final_exchange_captured_at, '
-      'final_subtotal_usd, final_tax_usd, final_total_usd, created_at';
+      'final_subtotal_usd, final_tax_usd, final_total_usd, show_usd, created_at';
 
   static final List<ProjectLookup> _localProjects = [];
 
@@ -403,6 +403,30 @@ class QuotesRepository {
       return updated;
     } catch (error) {
       AppLogger.error('quotes_persist_final_usd_snapshot_failed', data: {'error': error.toString()});
+      _replaceLocalQuote(updated);
+      return updated;
+    }
+  }
+
+  Future<QuoteRecord> updateUsdVisibility({
+    required QuoteRecord quote,
+    required bool showUsd,
+  }) async {
+    final updated = quote.copyWith(showUsd: showUsd);
+    final client = SupabaseBootstrap.client;
+
+    if (client == null || !_isUuid(quote.id)) {
+      _replaceLocalQuote(updated);
+      return updated;
+    }
+
+    try {
+      await client.from('quotes').update({
+        'show_usd': showUsd,
+      }).eq('id', quote.id);
+      return updated;
+    } catch (error) {
+      AppLogger.error('quotes_update_usd_visibility_failed', data: {'error': error.toString()});
       _replaceLocalQuote(updated);
       return updated;
     }
@@ -902,6 +926,7 @@ class QuotesRepository {
       finalSubtotalUsd: _toNullableDouble(row['final_subtotal_usd']),
       finalTaxUsd: _toNullableDouble(row['final_tax_usd']),
       finalTotalUsd: _toNullableDouble(row['final_total_usd']),
+      showUsd: _toBool(row['show_usd']),
     );
   }
 
@@ -2068,6 +2093,17 @@ class QuotesRepository {
       return value.toDouble();
     }
     return double.tryParse('$value');
+  }
+
+  bool _toBool(Object? value) {
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+    final normalized = '$value'.trim().toLowerCase();
+    return normalized == 'true' || normalized == 't' || normalized == '1' || normalized == 'yes';
   }
 
   DateTime? _toDate(Object? value) {

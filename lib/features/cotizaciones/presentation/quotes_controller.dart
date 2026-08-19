@@ -315,6 +315,35 @@ class QuotesController extends AsyncNotifier<List<QuoteRecord>> {
 
     return updated;
   }
+
+  Future<QuoteRecord> setUsdVisibility({
+    required String quoteId,
+    required bool showUsd,
+  }) async {
+    final current = state.valueOrNull ?? const <QuoteRecord>[];
+    QuoteRecord? quote;
+    for (final item in current) {
+      if (item.id == quoteId) {
+        quote = item;
+        break;
+      }
+    }
+    if (quote == null) {
+      throw StateError('No se encontro la cotizacion para actualizar USD.');
+    }
+
+    final updated = await _repository.updateUsdVisibility(
+      quote: quote,
+      showUsd: showUsd,
+    );
+
+    state = AsyncData([
+      for (final item in current)
+        if (item.id == quoteId) updated else item,
+    ]);
+
+    return updated;
+  }
 }
 
 class QuoteItemsController
