@@ -313,9 +313,7 @@ create table if not exists public.project_survey_entries (
   evidence_meta jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint project_survey_entries_evidence_paths_max_two check (coalesce(cardinality(evidence_paths), 0) <= 2),
-  constraint project_survey_entries_evidence_meta_is_array check (jsonb_typeof(evidence_meta) = 'array'),
-  constraint project_survey_entries_evidence_meta_max_two check (jsonb_array_length(evidence_meta) <= 2)
+  constraint project_survey_entries_evidence_meta_is_array check (jsonb_typeof(evidence_meta) = 'array')
 );
 
 create table if not exists public.quote_acta_assets (

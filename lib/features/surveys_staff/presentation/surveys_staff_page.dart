@@ -202,7 +202,7 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
                   ),
                   if (isDraft)
                     FilledButton.tonalIcon(
-                      onPressed: () => _openEditSurveyDialog(firstSurvey),
+                      onPressed: () => _startEditFlowForBlock(),
                       style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -267,14 +267,73 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
                 ),
                 const SizedBox(height: 8),
                 for (final survey in widget.surveys)
-                  _SurveyEntryCard(
-                    survey: survey,
-                    onEdit: survey.quoteStatus.toLowerCase() == 'draft'
-                        ? () => _openEditSurveyDialog(survey)
-                        : null,
-                  ),
+                  _SurveyEntryCard(survey: survey),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startEditFlowForBlock() async {
+    if (widget.surveys.isEmpty) {
+      return;
+    }
+    final draftSurveys = [
+      for (final survey in widget.surveys)
+        if (survey.quoteStatus.toLowerCase() == 'draft') survey,
+    ];
+    if (draftSurveys.isEmpty) {
+      return;
+    }
+
+    SurveyWithQuoteContext? selected;
+    if (draftSurveys.length == 1) {
+      selected = draftSurveys.first;
+    } else {
+      selected = await _selectSurveyToEdit(draftSurveys);
+    }
+    if (selected == null || !mounted) {
+      return;
+    }
+    await _openEditSurveyDialog(selected);
+  }
+
+  Future<SurveyWithQuoteContext?> _selectSurveyToEdit(List<SurveyWithQuoteContext> surveys) {
+    return showDialog<SurveyWithQuoteContext>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Selecciona levantamiento a editar'),
+        content: SizedBox(
+          width: 520,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: surveys.length,
+            separatorBuilder: (_, __) => const Divider(height: 12),
+            itemBuilder: (context, index) {
+              final survey = surveys[index];
+              final preview = survey.description.trim().isEmpty
+                  ? 'Sin descripción'
+                  : survey.description.trim();
+              return ListTile(
+                dense: true,
+                title: Text('Levantamiento ${index + 1}'),
+                subtitle: Text(
+                  '${_formatDateTime(survey.createdAt)}\n$preview',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => Navigator.of(dialogContext).pop(survey),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
           ),
         ],
       ),
@@ -299,6 +358,11 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
     ref.invalidate(surveysByStaffProvider);
   }
 
+  String _formatDateTime(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
+        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'draft':
@@ -317,9 +381,8 @@ class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
 
 class _SurveyEntryCard extends StatelessWidget {
   final SurveyWithQuoteContext survey;
-  final VoidCallback? onEdit;
 
-  const _SurveyEntryCard({required this.survey, this.onEdit});
+  const _SurveyEntryCard({required this.survey});
 
   @override
   Widget build(BuildContext context) {
@@ -330,16 +393,6 @@ class _SurveyEntryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (onEdit != null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Editar levantamiento',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                ),
-              ),
             // Description
             if (survey.description.isNotEmpty)
               Column(
@@ -476,26 +529,6 @@ class _SurveyEditDialogState extends ConsumerState<_SurveyEditDialog> {
       return;
     }
 
-    final remaining = 2 - _photos.length;
-    if (remaining <= 0) {
-      if (mounted) {
-        showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Límite alcanzado'),
-            content: const Text('Solo se permiten 2 fotos por levantamiento.'),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          ),
-        );
-      }
-      return;
-    }
-
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
@@ -506,7 +539,7 @@ class _SurveyEditDialogState extends ConsumerState<_SurveyEditDialog> {
       return;
     }
 
-    final accepted = result.files.take(remaining).toList();
+    final accepted = result.files.toList();
     final items = <_EditablePhotoItem>[];
     for (final file in accepted) {
       final bytes = file.bytes;
@@ -625,23 +658,6 @@ class _SurveyEditDialogState extends ConsumerState<_SurveyEditDialog> {
 
     final retainedPhotos = _photos.where((item) => item.isExisting).toList();
     final newPhotos = _photos.where((item) => !item.isExisting).toList();
-    if (retainedPhotos.length + newPhotos.length > 2) {
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Límite de fotos'),
-          content: const Text('Solo se permiten hasta 2 fotos por levantamiento.'),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
 
     setState(() => _isSaving = true);
     try {
@@ -791,12 +807,12 @@ class _SurveyEditDialogState extends ConsumerState<_SurveyEditDialog> {
                       children: [
                         Expanded(
                           child: Text(
-                            'Fotos ($totalPhotos/2)',
+                            'Fotos ($totalPhotos)',
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
                         TextButton.icon(
-                          onPressed: totalPhotos >= 2 ? null : _addPhotos,
+                          onPressed: _isSaving ? null : _addPhotos,
                           icon: const Icon(Icons.add_photo_alternate_outlined),
                           label: const Text('Agregar fotos'),
                         ),
@@ -933,10 +949,10 @@ class _EditablePhotoTileState extends State<_EditablePhotoTile> {
               if (bytes != null && bytes.isNotEmpty) {
                 return Image.memory(bytes, fit: BoxFit.cover);
               }
-            : Image.memory(widget.item.bytes!, fit: BoxFit.cover);
+              return _photoPlaceholder(context, icon: Icons.image_not_supported_outlined);
             },
           )
-        : Image.memory(item.bytes!, fit: BoxFit.cover);
+        : Image.memory(widget.item.bytes!, fit: BoxFit.cover);
 
     return SizedBox(
       width: 160,

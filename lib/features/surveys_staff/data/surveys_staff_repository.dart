@@ -217,9 +217,6 @@ class SurveysStaffRepository {
         .map((path) => path.trim())
         .where((path) => path.isNotEmpty)
         .toList();
-    if (nextRetainedPaths.length + newEvidenceInputs.length > 2) {
-      throw StateError('Solo se permiten hasta 2 fotos por levantamiento.');
-    }
 
     final removedPaths = currentEvidencePaths.difference(nextRetainedPaths.toSet()).toList();
     final uploadedPaths = <String>[];
