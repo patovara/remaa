@@ -1,9 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/utils/image_optimizer.dart';
 import '../data/surveys_staff_provider.dart';
 import '../data/surveys_staff_repository.dart';
+import '../../levantamiento/presentation/levantamiento_state.dart';
+import '../../cotizaciones/domain/quote_models.dart';
 
 class SurveysStaffPage extends ConsumerWidget {
   const SurveysStaffPage({super.key});
@@ -125,7 +129,7 @@ class _DesktopSurveysView extends StatelessWidget {
   }
 }
 
-class _QuoteExpansionTile extends StatefulWidget {
+class _QuoteExpansionTile extends ConsumerStatefulWidget {
   final String quoteId;
   final List<SurveyWithQuoteContext> surveys;
   final bool isDesktop;
@@ -137,10 +141,10 @@ class _QuoteExpansionTile extends StatefulWidget {
   });
 
   @override
-  State<_QuoteExpansionTile> createState() => _QuoteExpansionTileState();
+  ConsumerState<_QuoteExpansionTile> createState() => _QuoteExpansionTileState();
 }
 
-class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
+class _QuoteExpansionTileState extends ConsumerState<_QuoteExpansionTile> {
   @override
   Widget build(BuildContext context) {
     if (widget.surveys.isEmpty) {
@@ -149,6 +153,7 @@ class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
 
     final firstSurvey = widget.surveys.first;
     final statusColor = _getStatusColor(firstSurvey.quoteStatus);
+    final isDraft = firstSurvey.quoteStatus.toLowerCase() == 'draft';
 
     return Card(
       elevation: 2,
@@ -173,19 +178,40 @@ class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                firstSurvey.quoteStatus.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
+            Flexible(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      firstSurvey.quoteStatus.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                  if (isDraft)
+                    FilledButton.tonalIcon(
+                      onPressed: () => _startEditFlowForBlock(),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Editar'),
+                    ),
+                ],
               ),
             ),
           ],
@@ -248,6 +274,93 @@ class _QuoteExpansionTileState extends State<_QuoteExpansionTile> {
         ],
       ),
     );
+  }
+
+  Future<void> _startEditFlowForBlock() async {
+    if (widget.surveys.isEmpty) {
+      return;
+    }
+    final draftSurveys = [
+      for (final survey in widget.surveys)
+        if (survey.quoteStatus.toLowerCase() == 'draft') survey,
+    ];
+    if (draftSurveys.isEmpty) {
+      return;
+    }
+
+    SurveyWithQuoteContext? selected;
+    if (draftSurveys.length == 1) {
+      selected = draftSurveys.first;
+    } else {
+      selected = await _selectSurveyToEdit(draftSurveys);
+    }
+    if (selected == null || !mounted) {
+      return;
+    }
+    await _openEditSurveyDialog(selected);
+  }
+
+  Future<SurveyWithQuoteContext?> _selectSurveyToEdit(List<SurveyWithQuoteContext> surveys) {
+    return showDialog<SurveyWithQuoteContext>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Selecciona levantamiento a editar'),
+        content: SizedBox(
+          width: 520,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: surveys.length,
+            separatorBuilder: (_, __) => const Divider(height: 12),
+            itemBuilder: (context, index) {
+              final survey = surveys[index];
+              final preview = survey.description.trim().isEmpty
+                  ? 'Sin descripción'
+                  : survey.description.trim();
+              return ListTile(
+                dense: true,
+                title: Text('Levantamiento ${index + 1}'),
+                subtitle: Text(
+                  '${_formatDateTime(survey.createdAt)}\n$preview',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => Navigator.of(dialogContext).pop(survey),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openEditSurveyDialog(SurveyWithQuoteContext survey) async {
+    if (survey.quoteStatus.toLowerCase() != 'draft') {
+      return;
+    }
+
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _SurveyEditDialog(survey: survey),
+    );
+
+    if (!mounted || saved != true) {
+      return;
+    }
+
+    ref.invalidate(surveysByStaffProvider);
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
+        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   Color _getStatusColor(String status) {
@@ -352,6 +465,543 @@ class _SurveyEntryCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _SurveyEditDialog extends ConsumerStatefulWidget {
+  const _SurveyEditDialog({required this.survey});
+
+  final SurveyWithQuoteContext survey;
+
+  @override
+  ConsumerState<_SurveyEditDialog> createState() => _SurveyEditDialogState();
+}
+
+class _SurveyEditDialogState extends ConsumerState<_SurveyEditDialog> {
+  final _repository = SurveysStaffRepository();
+  late final TextEditingController _projectNameController;
+  late final TextEditingController _descriptionController;
+  final List<_EditablePhotoItem> _photos = [];
+  bool _isDirty = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectNameController = TextEditingController(text: widget.survey.projectName);
+    _descriptionController = TextEditingController(text: widget.survey.description);
+    _projectNameController.addListener(_markDirty);
+    _descriptionController.addListener(_markDirty);
+    _photos.addAll([
+      for (final photo in widget.survey.evidenceMetadata)
+        _EditablePhotoItem.existing(
+          path: (photo['object_path'] as String? ?? '').trim(),
+          name: (photo['original_name'] as String? ?? '').trim().isNotEmpty
+              ? (photo['original_name'] as String).trim()
+              : (photo['object_path'] as String? ?? 'foto.jpg'),
+          sizeBytes: (photo['file_size_bytes'] as num?)?.toInt() ?? 0,
+          mimeType: photo['mime_type'] as String?,
+          sortOrder: (photo['sort_order'] as num?)?.toInt() ?? 0,
+        ),
+    ]);
+    _photos.removeWhere((item) => item.path.trim().isEmpty);
+    _photos.sort((left, right) => left.sortOrder.compareTo(right.sortOrder));
+  }
+
+  @override
+  void dispose() {
+    _projectNameController.removeListener(_markDirty);
+    _descriptionController.removeListener(_markDirty);
+    _projectNameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _markDirty() {
+    if (_isDirty) {
+      return;
+    }
+    setState(() => _isDirty = true);
+  }
+
+  Future<void> _addPhotos() async {
+    if (_isSaving) {
+      return;
+    }
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
+      withData: true,
+    );
+
+    if (!mounted || result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final accepted = result.files.toList();
+    final items = <_EditablePhotoItem>[];
+    for (final file in accepted) {
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        continue;
+      }
+      try {
+        final optimized = await optimizeImageForDocument(
+          inputBytes: bytes,
+          fileName: file.name,
+          profile: ImageOptimizationProfile.gridDocument,
+        );
+        items.add(
+          _EditablePhotoItem.newPhoto(
+            name: optimized.fileName,
+            bytes: optimized.bytes,
+            sizeBytes: optimized.bytes.length,
+            mimeType: optimized.mimeType,
+          ),
+        );
+      } on ImageOptimizationException catch (error) {
+        if (mounted) {
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('No se pudo agregar la foto'),
+              content: Text('${file.name}: ${error.message}'),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cerrar'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    }
+
+    if (items.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _photos.addAll(items);
+      _isDirty = true;
+    });
+  }
+
+  void _removePhoto(_EditablePhotoItem item) {
+    setState(() {
+      _photos.remove(item);
+      _isDirty = true;
+    });
+  }
+
+  Future<void> _requestClose() async {
+    if (_isSaving) {
+      return;
+    }
+
+    if (!_isDirty) {
+      if (mounted) {
+        Navigator.of(context).pop(false);
+      }
+      return;
+    }
+
+    final discard = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Salir sin guardar'),
+        content: const Text('Hay cambios sin guardar. ¿Deseas salir sin guardar los cambios?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Salir sin guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (discard == true && mounted) {
+      Navigator.of(context).pop(false);
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    if (_isSaving) {
+      return;
+    }
+
+    final projectName = _projectNameController.text.trim();
+    if (projectName.isEmpty) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Falta información'),
+          content: const Text('El título visible del proyecto no puede quedar vacío.'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final retainedPhotos = _photos.where((item) => item.isExisting).toList();
+    final newPhotos = _photos.where((item) => !item.isExisting).toList();
+
+    setState(() => _isSaving = true);
+    try {
+      final retainedPaths = retainedPhotos
+          .map((item) => item.path.trim())
+          .where((path) => path.isNotEmpty)
+          .toList();
+      final retainedMeta = [
+        for (final meta in widget.survey.evidenceMetadata)
+          if (meta['object_path'] is String && retainedPaths.contains((meta['object_path'] as String).trim()))
+            meta,
+      ];
+      final newInputs = [
+        for (final item in newPhotos)
+          if (item.bytes != null && item.bytes!.isNotEmpty)
+            SurveyEvidenceInput(
+              bytes: item.bytes!,
+              originalName: item.name,
+              fileSizeBytes: item.sizeBytes,
+              mimeType: item.mimeType,
+            ),
+      ];
+
+      final updated = await _repository.updateSurveyEntry(
+        survey: widget.survey,
+        projectName: projectName,
+        description: _descriptionController.text.trim(),
+        retainedEvidenceMetadata: retainedMeta,
+        retainedEvidencePaths: retainedPaths,
+        newEvidenceInputs: newInputs,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      final active = ref.read(activeLevantamientoProvider);
+      if (active != null && active.isActive &&
+          (active.quoteId == widget.survey.quoteId || active.projectId == widget.survey.projectId)) {
+        final evidencePreviewList = <Uint8List>[
+          for (final item in retainedPhotos)
+            if (item.isExisting)
+              await _repository.fetchSurveyImagePreview(item.path).then((bytes) => bytes ?? Uint8List(0)),
+          for (final item in newPhotos)
+            if (item.bytes != null && item.bytes!.isNotEmpty) item.bytes!,
+        ].where((bytes) => bytes.isNotEmpty).toList();
+
+        ref.read(activeLevantamientoProvider.notifier).updateSnapshot(
+              projectName: updated.projectName,
+            );
+        ref.read(activeLevantamientoProvider.notifier).updateEntry(
+              widget.survey.surveyId,
+              SurveyEntryRecord(
+                id: updated.surveyId,
+                projectId: updated.projectId,
+                quoteId: updated.quoteId,
+                description: updated.description,
+                evidencePaths: updated.evidencePaths,
+                evidencePreviewList: evidencePreviewList,
+                evidenceMetadata: [
+                  for (final meta in updated.evidenceMetadata)
+                    SurveyEvidenceMeta(
+                      objectPath: meta['object_path'] as String? ?? '',
+                      originalName: meta['original_name'] as String? ?? '',
+                      fileSizeBytes: (meta['file_size_bytes'] as num?)?.toInt() ?? 0,
+                      sortOrder: (meta['sort_order'] as num?)?.toInt() ?? 0,
+                      mimeType: meta['mime_type'] as String?,
+                      widthPx: (meta['width_px'] as num?)?.toInt(),
+                      heightPx: (meta['height_px'] as num?)?.toInt(),
+                      takenAt: meta['taken_at'] == null ? null : DateTime.tryParse(meta['taken_at'].toString()),
+                    ),
+                ],
+                createdAt: updated.createdAt,
+              ),
+            );
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (error) {
+      if (mounted) {
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('No se pudo guardar'),
+            content: Text('$error'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalPhotos = _photos.length;
+    return PopScope(
+      canPop: false,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 44),
+                      child: Text(
+                        'Editar levantamiento',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _projectNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Título visible del proyecto',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _descriptionController,
+                      minLines: 4,
+                      maxLines: 8,
+                      decoration: const InputDecoration(
+                        labelText: 'Descripción',
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Fotos ($totalPhotos)',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _isSaving ? null : _addPhotos,
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: const Text('Agregar fotos'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_photos.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Aun no hay fotos cargadas en este levantamiento.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          for (final item in _photos)
+                            _EditablePhotoTile(
+                              item: item,
+                              onRemove: _isSaving ? null : () => _removePhoto(item),
+                              repository: _repository,
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: _isSaving ? null : _saveChanges,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: Text(_isSaving ? 'Guardando...' : 'Guardar cambios'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  tooltip: 'Cerrar',
+                  onPressed: _isSaving ? null : _requestClose,
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditablePhotoItem {
+  const _EditablePhotoItem.existing({
+    required this.path,
+    required this.name,
+    required this.sizeBytes,
+    required this.mimeType,
+    required this.sortOrder,
+  })  : bytes = null,
+        isExisting = true;
+
+  const _EditablePhotoItem.newPhoto({
+    required this.name,
+    required this.bytes,
+    required this.sizeBytes,
+    required this.mimeType,
+  })  : path = '',
+        sortOrder = 0,
+        isExisting = false;
+
+  final String path;
+  final String name;
+  final Uint8List? bytes;
+  final int sizeBytes;
+  final String? mimeType;
+  final int sortOrder;
+  final bool isExisting;
+}
+
+class _EditablePhotoTile extends StatefulWidget {
+  const _EditablePhotoTile({
+    required this.item,
+    required this.onRemove,
+    required this.repository,
+  });
+
+  final _EditablePhotoItem item;
+  final VoidCallback? onRemove;
+  final SurveysStaffRepository repository;
+
+  @override
+  State<_EditablePhotoTile> createState() => _EditablePhotoTileState();
+}
+
+class _EditablePhotoTileState extends State<_EditablePhotoTile> {
+  late final Future<Uint8List?> _imageFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageFuture = widget.item.isExisting
+        ? widget.repository.fetchSurveyImagePreview(widget.item.path)
+        : Future<Uint8List?>.value(widget.item.bytes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = widget.item.isExisting
+        ? FutureBuilder<Uint8List?>(
+            future: _imageFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return _photoPlaceholder(context);
+              }
+              final bytes = snapshot.data;
+              if (bytes != null && bytes.isNotEmpty) {
+                return Image.memory(bytes, fit: BoxFit.cover);
+              }
+              return _photoPlaceholder(context, icon: Icons.image_not_supported_outlined);
+            },
+          )
+        : Image.memory(widget.item.bytes!, fit: BoxFit.cover);
+
+    return SizedBox(
+      width: 160,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(width: 160, height: 120, child: child),
+              ),
+              if (widget.onRemove != null)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Material(
+                    color: Colors.black54,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      iconSize: 18,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                      onPressed: widget.onRemove,
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _photoPlaceholder(BuildContext context, {IconData icon = Icons.image_outlined}) {
+    return Container(
+      color: Colors.grey.shade200,
+      alignment: Alignment.center,
+      child: Icon(icon, color: Colors.grey.shade600),
+    );
   }
 }
 
