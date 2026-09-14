@@ -10,7 +10,7 @@ abstract final class QuoteStatus {
 }
 
 const String approveWithoutPdfConfirmationRequired =
-  'approve_without_pdf_confirmation_required';
+    'approve_without_pdf_confirmation_required';
 
 class QuoteRecord {
   const QuoteRecord({
@@ -67,7 +67,8 @@ class QuoteRecord {
   bool get isDeclined => status == QuoteStatus.declined;
   bool get isActaFinalizada => status == QuoteStatus.actaFinalizada;
   bool get isPaid => status == QuoteStatus.paid;
-  bool get hasApprovalPdf => approvalPdfPath != null && approvalPdfPath!.trim().isNotEmpty;
+  bool get hasApprovalPdf =>
+      approvalPdfPath != null && approvalPdfPath!.trim().isNotEmpty;
   bool get canEditItems => isDraft;
   bool get hasFinalExchangeSnapshot =>
       finalExchangeRate != null &&
@@ -112,13 +113,16 @@ class QuoteRecord {
       createdAt: createdAt ?? this.createdAt,
       validUntil: validUntil ?? this.validUntil,
       approvalPdfPath: approvalPdfPath ?? this.approvalPdfPath,
-      approvalPdfUploadedAt: approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,
+      approvalPdfUploadedAt:
+          approvalPdfUploadedAt ?? this.approvalPdfUploadedAt,
       recipientEmail: recipientEmail ?? this.recipientEmail,
       finalExchangeRate: finalExchangeRate ?? this.finalExchangeRate,
       finalExchangeBase: finalExchangeBase ?? this.finalExchangeBase,
       finalExchangeTarget: finalExchangeTarget ?? this.finalExchangeTarget,
-      finalExchangeProvider: finalExchangeProvider ?? this.finalExchangeProvider,
-      finalExchangeCapturedAt: finalExchangeCapturedAt ?? this.finalExchangeCapturedAt,
+      finalExchangeProvider:
+          finalExchangeProvider ?? this.finalExchangeProvider,
+      finalExchangeCapturedAt:
+          finalExchangeCapturedAt ?? this.finalExchangeCapturedAt,
       finalSubtotalUsd: finalSubtotalUsd ?? this.finalSubtotalUsd,
       finalTaxUsd: finalTaxUsd ?? this.finalTaxUsd,
       finalTotalUsd: finalTotalUsd ?? this.finalTotalUsd,
@@ -315,18 +319,24 @@ class SurveyEvidenceMeta {
 
 class ActaDocumentRecord {
   const ActaDocumentRecord({
+    this.id,
     required this.quoteId,
     required this.fileName,
     required this.bytes,
     required this.createdAt,
+    this.startDate,
+    this.conclusionDate,
     this.objectPath,
     this.photoAssets = const <ActaPhotoAssetMeta>[],
   });
 
+  final String? id;
   final String quoteId;
   final String fileName;
   final Uint8List bytes;
   final DateTime createdAt;
+  final DateTime? startDate;
+  final DateTime? conclusionDate;
   final String? objectPath;
   final List<ActaPhotoAssetMeta> photoAssets;
 }
@@ -334,15 +344,21 @@ class ActaDocumentRecord {
 /// Metadata only — no bytes. Used for listing saved actas without downloading.
 class ActaDocumentMeta {
   const ActaDocumentMeta({
+    required this.id,
     required this.quoteId,
     required this.fileName,
     required this.createdAt,
+    this.startDate,
+    this.conclusionDate,
     this.objectPath,
   });
 
+  final String id;
   final String quoteId;
   final String fileName;
   final DateTime createdAt;
+  final DateTime? startDate;
+  final DateTime? conclusionDate;
   final String? objectPath;
 }
 

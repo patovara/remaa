@@ -318,15 +318,21 @@ create table if not exists public.project_survey_entries (
 );
 
 create table if not exists public.quote_acta_assets (
-  quote_id uuid primary key references public.quotes(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
+  quote_id uuid not null references public.quotes(id) on delete cascade,
   pdf_object_path text not null,
   pdf_file_name text not null,
   pdf_file_size_bytes integer not null default 0,
   photo_meta jsonb not null default '[]'::jsonb,
+  start_date date,
+  conclusion_date date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint quote_acta_assets_photo_meta_is_array check (jsonb_typeof(photo_meta) = 'array')
 );
+
+create index if not exists quote_acta_assets_quote_id_created_idx
+  on public.quote_acta_assets (quote_id, created_at desc);
 
 do $$
 begin

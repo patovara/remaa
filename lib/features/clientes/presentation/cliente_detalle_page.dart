@@ -1,4 +1,3 @@
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,7 +57,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     try {
       final row = await SupabaseBootstrap.client!
           .from('clients')
-          .select('id, business_name, contact_name, notes, rfc, email, phone, address_line, city, state, sector_label, logo_path, is_hidden')
+          .select(
+            'id, business_name, contact_name, notes, rfc, email, phone, address_line, city, state, sector_label, logo_path, is_hidden',
+          )
           .eq('id', widget.clientId)
           .maybeSingle();
 
@@ -93,13 +94,18 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
         id: row['id'] as String? ?? widget.clientId,
         name: businessName,
         contactName: contactName,
-        rfc: (row['rfc'] as String? ?? '').trim().isEmpty ? null : (row['rfc'] as String? ?? '').trim(),
-        sector: rawSector.isEmpty ? 'SIN SECTOR' : _metadataRepository.normalizeSectorLabel(rawSector),
+        rfc: (row['rfc'] as String? ?? '').trim().isEmpty
+            ? null
+            : (row['rfc'] as String? ?? '').trim(),
+        sector: rawSector.isEmpty
+            ? 'SIN SECTOR'
+            : _metadataRepository.normalizeSectorLabel(rawSector),
         badge: 'Activo',
         activeProjects: '00',
         months: '--',
         icon: Icons.apartment,
-        contactEmail: (row['email'] as String? ?? 'sin-correo@cliente.com').trim(),
+        contactEmail: (row['email'] as String? ?? 'sin-correo@cliente.com')
+            .trim(),
         phone: (row['phone'] as String? ?? 'Sin telefono').trim(),
         address: fullAddress.isEmpty ? 'Sin direccion registrada' : fullAddress,
         city: normalizedLocation.city,
@@ -139,10 +145,7 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       return (city: rawCity, state: rawState);
     }
 
-    return (
-      city: parts.sublist(1).join(', '),
-      state: parts.first,
-    );
+    return (city: parts.sublist(1).join(', '), state: parts.first);
   }
 
   String _composeAddressForDisplay({
@@ -194,9 +197,15 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
         .where((quote) => projectIds.contains(quote.projectId))
         .toList();
 
-    final payableQuotes = clientQuotes.where((quote) => quote.isActaFinalizada).length;
-    final concludedQuotes = clientQuotes.where((quote) => quote.isConcluded).length;
-    final approvedQuotes = clientQuotes.where((quote) => quote.isApproved).length;
+    final payableQuotes = clientQuotes
+        .where((quote) => quote.isActaFinalizada)
+        .length;
+    final concludedQuotes = clientQuotes
+        .where((quote) => quote.isConcluded)
+        .length;
+    final approvedQuotes = clientQuotes
+        .where((quote) => quote.isApproved)
+        .length;
 
     return _ClientQuoteCounters(
       payableQuotes: payableQuotes,
@@ -207,7 +216,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
 
   List<ClientResponsibleRecord> get _currentResponsibles {
     final currentState = ref.read(clientResponsiblesProvider(widget.clientId));
-    return _sorted(currentState.valueOrNull ?? _resolvedClient?.responsibles ?? const []);
+    return _sorted(
+      currentState.valueOrNull ?? _resolvedClient?.responsibles ?? const [],
+    );
   }
 
   Future<void> _addResponsible() async {
@@ -236,7 +247,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     }
 
     try {
-      await ref.read(clientResponsiblesProvider(widget.clientId).notifier).save(created);
+      await ref
+          .read(clientResponsiblesProvider(widget.clientId).notifier)
+          .save(created);
     } catch (_) {
       if (!mounted) {
         return;
@@ -245,7 +258,10 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       return;
     }
 
-    _showMessage(messenger, 'Responsable ${created.role.label.toLowerCase()} agregado.');
+    _showMessage(
+      messenger,
+      'Responsable ${created.role.label.toLowerCase()} agregado.',
+    );
   }
 
   Future<void> _editResponsible(ClientResponsibleRecord responsible) async {
@@ -278,7 +294,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     }
 
     try {
-      await ref.read(clientResponsiblesProvider(widget.clientId).notifier).save(updated);
+      await ref
+          .read(clientResponsiblesProvider(widget.clientId).notifier)
+          .save(updated);
     } catch (_) {
       if (!mounted) {
         return;
@@ -287,7 +305,10 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       return;
     }
 
-    _showMessage(messenger, 'Responsable ${updated.role.label.toLowerCase()} actualizado.');
+    _showMessage(
+      messenger,
+      'Responsable ${updated.role.label.toLowerCase()} actualizado.',
+    );
   }
 
   Future<void> _deleteResponsible(ClientResponsibleRecord responsible) async {
@@ -328,7 +349,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
     }
 
     try {
-      await ref.read(clientResponsiblesProvider(widget.clientId).notifier).remove(responsible);
+      await ref
+          .read(clientResponsiblesProvider(widget.clientId).notifier)
+          .remove(responsible);
     } catch (_) {
       if (!mounted) {
         return;
@@ -337,23 +360,25 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
       return;
     }
 
-    _showMessage(messenger, 'Responsable ${responsible.role.label.toLowerCase()} eliminado.');
+    _showMessage(
+      messenger,
+      'Responsable ${responsible.role.label.toLowerCase()} eliminado.',
+    );
   }
 
   void _showMessage(ScaffoldMessengerState messenger, String message) {
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
   @override
   Widget build(BuildContext context) {
-    final responsiblesState = ref.watch(clientResponsiblesProvider(widget.clientId));
+    final responsiblesState = ref.watch(
+      clientResponsiblesProvider(widget.clientId),
+    );
     final quotesAsync = ref.watch(quotesProvider);
     final projectsAsync = ref.watch(quoteProjectsProvider);
     return FutureBuilder<ClientRecord?>(
@@ -378,14 +403,17 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
               label: const Text('Volver'),
             ),
             child: const RemaPanel(
-              child: Text('Revisa el listado de clientes y vuelve a abrir el expediente desde ahi.'),
+              child: Text(
+                'Revisa el listado de clientes y vuelve a abrir el expediente desde ahi.',
+              ),
             ),
           );
         }
 
         return PageFrame(
           title: (_editedClient ?? client).name,
-          subtitle: 'Expediente del cliente y administracion de responsables para firmas.',
+          subtitle:
+              'Expediente del cliente y administracion de responsables para firmas.',
           trailing: TextButton.icon(
             onPressed: () => context.go('/clientes'),
             icon: const Icon(Icons.arrow_back),
@@ -400,25 +428,35 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                 quotesAsync: quotesAsync,
                 projectsAsync: projectsAsync,
               );
-              final responsibleItemsFinal = _sorted(responsiblesState.valueOrNull ?? effectiveClient.responsibles);
+              final responsibleItemsFinal = _sorted(
+                responsiblesState.valueOrNull ?? effectiveClient.responsibles,
+              );
               final summary = _ClientSummaryPanel(
                 client: effectiveClient,
                 quoteCounters: quoteCounters,
-                onClientUpdated: (updated) => setState(() => _editedClient = updated),
+                onClientUpdated: (updated) =>
+                    setState(() => _editedClient = updated),
                 metadataRepository: _metadataRepository,
                 isResponsiblesEditing: _isEditingResponsibles,
-                onEditingChanged: (value) => setState(() => _isClientSummaryEditing = value),
+                onEditingChanged: (value) =>
+                    setState(() => _isClientSummaryEditing = value),
               );
               final responsiblesPanel = _ResponsiblesPanel(
                 responsibles: responsibleItemsFinal,
-                isLoading: responsiblesState.isLoading && !responsiblesState.hasValue,
-                canAddMore: responsibleItemsFinal.length < ResponsibleRole.values.length,
+                isLoading:
+                    responsiblesState.isLoading && !responsiblesState.hasValue,
+                canAddMore:
+                    responsibleItemsFinal.length <
+                    ResponsibleRole.values.length,
                 isClientEditing: _isClientSummaryEditing,
                 onAdd: _addResponsible,
                 onEdit: _editResponsible,
                 onDelete: _deleteResponsible,
-                onRetry: () => ref.read(clientResponsiblesProvider(widget.clientId).notifier).reload(),
-                hasError: responsiblesState.hasError && !responsiblesState.hasValue,
+                onRetry: () => ref
+                    .read(clientResponsiblesProvider(widget.clientId).notifier)
+                    .reload(),
+                hasError:
+                    responsiblesState.hasError && !responsiblesState.hasValue,
               );
 
               if (isWide) {
@@ -433,7 +471,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                           const SizedBox(height: 24),
                           _ClientQuotesPanel(
                             clientId: widget.clientId,
-                            onCreateQuote: () => context.go('/cotizaciones?clientId=${widget.clientId}&new=1'),
+                            onCreateQuote: () => context.go(
+                              '/cotizaciones?clientId=${widget.clientId}&new=1',
+                            ),
                           ),
                           const SizedBox(height: 24),
                           _ClientActasPanel(clientId: widget.clientId),
@@ -454,7 +494,9 @@ class _ClienteDetallePageState extends ConsumerState<ClienteDetallePage> {
                   const SizedBox(height: 20),
                   _ClientQuotesPanel(
                     clientId: widget.clientId,
-                    onCreateQuote: () => context.go('/cotizaciones?clientId=${widget.clientId}&new=1'),
+                    onCreateQuote: () => context.go(
+                      '/cotizaciones?clientId=${widget.clientId}&new=1',
+                    ),
                   ),
                   const SizedBox(height: 20),
                   _ClientActasPanel(clientId: widget.clientId),
@@ -516,7 +558,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   late final TextEditingController _cityCtrl;
 
   String? _normalizeSectorSelection(String? value) {
-    final normalized = widget.metadataRepository.normalizeSectorLabel(value ?? '');
+    final normalized = widget.metadataRepository.normalizeSectorLabel(
+      value ?? '',
+    );
     if (normalized.isEmpty || normalized == 'SIN SECTOR') {
       return null;
     }
@@ -551,7 +595,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
 
     final suffix = ', $location';
     while (address.toLowerCase().endsWith(suffix.toLowerCase())) {
-      address = address.substring(0, address.length - suffix.length).trimRight();
+      address = address
+          .substring(0, address.length - suffix.length)
+          .trimRight();
       address = address.replaceAll(RegExp(r'[\s,]+$'), '');
     }
 
@@ -562,7 +608,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.client.name);
-    _contactNameCtrl = TextEditingController(text: widget.client.contactName ?? '');
+    _contactNameCtrl = TextEditingController(
+      text: widget.client.contactName ?? '',
+    );
     _rfcCtrl = TextEditingController(text: widget.client.rfc ?? '');
     _emailCtrl = TextEditingController(text: widget.client.contactEmail);
     _phoneCtrl = TextEditingController(
@@ -589,7 +637,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       _contactNameCtrl.text = widget.client.contactName ?? '';
       _rfcCtrl.text = widget.client.rfc ?? '';
       _emailCtrl.text = widget.client.contactEmail;
-      _phoneCtrl.text = ClientInputRules.editableMxPhoneDigits(widget.client.phone);
+      _phoneCtrl.text = ClientInputRules.editableMxPhoneDigits(
+        widget.client.phone,
+      );
       _addressCtrl.text = _addressLineOnly(widget.client);
       _stateCtrl.text = widget.client.state ?? '';
       _cityCtrl.text = widget.client.city ?? '';
@@ -623,8 +673,13 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       return;
     }
     setState(() {
-      _sectorLabels = _buildSectorLabels(labels, _selectedSector ?? widget.client.sector);
-      final normalizedClientSector = _normalizeSectorSelection(widget.client.sector);
+      _sectorLabels = _buildSectorLabels(
+        labels,
+        _selectedSector ?? widget.client.sector,
+      );
+      final normalizedClientSector = _normalizeSectorSelection(
+        widget.client.sector,
+      );
       if (_selectedSector != null && !_sectorLabels.contains(_selectedSector)) {
         _selectedSector = null;
       }
@@ -662,7 +717,10 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         _logoBytes = optimized.bytes;
         _logoName = optimized.fileName;
       });
-      showRemaMessage(context, 'Logo optimizado a formato cuadrado maximo 500x500.');
+      showRemaMessage(
+        context,
+        'Logo optimizado a formato cuadrado maximo 500x500.',
+      );
     } on ImageOptimizationException catch (error) {
       if (!mounted) {
         return;
@@ -697,7 +755,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     );
     controller.dispose();
 
-    final normalized = widget.metadataRepository.normalizeSectorLabel(created ?? '');
+    final normalized = widget.metadataRepository.normalizeSectorLabel(
+      created ?? '',
+    );
     if (normalized.isEmpty) {
       return;
     }
@@ -721,7 +781,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     final state = _stateCtrl.text.trim();
     final city = _cityCtrl.text.trim();
     final rfc = _rfcCtrl.text.trim().toUpperCase();
-    final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
+    final sector = widget.metadataRepository.normalizeSectorLabel(
+      _selectedSector ?? '',
+    );
 
     String? nameError;
     String? contactNameError;
@@ -734,13 +796,18 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     String? sectorError;
 
     if (businessName.length < ClientInputRules.minTextLength) {
-      nameError = 'La razon social debe tener al menos ${ClientInputRules.minTextLength} caracteres.';
+      nameError =
+          'La razon social debe tener al menos ${ClientInputRules.minTextLength} caracteres.';
     } else if (businessName.length > ClientInputRules.maxTextLength) {
-      nameError = 'La razon social no puede superar ${ClientInputRules.maxTextLength} caracteres.';
+      nameError =
+          'La razon social no puede superar ${ClientInputRules.maxTextLength} caracteres.';
     }
 
-    if (contactName.isNotEmpty && !ClientInputRules.isValidTextOnly(contactName)) {
-      contactNameError = ClientInputRules.textOnlyErrorMessage(fieldLabel: 'nombre de contacto');
+    if (contactName.isNotEmpty &&
+        !ClientInputRules.isValidTextOnly(contactName)) {
+      contactNameError = ClientInputRules.textOnlyErrorMessage(
+        fieldLabel: 'nombre de contacto',
+      );
     }
 
     if (!ClientInputRules.isValidRfc(rfc)) {
@@ -752,7 +819,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     }
 
     if (!ClientInputRules.isValidEmail(email)) {
-      emailError = ClientInputRules.emailErrorMessage(fieldLabel: 'correo principal');
+      emailError = ClientInputRules.emailErrorMessage(
+        fieldLabel: 'correo principal',
+      );
     }
 
     if (address.isNotEmpty && !ClientInputRules.isValidAddress(address)) {
@@ -786,14 +855,14 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     });
 
     return nameError == null &&
-      contactNameError == null &&
-      rfcError == null &&
-      emailError == null &&
-      phoneError == null &&
-      addressError == null &&
+        contactNameError == null &&
+        rfcError == null &&
+        emailError == null &&
+        phoneError == null &&
+        addressError == null &&
         stateError == null &&
         cityError == null &&
-      sectorError == null;
+        sectorError == null;
   }
 
   Future<void> _save() async {
@@ -802,7 +871,9 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     }
 
     final businessName = _nameCtrl.text.trim().toUpperCase();
-    final contactName = ClientInputRules.sanitizeTextOnly(_contactNameCtrl.text);
+    final contactName = ClientInputRules.sanitizeTextOnly(
+      _contactNameCtrl.text,
+    );
     final rfc = _rfcCtrl.text.trim().toUpperCase();
     final phoneDigits = ClientInputRules.digitsOnly(_phoneCtrl.text);
     final phoneE164 = ClientInputRules.toE164Mx(phoneDigits) ?? phoneDigits;
@@ -810,14 +881,18 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
     final address = _addressCtrl.text.trim();
     final state = _stateCtrl.text.trim();
     final city = _cityCtrl.text.trim();
-    final sector = widget.metadataRepository.normalizeSectorLabel(_selectedSector ?? '');
+    final sector = widget.metadataRepository.normalizeSectorLabel(
+      _selectedSector ?? '',
+    );
 
     setState(() => _isSaving = true);
     try {
       // ── Paso 1: subir logo (no bloquea el guardado si falla) ───────────────
       String? logoPath = widget.client.logoPath;
       bool logoUploadFailed = false;
-      if (_logoBytes != null && _logoName != null && _uuidRe.hasMatch(widget.client.id)) {
+      if (_logoBytes != null &&
+          _logoName != null &&
+          _uuidRe.hasMatch(widget.client.id)) {
         try {
           final uploaded = await widget.metadataRepository.uploadLogo(
             clientId: widget.client.id,
@@ -851,7 +926,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
         logoBytes: logoUploadFailed ? widget.client.logoBytes : _logoBytes,
         isHidden: widget.client.isHidden,
       );
-      if (_uuidRe.hasMatch(widget.client.id) && SupabaseBootstrap.client != null) {
+      if (_uuidRe.hasMatch(widget.client.id) &&
+          SupabaseBootstrap.client != null) {
         await widget.metadataRepository.updateClientMetadata(
           clientId: updated.id,
           businessName: updated.name,
@@ -909,10 +985,16 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
       if (!mounted) {
         return;
       }
-      showRemaMessage(context, nextHidden ? 'Cliente ocultado.' : 'Cliente restaurado.');
+      showRemaMessage(
+        context,
+        nextHidden ? 'Cliente ocultado.' : 'Cliente restaurado.',
+      );
     } catch (_) {
       if (mounted) {
-        showRemaMessage(context, 'No fue posible actualizar la visibilidad del cliente.');
+        showRemaMessage(
+          context,
+          'No fue posible actualizar la visibilidad del cliente.',
+        );
       }
     } finally {
       if (mounted) {
@@ -944,11 +1026,8 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                           width: 72,
                           height: 72,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Icon(
-                            client.icon,
-                            color: Colors.white,
-                            size: 32,
-                          ),
+                          errorBuilder: (_, _, _) =>
+                              Icon(client.icon, color: Colors.white, size: 32),
                         ),
                       )
                     : Icon(client.icon, color: Colors.white, size: 32),
@@ -961,22 +1040,24 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                     Text(
                       client.badge.toUpperCase(),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.72),
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2,
-                          ),
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       client.name,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineSmall?.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       client.sector,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.8),
-                          ),
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
                     ),
                   ],
                 ),
@@ -998,15 +1079,28 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                         spacing: 8,
                         children: [
                           TextButton.icon(
-                            onPressed: _uuidRe.hasMatch(client.id) && !_isUpdatingVisibility ? _toggleHidden : null,
+                            onPressed:
+                                _uuidRe.hasMatch(client.id) &&
+                                    !_isUpdatingVisibility
+                                ? _toggleHidden
+                                : null,
                             icon: _isUpdatingVisibility
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
-                                : Icon(client.isHidden ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18),
-                            label: Text(client.isHidden ? 'Restaurar' : 'Ocultar'),
+                                : Icon(
+                                    client.isHidden
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    size: 18,
+                                  ),
+                            label: Text(
+                              client.isHidden ? 'Restaurar' : 'Ocultar',
+                            ),
                           ),
                           TextButton.icon(
                             onPressed: widget.isResponsiblesEditing
@@ -1216,16 +1310,25 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                           ? null
                           : () {
                               _nameCtrl.text = widget.client.name;
-                              _contactNameCtrl.text = widget.client.contactName ?? '';
+                              _contactNameCtrl.text =
+                                  widget.client.contactName ?? '';
                               _rfcCtrl.text = widget.client.rfc ?? '';
                               _emailCtrl.text = widget.client.contactEmail;
-                              _phoneCtrl.text = ClientInputRules.editableMxPhoneDigits(widget.client.phone);
+                              _phoneCtrl.text =
+                                  ClientInputRules.editableMxPhoneDigits(
+                                    widget.client.phone,
+                                  );
                               _addressCtrl.text = widget.client.address;
                               _stateCtrl.text = widget.client.state ?? '';
                               _cityCtrl.text = widget.client.city ?? '';
                               setState(() {
-                                _selectedSector = _normalizeSectorSelection(widget.client.sector);
-                                _sectorLabels = _buildSectorLabels(_sectorLabels, _selectedSector);
+                                _selectedSector = _normalizeSectorSelection(
+                                  widget.client.sector,
+                                );
+                                _sectorLabels = _buildSectorLabels(
+                                  _sectorLabels,
+                                  _selectedSector,
+                                );
                                 _logoBytes = widget.client.logoBytes;
                                 _logoName = null;
                                 _nameError = null;
@@ -1261,19 +1364,29 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 const SizedBox(height: 16),
                 _SummaryRow(
                   label: 'Nombre de contacto',
-                  value: client.displayContactName.isEmpty ? 'Sin contacto principal' : client.displayContactName,
+                  value: client.displayContactName.isEmpty
+                      ? 'Sin contacto principal'
+                      : client.displayContactName,
                 ),
                 const SizedBox(height: 16),
                 _SummaryRow(
                   label: 'RFC',
-                  value: (client.rfc == null || client.rfc!.trim().isEmpty) ? 'Sin RFC' : client.rfc!,
+                  value: (client.rfc == null || client.rfc!.trim().isEmpty)
+                      ? 'Sin RFC'
+                      : client.rfc!,
                 ),
                 const SizedBox(height: 16),
                 _SummaryRow(label: 'Sector', value: client.sector),
                 const SizedBox(height: 16),
-                _SummaryRow(label: 'Visibilidad', value: client.isHidden ? 'Oculto' : 'Visible'),
+                _SummaryRow(
+                  label: 'Visibilidad',
+                  value: client.isHidden ? 'Oculto' : 'Visible',
+                ),
                 const SizedBox(height: 16),
-                _SummaryRow(label: 'Correo principal', value: client.contactEmail),
+                _SummaryRow(
+                  label: 'Correo principal',
+                  value: client.contactEmail,
+                ),
                 const SizedBox(height: 16),
                 _SummaryRow(label: 'Telefono', value: client.phone),
                 const SizedBox(height: 16),
@@ -1281,14 +1394,19 @@ class _ClientSummaryPanelState extends State<_ClientSummaryPanel> {
                 const SizedBox(height: 16),
                 _SummaryRow(
                   label: 'Ubicacion',
-                  value: [
-                    if ((client.state ?? '').trim().isNotEmpty) client.state!.trim(),
-                    if ((client.city ?? '').trim().isNotEmpty) client.city!.trim(),
-                  ].join(', ').isEmpty
+                  value:
+                      [
+                        if ((client.state ?? '').trim().isNotEmpty)
+                          client.state!.trim(),
+                        if ((client.city ?? '').trim().isNotEmpty)
+                          client.city!.trim(),
+                      ].join(', ').isEmpty
                       ? 'Sin ubicacion registrada'
                       : [
-                          if ((client.state ?? '').trim().isNotEmpty) client.state!.trim(),
-                          if ((client.city ?? '').trim().isNotEmpty) client.city!.trim(),
+                          if ((client.state ?? '').trim().isNotEmpty)
+                            client.state!.trim(),
+                          if ((client.city ?? '').trim().isNotEmpty)
+                            client.city!.trim(),
                         ].join(', '),
                 ),
                 const SizedBox(height: 16),
@@ -1370,7 +1488,9 @@ class _ResponsiblesPanel extends StatelessWidget {
                 : canAddMore
                 ? 'Administra supervisor y gerente del cliente. Si Supabase esta configurado, los cambios se sincronizan; si no, la pantalla sigue funcionando en modo local.'
                 : 'El expediente ya tiene los dos roles cubiertos. Edita o elimina alguno si necesitas cambiarlo.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: RemaColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 24),
           if (isLoading)
@@ -1392,7 +1512,9 @@ class _ResponsiblesPanel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('No fue posible cargar los responsables del cliente.'),
+                  const Text(
+                    'No fue posible cargar los responsables del cliente.',
+                  ),
                   const SizedBox(height: 12),
                   TextButton.icon(
                     onPressed: onRetry,
@@ -1411,7 +1533,9 @@ class _ResponsiblesPanel extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: RemaColors.outlineVariant),
               ),
-              child: const Text('Aun no hay responsables registrados para este cliente.'),
+              child: const Text(
+                'Aun no hay responsables registrados para este cliente.',
+              ),
             )
           else
             for (final responsible in responsibles) ...[
@@ -1458,14 +1582,19 @@ class _ResponsibleCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: RemaColors.surfaceHighest,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   responsible.role.label.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
               const Spacer(),
@@ -1484,12 +1613,16 @@ class _ResponsibleCard extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             '${responsible.title} ${responsible.fullName}'.trim(),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
             responsible.position,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: RemaColors.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: RemaColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 18),
           Wrap(
@@ -1554,9 +1687,9 @@ class _SummaryRow extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.6,
-              ),
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.6,
+          ),
         ),
         const SizedBox(height: 6),
         Text(value, style: Theme.of(context).textTheme.bodyLarge),
@@ -1584,7 +1717,9 @@ class _SummaryMetric extends StatelessWidget {
         children: [
           Text(
             value,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(label),
@@ -1602,21 +1737,24 @@ class _ClientQuoteCounters {
   }) : isLoading = false;
 
   const _ClientQuoteCounters.loading()
-      : payableQuotes = 0,
-        concludedQuotes = 0,
-        approvedQuotes = 0,
-        isLoading = true;
+    : payableQuotes = 0,
+      concludedQuotes = 0,
+      approvedQuotes = 0,
+      isLoading = true;
 
   final int payableQuotes;
   final int concludedQuotes;
   final int approvedQuotes;
   final bool isLoading;
 
-  String get displayPayableQuotes => isLoading ? '--' : payableQuotes.toString().padLeft(2, '0');
+  String get displayPayableQuotes =>
+      isLoading ? '--' : payableQuotes.toString().padLeft(2, '0');
 
-  String get displayConcludedQuotes => isLoading ? '--' : concludedQuotes.toString().padLeft(2, '0');
+  String get displayConcludedQuotes =>
+      isLoading ? '--' : concludedQuotes.toString().padLeft(2, '0');
 
-  String get displayApprovedQuotes => isLoading ? '--' : approvedQuotes.toString().padLeft(2, '0');
+  String get displayApprovedQuotes =>
+      isLoading ? '--' : approvedQuotes.toString().padLeft(2, '0');
 }
 
 class _EditableLogoCard extends StatelessWidget {
@@ -1639,7 +1777,9 @@ class _EditableLogoCard extends StatelessWidget {
       children: [
         Text(
           'LOGO DEL CLIENTE',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         InkWell(
@@ -1664,7 +1804,11 @@ class _EditableLogoCard extends StatelessWidget {
                       errorBuilder: (_, _, _) => Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(fallbackIcon, size: 42, color: RemaColors.onSurfaceVariant),
+                          Icon(
+                            fallbackIcon,
+                            size: 42,
+                            color: RemaColors.onSurfaceVariant,
+                          ),
                           const SizedBox(height: 10),
                           const Text('No se pudo mostrar el logo'),
                         ],
@@ -1674,7 +1818,11 @@ class _EditableLogoCard extends StatelessWidget {
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(fallbackIcon, size: 42, color: RemaColors.onSurfaceVariant),
+                      Icon(
+                        fallbackIcon,
+                        size: 42,
+                        color: RemaColors.onSurfaceVariant,
+                      ),
                       const SizedBox(height: 10),
                       const Text('Haz clic para actualizar el logo'),
                     ],
@@ -1691,19 +1839,25 @@ class _EditableLogoCard extends StatelessWidget {
 }
 
 class ResponsibleEditorDialog extends StatefulWidget {
-  const ResponsibleEditorDialog({super.key, this.initialValue, required this.takenRoles});
+  const ResponsibleEditorDialog({
+    super.key,
+    this.initialValue,
+    required this.takenRoles,
+  });
 
   final ClientResponsibleRecord? initialValue;
   final Set<ResponsibleRole> takenRoles;
 
   @override
-  State<ResponsibleEditorDialog> createState() => _ResponsibleEditorDialogState();
+  State<ResponsibleEditorDialog> createState() =>
+      _ResponsibleEditorDialogState();
 }
 
 class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
   final _formKey = GlobalKey<FormState>();
 
-  late ResponsibleRole _role = widget.initialValue?.role ?? _firstAvailableRole();
+  late ResponsibleRole _role =
+      widget.initialValue?.role ?? _firstAvailableRole();
   late final TextEditingController _positionController = TextEditingController(
     text: widget.initialValue?.position ?? '',
   );
@@ -1711,7 +1865,9 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
     text: widget.initialValue?.fullName ?? '',
   );
   late final TextEditingController _phoneController = TextEditingController(
-    text: ClientInputRules.editableMxPhoneDigits(widget.initialValue?.phone ?? ''),
+    text: ClientInputRules.editableMxPhoneDigits(
+      widget.initialValue?.phone ?? '',
+    ),
   );
   late final TextEditingController _emailController = TextEditingController(
     text: widget.initialValue?.email ?? '',
@@ -1747,7 +1903,9 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
 
     Navigator.of(context).pop(
       ClientResponsibleRecord(
-        id: widget.initialValue?.id ?? '${_role.code}-${DateTime.now().millisecondsSinceEpoch}',
+        id:
+            widget.initialValue?.id ??
+            '${_role.code}-${DateTime.now().millisecondsSinceEpoch}',
         role: _role,
         title: '',
         position: ClientInputRules.sanitizeTextOnly(_positionController.text),
@@ -1762,7 +1920,11 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.initialValue == null ? 'Nuevo responsable' : 'Editar responsable'),
+      title: Text(
+        widget.initialValue == null
+            ? 'Nuevo responsable'
+            : 'Editar responsable',
+      ),
       content: SizedBox(
         width: 560,
         child: Form(
@@ -1778,7 +1940,9 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
                     for (final role in ResponsibleRole.values)
                       DropdownMenuItem(
                         value: role,
-                        enabled: role == widget.initialValue?.role || !widget.takenRoles.contains(role),
+                        enabled:
+                            role == widget.initialValue?.role ||
+                            !widget.takenRoles.contains(role),
                         child: Text(role.label),
                       ),
                   ],
@@ -1794,7 +1958,9 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
                   decoration: const InputDecoration(labelText: 'Puesto'),
                   textCapitalization: TextCapitalization.characters,
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]')),
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]'),
+                    ),
                     const _UpperCaseTextFormatter(),
                   ],
                   validator: (value) => _validateTextOnly(
@@ -1806,10 +1972,14 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _fullNameController,
-                  decoration: const InputDecoration(labelText: 'Nombre completo'),
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre completo',
+                  ),
                   textCapitalization: TextCapitalization.characters,
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]')),
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]'),
+                    ),
                     const _UpperCaseTextFormatter(),
                   ],
                   validator: (value) => _validateTextOnly(
@@ -1830,7 +2000,9 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(labelText: 'Correo electronico'),
+                  decoration: const InputDecoration(
+                    labelText: 'Correo electronico',
+                  ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) => _requiredEmail(value),
                 ),
@@ -1838,7 +2010,9 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
                 TextFormField(
                   controller: _notesController,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Notas de contacto'),
+                  decoration: const InputDecoration(
+                    labelText: 'Notas de contacto',
+                  ),
                 ),
               ],
             ),
@@ -1850,10 +2024,7 @@ class _ResponsibleEditorDialogState extends State<ResponsibleEditorDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('Guardar'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('Guardar')),
       ],
     );
   }
@@ -1924,7 +2095,10 @@ class _UpperCaseTextFormatter extends TextInputFormatter {
 // ─── Client quotes panel ──────────────────────────────────────────────────────
 
 class _ClientQuotesPanel extends ConsumerWidget {
-  const _ClientQuotesPanel({required this.clientId, required this.onCreateQuote});
+  const _ClientQuotesPanel({
+    required this.clientId,
+    required this.onCreateQuote,
+  });
 
   final String clientId;
   final VoidCallback onCreateQuote;
@@ -1934,13 +2108,15 @@ class _ClientQuotesPanel extends ConsumerWidget {
     final quotesAsync = ref.watch(quotesProvider);
     final projectsAsync = ref.watch(quoteProjectsProvider);
 
-    final projectIds = projectsAsync.valueOrNull
+    final projectIds =
+        projectsAsync.valueOrNull
             ?.where((p) => p.clientId == clientId)
             .map((p) => p.id)
             .toSet() ??
         const <String>{};
 
-    final clientQuotes = quotesAsync.valueOrNull
+    final clientQuotes =
+        quotesAsync.valueOrNull
             ?.where((q) => projectIds.contains(q.projectId))
             .toList() ??
         const <QuoteRecord>[];
@@ -1969,10 +2145,9 @@ class _ClientQuotesPanel extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'Sin cotizaciones registradas para este cliente.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: RemaColors.onSurfaceVariant,
+                ),
               ),
             )
           else
@@ -1993,7 +2168,11 @@ class _QuoteRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final formatter = NumberFormat.currency(symbol: r'$', decimalDigits: 2, locale: 'en_US');
+    final formatter = NumberFormat.currency(
+      symbol: r'$',
+      decimalDigits: 2,
+      locale: 'en_US',
+    );
     final canOpenSavedActa = !quote.isDeclined;
 
     return ListTile(
@@ -2032,11 +2211,18 @@ class _QuoteRow extends ConsumerWidget {
     );
   }
 
-  Future<ActaDocumentRecord?> _loadFinalActaDocument(WidgetRef ref, QuoteRecord quote) async {
+  Future<ActaDocumentRecord?> _loadFinalActaDocument(
+    WidgetRef ref,
+    QuoteRecord quote,
+  ) async {
     return ref.read(quotesRepositoryProvider).fetchActaDocument(quote.id);
   }
 
-  Future<void> _previewFinalActa(BuildContext context, WidgetRef ref, QuoteRecord quote) async {
+  Future<void> _previewFinalActa(
+    BuildContext context,
+    WidgetRef ref,
+    QuoteRecord quote,
+  ) async {
     final document = await _loadFinalActaDocument(ref, quote);
     if (document == null) {
       if (context.mounted) {
@@ -2045,10 +2231,17 @@ class _QuoteRow extends ConsumerWidget {
       return;
     }
 
-    await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
+    await Printing.layoutPdf(
+      onLayout: (_) async => document.bytes,
+      name: document.fileName,
+    );
   }
 
-  Future<void> _downloadFinalActa(BuildContext context, WidgetRef ref, QuoteRecord quote) async {
+  Future<void> _downloadFinalActa(
+    BuildContext context,
+    WidgetRef ref,
+    QuoteRecord quote,
+  ) async {
     final document = await _loadFinalActaDocument(ref, quote);
     if (document == null) {
       if (context.mounted) {
@@ -2097,14 +2290,19 @@ class _ClientActasPanelState extends ConsumerState<_ClientActasPanel> {
   Map<String, QuoteRecord> _quoteById = {};
   List<String> _lastQuoteIds = const [];
 
-  Future<void> _loadMetas(List<String> quoteIds, Map<String, QuoteRecord> quoteById) async {
+  Future<void> _loadMetas(
+    List<String> quoteIds,
+    Map<String, QuoteRecord> quoteById,
+  ) async {
     if (_isLoadingMetas) return;
     setState(() {
       _isLoadingMetas = true;
       _lastQuoteIds = quoteIds;
       _quoteById = quoteById;
     });
-    final metas = await ref.read(quotesRepositoryProvider).fetchActaDocumentMetasForQuotes(quoteIds);
+    final metas = await ref
+        .read(quotesRepositoryProvider)
+        .fetchActaDocumentMetasForQuotes(quoteIds);
     if (mounted) {
       setState(() {
         _metas = metas;
@@ -2118,13 +2316,15 @@ class _ClientActasPanelState extends ConsumerState<_ClientActasPanel> {
     final quotesAsync = ref.watch(quotesProvider);
     final projectsAsync = ref.watch(quoteProjectsProvider);
 
-    final projectIds = projectsAsync.valueOrNull
+    final projectIds =
+        projectsAsync.valueOrNull
             ?.where((p) => p.clientId == widget.clientId)
             .map((p) => p.id)
             .toSet() ??
         const <String>{};
 
-    final clientQuotes = quotesAsync.valueOrNull
+    final clientQuotes =
+        quotesAsync.valueOrNull
             ?.where((q) => projectIds.contains(q.projectId) && !q.isDeclined)
             .toList() ??
         const <QuoteRecord>[];
@@ -2134,7 +2334,9 @@ class _ClientActasPanelState extends ConsumerState<_ClientActasPanel> {
 
     // Trigger load when quote IDs are available and not yet loaded.
     if (_metas == null && !_isLoadingMetas && quoteIds.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMetas(quoteIds, quoteById));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _loadMetas(quoteIds, quoteById),
+      );
     }
 
     return RemaPanel(
@@ -2172,10 +2374,9 @@ class _ClientActasPanelState extends ConsumerState<_ClientActasPanel> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'Sin cotizaciones asociadas para mostrar actas.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: RemaColors.onSurfaceVariant,
+                ),
               ),
             )
           else if (_isLoadingMetas)
@@ -2188,18 +2389,14 @@ class _ClientActasPanelState extends ConsumerState<_ClientActasPanel> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'No hay actas guardadas para este cliente.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: RemaColors.onSurfaceVariant,
+                ),
               ),
             )
           else
             for (final meta in _metas!) ...[
-              _ActaMetaRow(
-                meta: meta,
-                quote: _quoteById[meta.quoteId],
-              ),
+              _ActaMetaRow(meta: meta, quote: _quoteById[meta.quoteId]),
               if (meta != _metas!.last) const Divider(height: 1),
             ],
         ],
@@ -2216,14 +2413,18 @@ class _ActaMetaRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dateLabel = DateFormat('dd/MM/yyyy HH:mm').format(meta.createdAt.toLocal());
+    final dateLabel = DateFormat(
+      'dd/MM/yyyy HH:mm',
+    ).format(meta.createdAt.toLocal());
     final statusText = quote != null ? _statusLabel(quote!.status) : '';
 
     return ListTile(
       dense: true,
       leading: const Icon(Icons.picture_as_pdf_outlined),
       title: Text(meta.fileName),
-      subtitle: Text('${statusText.isNotEmpty ? "$statusText · " : ""}$dateLabel'),
+      subtitle: Text(
+        '${statusText.isNotEmpty ? "$statusText · " : ""}$dateLabel',
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2243,17 +2444,24 @@ class _ActaMetaRow extends ConsumerWidget {
   }
 
   Future<void> _previewActa(BuildContext context, WidgetRef ref) async {
-    final document = await ref.read(quotesRepositoryProvider).fetchActaDocument(meta.quoteId);
+    final document = await ref
+        .read(quotesRepositoryProvider)
+        .fetchActaDocument(meta.quoteId, actaId: meta.id);
     if (!context.mounted) return;
     if (document == null) {
       showRemaMessage(context, 'No se pudo cargar el acta.');
       return;
     }
-    await Printing.layoutPdf(onLayout: (_) async => document.bytes, name: document.fileName);
+    await Printing.layoutPdf(
+      onLayout: (_) async => document.bytes,
+      name: document.fileName,
+    );
   }
 
   Future<void> _downloadActa(BuildContext context, WidgetRef ref) async {
-    final document = await ref.read(quotesRepositoryProvider).fetchActaDocument(meta.quoteId);
+    final document = await ref
+        .read(quotesRepositoryProvider)
+        .fetchActaDocument(meta.quoteId, actaId: meta.id);
     if (!context.mounted) return;
     if (document == null) {
       showRemaMessage(context, 'No se pudo cargar el acta.');

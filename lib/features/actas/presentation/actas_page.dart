@@ -27,37 +27,66 @@ import '../../cotizaciones/domain/quote_models.dart';
 import '../../cotizaciones/presentation/quotes_controller.dart';
 import '../../levantamiento/presentation/levantamiento_state.dart';
 
-Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) async {
+Future<Uint8List> _buildActaPdfBytesInBackground(
+  Map<String, Object?> payload,
+) async {
   final pdf = pw.Document();
   final logoBytes = payload['logoBytes'] as Uint8List?;
   final watermarkBytes = payload['watermarkBytes'] as Uint8List?;
-  final logo = logoBytes != null && logoBytes.isNotEmpty ? pw.MemoryImage(logoBytes) : null;
-  final watermark =
-      watermarkBytes != null && watermarkBytes.isNotEmpty ? pw.MemoryImage(watermarkBytes) : null;
+  final logo = logoBytes != null && logoBytes.isNotEmpty
+      ? pw.MemoryImage(logoBytes)
+      : null;
+  final watermark = watermarkBytes != null && watermarkBytes.isNotEmpty
+      ? pw.MemoryImage(watermarkBytes)
+      : null;
 
-  final ingresoBytes = (payload['ingresoBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
-  final antesBytes = (payload['antesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
-  final despuesBytes = (payload['despuesBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
-  final duranteBytes = (payload['duranteBytes'] as List?)?.cast<Uint8List>() ?? const <Uint8List>[];
+  final ingresoBytes =
+      (payload['ingresoBytes'] as List?)?.cast<Uint8List>() ??
+      const <Uint8List>[];
+  final antesBytes =
+      (payload['antesBytes'] as List?)?.cast<Uint8List>() ??
+      const <Uint8List>[];
+  final despuesBytes =
+      (payload['despuesBytes'] as List?)?.cast<Uint8List>() ??
+      const <Uint8List>[];
+  final duranteBytes =
+      (payload['duranteBytes'] as List?)?.cast<Uint8List>() ??
+      const <Uint8List>[];
   final ingresoFecha = payload['ingresoFecha'] as String? ?? '';
   final ingresoTrabajo = payload['ingresoTrabajo'] as String? ?? '';
   final antesTrabajo = payload['antesTrabajo'] as String? ?? '';
   final duranteTrabajo = payload['duranteTrabajo'] as String? ?? '';
   final despuesTrabajo = payload['despuesTrabajo'] as String? ?? '';
 
-  final ingresoImages = [for (final bytes in ingresoBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
-  final antesImages = [for (final bytes in antesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
-  final despuesImages = [for (final bytes in despuesBytes) if (bytes.isNotEmpty) pw.MemoryImage(bytes)];
+  final ingresoImages = [
+    for (final bytes in ingresoBytes)
+      if (bytes.isNotEmpty) pw.MemoryImage(bytes),
+  ];
+  final antesImages = [
+    for (final bytes in antesBytes)
+      if (bytes.isNotEmpty) pw.MemoryImage(bytes),
+  ];
+  final despuesImages = [
+    for (final bytes in despuesBytes)
+      if (bytes.isNotEmpty) pw.MemoryImage(bytes),
+  ];
   final duranteImages = [
     for (final bytes in duranteBytes)
       if (bytes.isNotEmpty) pw.MemoryImage(bytes),
   ];
 
   final renderedActa = payload['renderedActa'] as String? ?? '';
-  final gerenteNombre = payload['gerenteNombre'] as String? ?? '{nombre_del_gerente_del_cliente}';
-  final gerentePuesto = payload['gerentePuesto'] as String? ?? '{nombre_del_puesto_del_gerente_del_cliente}';
-  final responsableNombre = payload['responsableNombre'] as String? ?? '{nombre_del_responsable_del_cliente}';
-  final responsablePuesto = payload['responsablePuesto'] as String? ?? '{nombre_del_puesto_del_responsable_del_cliente}';
+  final gerenteNombre =
+      payload['gerenteNombre'] as String? ?? '{nombre_del_gerente_del_cliente}';
+  final gerentePuesto =
+      payload['gerentePuesto'] as String? ??
+      '{nombre_del_puesto_del_gerente_del_cliente}';
+  final responsableNombre =
+      payload['responsableNombre'] as String? ??
+      '{nombre_del_responsable_del_cliente}';
+  final responsablePuesto =
+      payload['responsablePuesto'] as String? ??
+      '{nombre_del_puesto_del_responsable_del_cliente}';
   final brandName = payload['brandName'] as String? ?? CompanyProfile.brandName;
   final legalName = payload['legalName'] as String? ?? CompanyProfile.legalName;
 
@@ -108,7 +137,11 @@ Future<Uint8List> _buildActaPdfBytesInBackground(Map<String, Object?> payload) a
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+                _buildPdfHeader(
+                  logo: logo,
+                  brandName: brandName,
+                  legalName: legalName,
+                ),
                 pw.SizedBox(height: 16),
                 pw.Text(renderedActa, style: const pw.TextStyle(fontSize: 11)),
                 pw.Spacer(),
@@ -183,7 +216,10 @@ pw.Widget _buildPdfHeader({
                 ? pw.Image(logo, fit: pw.BoxFit.contain)
                 : pw.Text(
                     brandName,
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
           ),
           pw.Spacer(),
@@ -256,7 +292,10 @@ class _PhotoGridEntry {
 }
 
 int _countCombinedSectionPages(List<_PhotoSectionData> sections) {
-  final count = sections.fold<int>(0, (sum, section) => sum + section.images.length);
+  final count = sections.fold<int>(
+    0,
+    (sum, section) => sum + section.images.length,
+  );
   return _countSectionGridPages(count);
 }
 
@@ -296,9 +335,16 @@ List<pw.Page> _buildIngresoSectionPages({
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              _buildPdfHeader(
+                logo: logo,
+                brandName: brandName,
+                legalName: legalName,
+              ),
               pw.SizedBox(height: 20),
-              pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                title,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
               if (subtitle.trim().isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text(subtitle, style: const pw.TextStyle(fontSize: 9)),
@@ -336,9 +382,16 @@ List<pw.Page> _buildIngresoSectionPages({
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              _buildPdfHeader(
+                logo: logo,
+                brandName: brandName,
+                legalName: legalName,
+              ),
               pw.SizedBox(height: 20),
-              pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                title,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
               if (subtitle.trim().isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text(subtitle, style: const pw.TextStyle(fontSize: 9)),
@@ -391,7 +444,11 @@ List<pw.Page> _buildCombinedSectionPages({
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              _buildPdfHeader(
+                logo: logo,
+                brandName: brandName,
+                legalName: legalName,
+              ),
               pw.SizedBox(height: 20),
               pw.Text(
                 'REPORTE FOTOGRAFICO - ANTES / DURANTE / DESPUÉS',
@@ -406,7 +463,9 @@ List<pw.Page> _buildCombinedSectionPages({
                   border: pw.Border.all(color: PdfColors.grey300),
                   color: PdfColors.white,
                 ),
-                child: pw.Text('Sin evidencia cargada en Antes, Durante o Después.'),
+                child: pw.Text(
+                  'Sin evidencia cargada en Antes, Durante o Después.',
+                ),
               ),
               pw.Spacer(),
               _buildPageFooter(page: startPage, totalPages: totalPages),
@@ -433,7 +492,8 @@ List<pw.Page> _buildCombinedSectionPages({
         }
       }
     }
-    final title = 'REPORTE FOTOGRAFICO - ${chunkSections.map((section) => section.title).join(' / ')}';
+    final title =
+        'REPORTE FOTOGRAFICO - ${chunkSections.map((section) => section.title).join(' / ')}';
     final currentPageNumber = pageNumber;
 
     pages.add(
@@ -444,9 +504,16 @@ List<pw.Page> _buildCombinedSectionPages({
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildPdfHeader(logo: logo, brandName: brandName, legalName: legalName),
+              _buildPdfHeader(
+                logo: logo,
+                brandName: brandName,
+                legalName: legalName,
+              ),
               pw.SizedBox(height: 20),
-              pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                title,
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
               pw.SizedBox(height: 6),
               _buildSectionSummary(chunkSections),
               pw.SizedBox(height: 8),
@@ -473,8 +540,13 @@ pw.Widget _buildSectionSummary(List<_PhotoSectionData> sections) {
       lines.add(section.title);
       continue;
     }
-    final compact = subtitle.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
-    final trimmed = compact.length > 130 ? '${compact.substring(0, 130)}...' : compact;
+    final compact = subtitle
+        .replaceAll('\n', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final trimmed = compact.length > 130
+        ? '${compact.substring(0, 130)}...'
+        : compact;
     lines.add('${section.title}: $trimmed');
   }
 
@@ -551,7 +623,10 @@ pw.Widget _buildPhotoGrid(List<_PhotoGridEntry> entries) {
 pw.Widget _buildPageFooter({required int page, required int totalPages}) {
   return pw.Align(
     alignment: pw.Alignment.centerRight,
-    child: pw.Text('Pagina $page de $totalPages', style: const pw.TextStyle(fontSize: 9)),
+    child: pw.Text(
+      'Pagina $page de $totalPages',
+      style: const pw.TextStyle(fontSize: 9),
+    ),
   );
 }
 
@@ -591,12 +666,12 @@ class ActasPage extends ConsumerStatefulWidget {
 }
 
 class _ActasPageState extends ConsumerState<ActasPage> {
-    // Controladores nuevos para búsqueda y campos manuales
-    final _clienteSearchController = TextEditingController();
-    final _proyectoNombreController = TextEditingController();
-    List<ClientRecord> _clientesDisponibles = [];
-    bool _isLoadingClientes = false;
-    ClientRecord? _selectedCliente;
+  // Controladores nuevos para búsqueda y campos manuales
+  final _clienteSearchController = TextEditingController();
+  final _proyectoNombreController = TextEditingController();
+  List<ClientRecord> _clientesDisponibles = [];
+  bool _isLoadingClientes = false;
+  ClientRecord? _selectedCliente;
   final _formatter = DateFormat('dd/MM/yyyy');
   final _responsiblesRepository = ClientResponsiblesRepository();
   final _quotesRepository = QuotesRepository();
@@ -618,7 +693,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   final _fechaConclusionController = TextEditingController();
   final _numeroPedidoController = TextEditingController();
   final _fechaAprobacionPedidoController = TextEditingController();
-  final _actaTemplateController = TextEditingController(text: _defaultActaTemplate);
+  final _actaTemplateController = TextEditingController(
+    text: _defaultActaTemplate,
+  );
   final _ingresoFechaController = TextEditingController();
   final _ingresoTrabajoController = TextEditingController();
   final _antesTrabajoController = TextEditingController();
@@ -654,7 +731,6 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     if (widget.quoteId != null && widget.quoteId!.isNotEmpty) {
       _loadProjectNameFromQuote(widget.quoteId!);
       _loadServiceDescriptionFromQuote(widget.quoteId!);
-      _checkActaStatus(widget.quoteId!);
     }
     // Cargar automáticamente evidencia del levantamiento o desde registros persistidos
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -711,7 +787,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       }
 
       setState(() {
-        _servicioController.text = _normalizeServiceDescriptionForActa(firstConcept);
+        _servicioController.text = _normalizeServiceDescriptionForActa(
+          firstConcept,
+        );
       });
     } catch (error) {
       AppLogger.error(
@@ -792,7 +870,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           .eq('id', quoteId)
           .single();
       final status = row['status'] as String? ?? '';
-      if (mounted && (status == QuoteStatus.actaFinalizada || status == QuoteStatus.paid)) {
+      if (mounted &&
+          (status == QuoteStatus.actaFinalizada ||
+              status == QuoteStatus.paid)) {
         setState(() => _actaFinalizada = true);
       }
     } catch (_) {}
@@ -840,7 +920,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   Future<void> _loadEvidenceFromPersistedSurveyEntries() async {
     final quoteId = widget.quoteId?.trim();
     final client = SupabaseBootstrap.client;
-    if (quoteId == null || quoteId.isEmpty || client == null || !_isUuid(quoteId)) {
+    if (quoteId == null ||
+        quoteId.isEmpty ||
+        client == null ||
+        !_isUuid(quoteId)) {
       return;
     }
 
@@ -894,7 +977,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       final downloaded = await Future.wait(
         objectPaths.map((path) async {
           try {
-            final bytes = await client.storage.from('survey-photos').download(path);
+            final bytes = await client.storage
+                .from('survey-photos')
+                .download(path);
             return bytes.isEmpty ? null : bytes;
           } catch (_) {
             return null;
@@ -939,7 +1024,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         for (var index = 1; index < evidenceList.length; index++) {
           _fotosDurante.add(
             _PickedMedia(
-              name: 'durante_${index}_${DateTime.now().millisecondsSinceEpoch}.png',
+              name:
+                  'durante_${index}_${DateTime.now().millisecondsSinceEpoch}.png',
               bytes: evidenceList[index],
               size: evidenceList[index].length,
             ),
@@ -978,20 +1064,27 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     try {
       final bytes = await _runPdfGeneration(
-        message: 'Tu documento se esta generando, te notificaremos cuando este listo.',
+        message:
+            'Tu documento se esta generando, te notificaremos cuando este listo.',
         task: _buildPdfBytes,
         estimatedDuration: const Duration(seconds: 8),
       );
       final order = _numeroPedidoController.text.trim().isEmpty
           ? widget.quoteId!
           : _numeroPedidoController.text.trim().replaceAll(' ', '_');
-      final savedInSupabase = await ref.read(quotesRepositoryProvider).saveActaDocument(
+      final savedInSupabase = await ref
+          .read(quotesRepositoryProvider)
+          .saveActaDocument(
             quoteId: widget.quoteId!,
             bytes: bytes,
             fileName: 'acta_entrega_$order.pdf',
+            startDate: _tryParseDate(_fechaInicioController.text),
+            conclusionDate: _tryParseDate(_fechaConclusionController.text),
             photos: _buildActaPhotoInputs(),
           );
-      await ref.read(quotesProvider.notifier).updateStatus(
+      await ref
+          .read(quotesProvider.notifier)
+          .updateStatus(
             quoteId: widget.quoteId!,
             status: QuoteStatus.actaFinalizada,
           );
@@ -1000,14 +1093,16 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       showRemaMessage(
         context,
         savedInSupabase
-        ? 'Acta finalizada y guardada en Supabase. La cotizacion queda por cobrar.'
-        : 'Acta finalizada y guardada localmente. La cotizacion queda por cobrar.',
+            ? 'Acta finalizada y guardada en Supabase. La cotizacion queda por cobrar.'
+            : 'Acta finalizada y guardada localmente. La cotizacion queda por cobrar.',
       );
       context.go('/cotizaciones');
     } catch (error) {
       if (!mounted) return;
-      AppLogger.error('actas_finalize_failed',
-          data: {'quoteId': widget.quoteId, 'error': error.toString()});
+      AppLogger.error(
+        'actas_finalize_failed',
+        data: {'quoteId': widget.quoteId, 'error': error.toString()},
+      );
       showRemaMessage(context, 'Error al finalizar acta: $error');
     }
   }
@@ -1035,7 +1130,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     final clientId = await _resolveClientId();
     if (clientId == null || clientId.isEmpty) {
       if (mounted && showFeedback) {
-        showRemaMessage(context, 'No se pudo identificar el cliente para actualizar datos del acta.');
+        showRemaMessage(
+          context,
+          'No se pudo identificar el cliente para actualizar datos del acta.',
+        );
       }
       return;
     }
@@ -1059,17 +1157,28 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     final quoteId = widget.quoteId?.trim();
     final client = SupabaseBootstrap.client;
-    if (quoteId == null || quoteId.isEmpty || client == null || !_isUuid(quoteId)) {
+    if (quoteId == null ||
+        quoteId.isEmpty ||
+        client == null ||
+        !_isUuid(quoteId)) {
       return null;
     }
 
     try {
-      final quoteRow = await client.from('quotes').select('project_id').eq('id', quoteId).single();
+      final quoteRow = await client
+          .from('quotes')
+          .select('project_id')
+          .eq('id', quoteId)
+          .single();
       final projectId = quoteRow['project_id'] as String?;
       if (projectId == null || projectId.isEmpty || !_isUuid(projectId)) {
         return null;
       }
-      final projectRow = await client.from('projects').select('client_id').eq('id', projectId).single();
+      final projectRow = await client
+          .from('projects')
+          .select('client_id')
+          .eq('id', projectId)
+          .single();
       final clientId = projectRow['client_id'] as String?;
       return clientId?.trim();
     } catch (error) {
@@ -1092,14 +1201,18 @@ class _ActasPageState extends ConsumerState<ActasPage> {
           .eq('id', clientId)
           .single();
 
-        final businessName = (row['business_name'] as String? ?? '').trim();
-        final contactName = (row['contact_name'] as String? ?? '').trim();
-        final clientNameForActa = contactName.isNotEmpty ? contactName : businessName;
+      final businessName = (row['business_name'] as String? ?? '').trim();
+      final contactName = (row['contact_name'] as String? ?? '').trim();
+      final clientNameForActa = contactName.isNotEmpty
+          ? contactName
+          : businessName;
       final address = row['address_line'] as String? ?? '';
       final city = row['city'] as String? ?? '';
       final state = row['state'] as String? ?? '';
       final location = [city, state].where((v) => v.isNotEmpty).join(', ');
-      final responsibles = await _responsiblesRepository.fetchByClientId(clientId);
+      final responsibles = await _responsiblesRepository.fetchByClientId(
+        clientId,
+      );
 
       if (mounted) {
         setState(() {
@@ -1125,7 +1238,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         });
       }
     } catch (e) {
-      AppLogger.error('actas_load_client_failed', data: {'clientId': clientId, 'error': e.toString()});
+      AppLogger.error(
+        'actas_load_client_failed',
+        data: {'clientId': clientId, 'error': e.toString()},
+      );
     }
   }
 
@@ -1133,7 +1249,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     setState(() {
       _loadedClient = client;
       final contactName = (client.contactName ?? '').trim();
-      _clienteController.text = contactName.isNotEmpty ? contactName : client.name;
+      _clienteController.text = contactName.isNotEmpty
+          ? contactName
+          : client.name;
       _razonSocialController.text = client.name;
       _direccionController.text = client.address;
       _ubicacionController.text = client.address;
@@ -1160,7 +1278,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     if (supervisor != null) {
       _responsableController.text = _sanitizeTextOnly(supervisor.fullName);
-      _puestoResponsableController.text = _sanitizeTextOnly(supervisor.position);
+      _puestoResponsableController.text = _sanitizeTextOnly(
+        supervisor.position,
+      );
     }
 
     if (gerente != null) {
@@ -1232,7 +1352,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
         return;
       }
 
-      final selected = result.files.where((item) => item.bytes != null).toList();
+      final selected = result.files
+          .where((item) => item.bytes != null)
+          .toList();
       final optimizedMedia = <_PickedMedia>[];
       final rejectedMessages = <String>[];
 
@@ -1267,7 +1389,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       }
 
       if (optimizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
-        showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos optimizadas.');
+        showRemaMessage(
+          context,
+          'Se agregaron ${optimizedMedia.length} fotos optimizadas.',
+        );
       } else if (optimizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
         showRemaMessage(
           context,
@@ -1332,7 +1457,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       }
 
       if (optimizedMedia.isNotEmpty && rejectedMessages.isEmpty) {
-        showRemaMessage(context, 'Se agregaron ${optimizedMedia.length} fotos optimizadas de avance.');
+        showRemaMessage(
+          context,
+          'Se agregaron ${optimizedMedia.length} fotos optimizadas de avance.',
+        );
         return;
       }
       if (optimizedMedia.isNotEmpty && rejectedMessages.isNotEmpty) {
@@ -1356,8 +1484,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     _pdfProgressTimer?.cancel();
     _pdfProgressValue = 0;
     const tick = Duration(milliseconds: 120);
-    final totalTicks =
-        (estimatedDuration.inMilliseconds / tick.inMilliseconds).clamp(1, 100000).round();
+    final totalTicks = (estimatedDuration.inMilliseconds / tick.inMilliseconds)
+        .clamp(1, 100000)
+        .round();
     var currentTick = 0;
     _pdfProgressTimer = Timer.periodic(tick, (_) {
       if (!mounted) {
@@ -1374,7 +1503,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       final firstDate = _pickerFirstDateFor(controller);
       final lastDate = _pickerLastDateFor(controller);
       if (lastDate.isBefore(firstDate)) {
-        showRemaMessage(context, 'Primero captura una fecha compatible para continuar.');
+        showRemaMessage(
+          context,
+          'Primero captura una fecha compatible para continuar.',
+        );
         return;
       }
 
@@ -1467,22 +1599,30 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     }
     if (_puestoResponsableController.text.trim().isEmpty) {
       missing.add('Puesto del supervisor');
-    } else if (!_textOnlyPattern.hasMatch(_puestoResponsableController.text.trim())) {
+    } else if (!_textOnlyPattern.hasMatch(
+      _puestoResponsableController.text.trim(),
+    )) {
       missing.add('Puesto del supervisor solo texto');
     }
     if (_gerenteClienteController.text.trim().isEmpty) {
       missing.add('Gerente del cliente');
-    } else if (!_textOnlyPattern.hasMatch(_gerenteClienteController.text.trim())) {
+    } else if (!_textOnlyPattern.hasMatch(
+      _gerenteClienteController.text.trim(),
+    )) {
       missing.add('Gerente del cliente solo texto');
     }
     if (_puestoGerenteController.text.trim().isEmpty) {
       missing.add('Puesto del gerente');
-    } else if (!_textOnlyPattern.hasMatch(_puestoGerenteController.text.trim())) {
+    } else if (!_textOnlyPattern.hasMatch(
+      _puestoGerenteController.text.trim(),
+    )) {
       missing.add('Puesto del gerente solo texto');
     }
     if (_horaEstablecidaController.text.trim().isEmpty) {
       missing.add('Hora establecida por usuario');
-    } else if (!_hour24Pattern.hasMatch(_horaEstablecidaController.text.trim())) {
+    } else if (!_hour24Pattern.hasMatch(
+      _horaEstablecidaController.text.trim(),
+    )) {
       missing.add('Hora en formato 24 hrs');
     }
 
@@ -1501,7 +1641,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     missing.addAll(_collectDateValidationErrors());
 
-    if (_fotosIngreso.isEmpty && _fotosAntes.isEmpty && _fotosDespues.isEmpty && _fotosDurante.isEmpty) {
+    if (_fotosIngreso.isEmpty &&
+        _fotosAntes.isEmpty &&
+        _fotosDespues.isEmpty &&
+        _fotosDurante.isEmpty) {
       missing.add('Registro fotografico');
     }
 
@@ -1512,24 +1655,36 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     final errors = <String>[];
     final fechaInicio = _tryParseDate(_fechaInicioController.text);
     final fechaConclusion = _tryParseDate(_fechaConclusionController.text);
-    final fechaAprobacion = _tryParseDate(_fechaAprobacionPedidoController.text);
+    final fechaAprobacion = _tryParseDate(
+      _fechaAprobacionPedidoController.text,
+    );
 
     if (_fechaInicioController.text.trim().isNotEmpty && fechaInicio == null) {
       errors.add('Fecha de inicio invalida');
     }
-    if (_fechaConclusionController.text.trim().isNotEmpty && fechaConclusion == null) {
+    if (_fechaConclusionController.text.trim().isNotEmpty &&
+        fechaConclusion == null) {
       errors.add('Fecha de conclusion invalida');
     }
-    if (_fechaAprobacionPedidoController.text.trim().isNotEmpty && fechaAprobacion == null) {
+    if (_fechaAprobacionPedidoController.text.trim().isNotEmpty &&
+        fechaAprobacion == null) {
       errors.add('Fecha de aprobacion del pedido invalida');
     }
 
-    if (fechaInicio != null && fechaConclusion != null && fechaConclusion.isBefore(fechaInicio)) {
-      errors.add('La fecha de conclusion no puede ser menor que la fecha de inicio');
+    if (fechaInicio != null &&
+        fechaConclusion != null &&
+        fechaConclusion.isBefore(fechaInicio)) {
+      errors.add(
+        'La fecha de conclusion no puede ser menor que la fecha de inicio',
+      );
     }
 
-    if (fechaAprobacion != null && fechaConclusion != null && !fechaAprobacion.isBefore(fechaConclusion)) {
-      errors.add('La fecha de aprobacion del pedido debe ser anterior a la fecha de conclusion');
+    if (fechaAprobacion != null &&
+        fechaConclusion != null &&
+        !fechaAprobacion.isBefore(fechaConclusion)) {
+      errors.add(
+        'La fecha de aprobacion del pedido debe ser anterior a la fecha de conclusion',
+      );
     }
 
     return errors;
@@ -1626,35 +1781,37 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
   Future<Uint8List> _buildPdfBytes() async {
     final logoBytes = await _loadAssetBytes('assets/images/logo_remaa.png');
-    final watermarkBytes = await _loadAssetBytes('assets/images/marca_agua_remaa.png');
-
-    return compute(
-      _buildActaPdfBytesInBackground,
-      <String, Object?>{
-        'logoBytes': logoBytes,
-        'watermarkBytes': watermarkBytes,
-        'ingresoBytes': [for (final media in _fotosIngreso) media.bytes],
-        'antesBytes': [for (final media in _fotosAntes) media.bytes],
-        'despuesBytes': [for (final media in _fotosDespues) media.bytes],
-        'duranteBytes': [for (final media in _fotosDurante) media.bytes],
-        ..._photoReportValues,
-        'renderedActa': _renderTemplate(_actaTemplateController.text, _templateValues),
-        'gerenteNombre': _gerenteClienteController.text.trim().isEmpty
-            ? '{nombre_del_gerente_del_cliente}'
-            : _gerenteClienteController.text.trim(),
-        'gerentePuesto': _puestoGerenteController.text.trim().isEmpty
-            ? '{nombre_del_puesto_del_gerente_del_cliente}'
-            : _puestoGerenteController.text.trim(),
-        'responsableNombre': _responsableController.text.trim().isEmpty
-            ? '{nombre_del_responsable_del_cliente}'
-            : _responsableController.text.trim(),
-        'responsablePuesto': _puestoResponsableController.text.trim().isEmpty
-            ? '{nombre_del_puesto_del_responsable_del_cliente}'
-            : _puestoResponsableController.text.trim(),
-        'brandName': CompanyProfile.brandName,
-        'legalName': CompanyProfile.legalName,
-      },
+    final watermarkBytes = await _loadAssetBytes(
+      'assets/images/marca_agua_remaa.png',
     );
+
+    return compute(_buildActaPdfBytesInBackground, <String, Object?>{
+      'logoBytes': logoBytes,
+      'watermarkBytes': watermarkBytes,
+      'ingresoBytes': [for (final media in _fotosIngreso) media.bytes],
+      'antesBytes': [for (final media in _fotosAntes) media.bytes],
+      'despuesBytes': [for (final media in _fotosDespues) media.bytes],
+      'duranteBytes': [for (final media in _fotosDurante) media.bytes],
+      ..._photoReportValues,
+      'renderedActa': _renderTemplate(
+        _actaTemplateController.text,
+        _templateValues,
+      ),
+      'gerenteNombre': _gerenteClienteController.text.trim().isEmpty
+          ? '{nombre_del_gerente_del_cliente}'
+          : _gerenteClienteController.text.trim(),
+      'gerentePuesto': _puestoGerenteController.text.trim().isEmpty
+          ? '{nombre_del_puesto_del_gerente_del_cliente}'
+          : _puestoGerenteController.text.trim(),
+      'responsableNombre': _responsableController.text.trim().isEmpty
+          ? '{nombre_del_responsable_del_cliente}'
+          : _responsableController.text.trim(),
+      'responsablePuesto': _puestoResponsableController.text.trim().isEmpty
+          ? '{nombre_del_puesto_del_responsable_del_cliente}'
+          : _puestoResponsableController.text.trim(),
+      'brandName': CompanyProfile.brandName,
+      'legalName': CompanyProfile.legalName,
+    });
   }
 
   Future<Uint8List?> _loadAssetBytes(String assetPath) async {
@@ -1667,44 +1824,45 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   }
 
   Map<String, String> get _templateValues => {
-        'hora_establecida_por_usuario': _horaEstablecidaController.text.trim(),
-      'fecha_actual': DateFormat('dd/MM/yyyy').format(DateTime.now()),
-      // Alias legacy para plantillas viejas.
-      'fecha_acutal': DateFormat('dd/MM/yyyy').format(DateTime.now()),
-        'nombre_del_proyecto': _proyectoNombreController.text.trim(),
-        'proyecto': _proyectoNombreController.text.trim(),
-        'nombre_del_cliente': _clienteController.text.trim(),
-        'direccion_del_cliente': _direccionController.text.trim(),
-        'ubicacion_del_cliente': _ubicacionController.text.trim(),
-        'descripcion_del_servicio': _servicioController.text.trim(),
-        'numero_de_pedido': _numeroPedidoController.text.trim(),
-      'fecha_aprobacion_del_pedido': _fechaAprobacionPedidoController.text.trim(),
-        'fecha_aprobacion_pedido': _fechaAprobacionPedidoController.text.trim(),
-      'razon_social_del_cliente': _razonSocialController.text.trim(),
-      // 'titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
-      // 'titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
-      'razon_social_facturacion': _razonSocialController.text.trim(),
-      'nombre_del_gerente_del_cliente': _gerenteClienteController.text.trim(),
-      // 'nombre_del_supervisor_del_cliente': _responsableController.text.trim(),
-      // 'nombre_del_responsable_del_cliente': _responsableController.text.trim(),
-      // 'nombre_del_titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
-      // 'nombre_del_titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
-      'nombre_del_puesto_del_gerente_del_cliente': _puestoGerenteController.text.trim(),
-      // 'nombre_del_puesto_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
-      // 'nombre_del_puesto_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
-      'fecha_de_inicio': _fechaInicioController.text.trim(),
-      'fecha_de_conclusion': _fechaConclusionController.text.trim(),
-        'fecha_inicio': _fechaInicioController.text.trim(),
-        'fecha_conclusion': _fechaConclusionController.text.trim(),
-      };
+    'hora_establecida_por_usuario': _horaEstablecidaController.text.trim(),
+    'fecha_actual': DateFormat('dd/MM/yyyy').format(DateTime.now()),
+    // Alias legacy para plantillas viejas.
+    'fecha_acutal': DateFormat('dd/MM/yyyy').format(DateTime.now()),
+    'nombre_del_proyecto': _proyectoNombreController.text.trim(),
+    'proyecto': _proyectoNombreController.text.trim(),
+    'nombre_del_cliente': _clienteController.text.trim(),
+    'direccion_del_cliente': _direccionController.text.trim(),
+    'ubicacion_del_cliente': _ubicacionController.text.trim(),
+    'descripcion_del_servicio': _servicioController.text.trim(),
+    'numero_de_pedido': _numeroPedidoController.text.trim(),
+    'fecha_aprobacion_del_pedido': _fechaAprobacionPedidoController.text.trim(),
+    'fecha_aprobacion_pedido': _fechaAprobacionPedidoController.text.trim(),
+    'razon_social_del_cliente': _razonSocialController.text.trim(),
+    // 'titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+    // 'titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+    'razon_social_facturacion': _razonSocialController.text.trim(),
+    'nombre_del_gerente_del_cliente': _gerenteClienteController.text.trim(),
+    // 'nombre_del_supervisor_del_cliente': _responsableController.text.trim(),
+    // 'nombre_del_responsable_del_cliente': _responsableController.text.trim(),
+    // 'nombre_del_titulo_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+    // 'nombre_del_titulo_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+    'nombre_del_puesto_del_gerente_del_cliente': _puestoGerenteController.text
+        .trim(),
+    // 'nombre_del_puesto_del_supervisor_del_cliente': _puestoResponsableController.text.trim(),
+    // 'nombre_del_puesto_del_responsable_del_cliente': _puestoResponsableController.text.trim(),
+    'fecha_de_inicio': _fechaInicioController.text.trim(),
+    'fecha_de_conclusion': _fechaConclusionController.text.trim(),
+    'fecha_inicio': _fechaInicioController.text.trim(),
+    'fecha_conclusion': _fechaConclusionController.text.trim(),
+  };
 
   Map<String, String> get _photoReportValues => {
-        'ingresoFecha': _ingresoFechaController.text.trim(),
-        'ingresoTrabajo': _ingresoTrabajoController.text.trim(),
-        'antesTrabajo': _antesTrabajoController.text.trim(),
-        'duranteTrabajo': _duranteTrabajoController.text.trim(),
-        'despuesTrabajo': _despuesTrabajoController.text.trim(),
-      };
+    'ingresoFecha': _ingresoFechaController.text.trim(),
+    'ingresoTrabajo': _ingresoTrabajoController.text.trim(),
+    'antesTrabajo': _antesTrabajoController.text.trim(),
+    'duranteTrabajo': _duranteTrabajoController.text.trim(),
+    'despuesTrabajo': _despuesTrabajoController.text.trim(),
+  };
 
   String _renderTemplate(String template, Map<String, String> values) {
     var normalizedTemplate = template;
@@ -1717,13 +1875,14 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     // Si la linea no existe en una plantilla vieja, se inserta junto al bloque de pedido.
     if (!RegExp(r'(?im)^\s*facturado\s*a\s*:').hasMatch(normalizedTemplate)) {
-      final confirmedMatch = RegExp(r'(?im)^\s*confirmado\s+con\s+el\s+pedido[^\n]*$')
-          .firstMatch(normalizedTemplate);
+      final confirmedMatch = RegExp(
+        r'(?im)^\s*confirmado\s+con\s+el\s+pedido[^\n]*$',
+      ).firstMatch(normalizedTemplate);
       if (confirmedMatch != null) {
         final line = confirmedMatch.group(0)!;
         normalizedTemplate = normalizedTemplate.replaceFirst(
           line,
-            '$line\nFacturado a: {razon_social_del_cliente}',
+          '$line\nFacturado a: {razon_social_del_cliente}',
         );
       }
     }
@@ -1777,12 +1936,11 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     );
     await _autoSaveGeneratedActa(bytes);
     final rawOrder = _numeroPedidoController.text.trim();
-    final order = rawOrder.isEmpty ? 'sin_pedido' : rawOrder.replaceAll(' ', '_');
+    final order = rawOrder.isEmpty
+        ? 'sin_pedido'
+        : rawOrder.replaceAll(' ', '_');
 
-    await Printing.sharePdf(
-      bytes: bytes,
-      filename: 'acta_entrega_$order.pdf',
-    );
+    await Printing.sharePdf(bytes: bytes, filename: 'acta_entrega_$order.pdf');
 
     if (!mounted) {
       return;
@@ -1800,10 +1958,14 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     final order = rawOrder.isEmpty ? quoteId : rawOrder.replaceAll(' ', '_');
 
     try {
-      final savedInSupabase = await ref.read(quotesRepositoryProvider).saveActaDocument(
+      final savedInSupabase = await ref
+          .read(quotesRepositoryProvider)
+          .saveActaDocument(
             quoteId: quoteId,
             bytes: bytes,
             fileName: 'acta_entrega_$order.pdf',
+            startDate: _tryParseDate(_fechaInicioController.text),
+            conclusionDate: _tryParseDate(_fechaConclusionController.text),
             photos: _buildActaPhotoInputs(),
           );
       if (!mounted) {
@@ -1911,16 +2073,23 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       },
       child: PageFrame(
         title: 'Actas de Entrega',
-        subtitle: 'Flujo final de cierre: cuerpo de acta y reporte fotografico.',
+        subtitle:
+            'Flujo final de cierre: cuerpo de acta y reporte fotografico.',
         trailing: Wrap(
           spacing: 8,
           runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (widget.quoteId != null && widget.quoteId!.isNotEmpty && _isAdmin)
+            if (widget.quoteId != null &&
+                widget.quoteId!.isNotEmpty &&
+                _isAdmin)
               _actaFinalizada
                   ? Chip(
-                      avatar: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                      avatar: const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 18,
+                      ),
                       label: const Text('ACTA FINALIZADA'),
                       backgroundColor: const Color(0xFFDFF4DD),
                       side: BorderSide.none,
@@ -1954,60 +2123,77 @@ class _ActasPageState extends ConsumerState<ActasPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const RemaSectionHeader(title: 'Buscar cliente existente o capturar manual'),
+                  const RemaSectionHeader(
+                    title: 'Buscar cliente existente o capturar manual',
+                  ),
                   const SizedBox(height: 10),
                   Autocomplete<ClientRecord>(
                     optionsBuilder: (textEditingValue) {
                       if (textEditingValue.text.isEmpty) {
                         return const Iterable<ClientRecord>.empty();
                       }
-                      return _clientesDisponibles.where((c) =>
-                        c.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
-                        (c.contactName ?? '').toLowerCase().contains(textEditingValue.text.toLowerCase())
+                      return _clientesDisponibles.where(
+                        (c) =>
+                            c.name.toLowerCase().contains(
+                              textEditingValue.text.toLowerCase(),
+                            ) ||
+                            (c.contactName ?? '').toLowerCase().contains(
+                              textEditingValue.text.toLowerCase(),
+                            ),
                       );
                     },
-                    displayStringForOption: (c) => c.contactName?.isNotEmpty == true ? c.contactName! : c.name,
-                    fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                      _clienteSearchController.text = controller.text;
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: 'Buscar cliente',
-                          suffixIcon: _isLoadingClientes
-                              ? const Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                                )
-                              : IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    controller.clear();
-                                    setState(() {
-                                      _selectedCliente = null;
-                                      _loadedClient = null;
-                                      _clienteController.clear();
-                                      _razonSocialController.clear();
-                                      _direccionController.clear();
-                                      _ubicacionController.clear();
-                                    });
-                                  },
-                                ),
-                        ),
-                        onChanged: (value) {
-                          if (value.isEmpty) {
-                            setState(() {
-                              _selectedCliente = null;
-                              _loadedClient = null;
-                              _clienteController.clear();
-                              _razonSocialController.clear();
-                              _direccionController.clear();
-                              _ubicacionController.clear();
-                            });
-                          }
+                    displayStringForOption: (c) =>
+                        c.contactName?.isNotEmpty == true
+                        ? c.contactName!
+                        : c.name,
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                          _clienteSearchController.text = controller.text;
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              labelText: 'Buscar cliente',
+                              suffixIcon: _isLoadingClientes
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        controller.clear();
+                                        setState(() {
+                                          _selectedCliente = null;
+                                          _loadedClient = null;
+                                          _clienteController.clear();
+                                          _razonSocialController.clear();
+                                          _direccionController.clear();
+                                          _ubicacionController.clear();
+                                        });
+                                      },
+                                    ),
+                            ),
+                            onChanged: (value) {
+                              if (value.isEmpty) {
+                                setState(() {
+                                  _selectedCliente = null;
+                                  _loadedClient = null;
+                                  _clienteController.clear();
+                                  _razonSocialController.clear();
+                                  _direccionController.clear();
+                                  _ubicacionController.clear();
+                                });
+                              }
+                            },
+                          );
                         },
-                      );
-                    },
                     onSelected: (ClientRecord selected) async {
                       setState(() {
                         _selectedCliente = selected;
@@ -2016,7 +2202,9 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                     },
                   ),
                   const SizedBox(height: 10),
-                  Text('O captura los datos manualmente si no encuentras el cliente.'),
+                  Text(
+                    'O captura los datos manualmente si no encuentras el cliente.',
+                  ),
                 ],
               ),
             ),
@@ -2080,7 +2268,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _pdfGenerationMessage ?? 'Tu documento se esta generando, te notificaremos cuando este listo.',
+                      _pdfGenerationMessage ??
+                          'Tu documento se esta generando, te notificaremos cuando este listo.',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 10),
@@ -2105,7 +2294,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                 fechaInicioController: _fechaInicioController,
                 fechaConclusionController: _fechaConclusionController,
                 numeroPedidoController: _numeroPedidoController,
-                fechaAprobacionPedidoController: _fechaAprobacionPedidoController,
+                fechaAprobacionPedidoController:
+                    _fechaAprobacionPedidoController,
                 ubicacionController: _ubicacionController,
                 horaEstablecidaController: _horaEstablecidaController,
                 actaTemplateController: _actaTemplateController,
@@ -2130,14 +2320,25 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                 isProcessingSinglePhoto: _isProcessingSinglePhoto,
                 processingSingleStage: _processingSingleStage,
                 isProcessingDurantePhotos: _isProcessingDurantePhotos,
-                onPickIngreso: () => _pickMultipleForStage(stage: 'ingreso', target: _fotosIngreso),
-                onPickAntes: () => _pickMultipleForStage(stage: 'antes', target: _fotosAntes),
-                onPickDespues: () => _pickMultipleForStage(stage: 'despues', target: _fotosDespues),
+                onPickIngreso: () => _pickMultipleForStage(
+                  stage: 'ingreso',
+                  target: _fotosIngreso,
+                ),
+                onPickAntes: () =>
+                    _pickMultipleForStage(stage: 'antes', target: _fotosAntes),
+                onPickDespues: () => _pickMultipleForStage(
+                  stage: 'despues',
+                  target: _fotosDespues,
+                ),
                 onPickDurante: _pickMultipleDurante,
-                onRemoveIngreso: (item) => setState(() => _fotosIngreso.remove(item)),
-                onRemoveAntes: (item) => setState(() => _fotosAntes.remove(item)),
-                onRemoveDespues: (item) => setState(() => _fotosDespues.remove(item)),
-                onRemoveDurante: (item) => setState(() => _fotosDurante.remove(item)),
+                onRemoveIngreso: (item) =>
+                    setState(() => _fotosIngreso.remove(item)),
+                onRemoveAntes: (item) =>
+                    setState(() => _fotosAntes.remove(item)),
+                onRemoveDespues: (item) =>
+                    setState(() => _fotosDespues.remove(item)),
+                onRemoveDurante: (item) =>
+                    setState(() => _fotosDurante.remove(item)),
                 onClearSingle: (stage) {
                   setState(() {
                     switch (stage) {
@@ -2164,10 +2365,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          title,
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-        ),
+        pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 6),
         pw.Container(
           width: double.infinity,
@@ -2218,7 +2416,10 @@ class _ActasPageState extends ConsumerState<ActasPage> {
                   ? pw.Image(logo, fit: pw.BoxFit.contain)
                   : pw.Text(
                       CompanyProfile.brandName,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
             ),
             pw.Spacer(),
@@ -2282,9 +2483,7 @@ class _ActasPageState extends ConsumerState<ActasPage> {
       width: 165,
       padding: const pw.EdgeInsets.only(top: 18),
       decoration: const pw.BoxDecoration(
-        border: pw.Border(
-          top: pw.BorderSide(color: PdfColors.black),
-        ),
+        border: pw.Border(top: pw.BorderSide(color: PdfColors.black)),
       ),
       child: pw.Column(
         children: [
@@ -2304,7 +2503,8 @@ class _ActasPageState extends ConsumerState<ActasPage> {
   }
 }
 
-const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se reúnen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel Vázquez, Representante de Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.
+const String _defaultActaTemplate =
+    '''A las {hora_establecida_por_usuario} hrs del {fecha_actual}, se reúnen en {nombre_del_cliente}, ubicado en {direccion_del_cliente}, {ubicacion_del_cliente}, Ing. Miguel Vázquez, Representante de Soluciones Integrales Sustentables Inteligentes y Dinámicas REMA, S.A.S. de C.V. y el {nombre_del_gerente_del_cliente}, {nombre_del_puesto_del_gerente_del_cliente} del {nombre_del_cliente}.
 
   Para la Revisión de la Entrega-Recepción de Servicio de 
   {descripcion_del_servicio}
@@ -2325,10 +2525,7 @@ const String _defaultActaTemplate = '''A las {hora_establecida_por_usuario} hrs 
   ''';
 
 class _RoleAndSteps extends StatelessWidget {
-  const _RoleAndSteps({
-    required this.step,
-    required this.onStepChanged,
-  });
+  const _RoleAndSteps({required this.step, required this.onStepChanged});
 
   final int step;
   final ValueChanged<int> onStepChanged;
@@ -2415,9 +2612,13 @@ class _ActaBodyStep extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Expanded(child: RemaSectionHeader(title: 'Datos base (BBDD)')),
+                  const Expanded(
+                    child: RemaSectionHeader(title: 'Datos base (BBDD)'),
+                  ),
                   TextButton.icon(
-                    onPressed: isLoadingClient ? null : () => onRefreshClientData(),
+                    onPressed: isLoadingClient
+                        ? null
+                        : () => onRefreshClientData(),
                     icon: const Icon(Icons.refresh),
                     label: const Text('Actualizar'),
                   ),
@@ -2433,7 +2634,10 @@ class _ActaBodyStep extends StatelessWidget {
                 maxLines: 1,
               ),
               const SizedBox(height: 16),
-              _ActaField(label: 'Razon social', controller: razonSocialController),
+              _ActaField(
+                label: 'Razon social',
+                controller: razonSocialController,
+              ),
               const SizedBox(height: 16),
               _ActaField(label: 'Direccion', controller: direccionController),
               const SizedBox(height: 16),
@@ -2500,10 +2704,9 @@ class _ActaBodyStep extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 'Variables manuales confirmadas: fecha inicio, fecha conclusion, numero pedido y fecha aprobacion.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: RemaColors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: RemaColors.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 20),
               Row(
@@ -2546,7 +2749,9 @@ class _ActaBodyStep extends StatelessWidget {
                       controller: numeroPedidoController,
                       enabled: isAdmin,
                       forceUppercase: true,
-                      helperText: isAdmin ? null : 'Solo admin puede capturar este campo.',
+                      helperText: isAdmin
+                          ? null
+                          : 'Solo admin puede capturar este campo.',
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2556,7 +2761,9 @@ class _ActaBodyStep extends StatelessWidget {
                       controller: fechaAprobacionPedidoController,
                       enabled: isAdmin,
                       onTap: () => onPickDate(fechaAprobacionPedidoController),
-                      helperText: isAdmin ? null : 'Solo admin puede capturar este campo.',
+                      helperText: isAdmin
+                          ? null
+                          : 'Solo admin puede capturar este campo.',
                     ),
                   ),
                 ],
@@ -2635,13 +2842,17 @@ class _PhotoReportStep extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const RemaSectionHeader(title: 'Paginas 2-5 / Reporte Fotografico'),
+              const RemaSectionHeader(
+                title: 'Paginas 2-5 / Reporte Fotografico',
+              ),
               const SizedBox(height: 18),
               _MultiPhotoCard(
                 title: 'Ingreso a las instalaciones',
                 subtitle: 'Seccion exclusiva',
                 mediaList: fotosIngreso,
-                isProcessing: isProcessingSinglePhoto && processingSingleStage == 'ingreso',
+                isProcessing:
+                    isProcessingSinglePhoto &&
+                    processingSingleStage == 'ingreso',
                 onPick: onPickIngreso,
                 onClear: () => onClearSingle('ingreso'),
                 onRemoveItem: onRemoveIngreso,
@@ -2674,7 +2885,8 @@ class _PhotoReportStep extends StatelessWidget {
                 title: 'Antes (levantamiento)',
                 subtitle: 'Pagina 3',
                 mediaList: fotosAntes,
-                isProcessing: isProcessingSinglePhoto && processingSingleStage == 'antes',
+                isProcessing:
+                    isProcessingSinglePhoto && processingSingleStage == 'antes',
                 onPick: onPickAntes,
                 onClear: () => onClearSingle('antes'),
                 onRemoveItem: onRemoveAntes,
@@ -2692,7 +2904,9 @@ class _PhotoReportStep extends StatelessWidget {
                 title: 'Despues (entrega final)',
                 subtitle: 'Pagina 5',
                 mediaList: fotosDespues,
-                isProcessing: isProcessingSinglePhoto && processingSingleStage == 'despues',
+                isProcessing:
+                    isProcessingSinglePhoto &&
+                    processingSingleStage == 'despues',
                 onPick: onPickDespues,
                 onClear: () => onClearSingle('despues'),
                 onRemoveItem: onRemoveDespues,
@@ -2722,7 +2936,11 @@ class _PhotoReportStep extends StatelessWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.add_a_photo_outlined),
-                    label: Text(isProcessingDurantePhotos ? 'Cargando...' : 'Agregar fotos'),
+                    label: Text(
+                      isProcessingDurantePhotos
+                          ? 'Cargando...'
+                          : 'Agregar fotos',
+                    ),
                   ),
                 ],
               ),
@@ -2808,7 +3026,9 @@ class _ActaField extends StatelessWidget {
       keyboardType: isHour24
           ? TextInputType.datetime
           : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
-      textCapitalization: forceUppercase ? TextCapitalization.characters : TextCapitalization.sentences,
+      textCapitalization: forceUppercase
+          ? TextCapitalization.characters
+          : TextCapitalization.sentences,
       inputFormatters: [
         if (allowOnlyText)
           FilteringTextInputFormatter.allow(RegExp(r'[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]')),
@@ -2947,9 +3167,7 @@ class _MultiPhotoCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.upload_file_outlined),
-                label: Text(
-                  isProcessing ? 'Cargando...' : 'Cargar',
-                ),
+                label: Text(isProcessing ? 'Cargando...' : 'Cargar'),
               ),
               IconButton(
                 onPressed: mediaList.isEmpty ? null : onClear,
@@ -2969,10 +3187,7 @@ class _MultiPhotoCard extends StatelessWidget {
               runSpacing: 10,
               children: [
                 for (final item in mediaList)
-                  _ThumbPhoto(
-                    media: item,
-                    onRemove: () => onRemoveItem(item),
-                  ),
+                  _ThumbPhoto(media: item, onRemove: () => onRemoveItem(item)),
               ],
             ),
         ],

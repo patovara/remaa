@@ -34,14 +34,19 @@ class QuotesRepository {
     try {
       final rows = await client
           .from('projects')
-          .select('id, code, name, client_id, site_address, description, manager_name')
+          .select(
+            'id, code, name, client_id, site_address, description, manager_name',
+          )
           .order('created_at', ascending: false);
 
       final projects = [
         for (final row in rows)
           ProjectLookup(
             id: row['id'] as String,
-            code: _normalizeProjectCode(row['code'] as String?, row['id'] as String),
+            code: _normalizeProjectCode(
+              row['code'] as String?,
+              row['id'] as String,
+            ),
             name: row['name'] as String? ?? 'Sin nombre',
             clientId: row['client_id'] as String?,
             siteAddress: row['site_address'] as String?,
@@ -64,7 +69,10 @@ class QuotesRepository {
 
       return merged;
     } catch (error) {
-      AppLogger.error('projects_fetch_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'projects_fetch_failed',
+        data: {'error': error.toString()},
+      );
       return _localProjects;
     }
   }
@@ -108,12 +116,17 @@ class QuotesRepository {
             'description': _asNullable(input.description),
             'manager_name': _asNullable(input.managerName),
           })
-          .select('id, code, name, client_id, site_address, description, manager_name')
+          .select(
+            'id, code, name, client_id, site_address, description, manager_name',
+          )
           .single();
 
       return ProjectLookup(
         id: inserted['id'] as String,
-        code: _normalizeProjectCode(inserted['code'] as String?, inserted['id'] as String),
+        code: _normalizeProjectCode(
+          inserted['code'] as String?,
+          inserted['id'] as String,
+        ),
         name: inserted['name'] as String? ?? name,
         clientId: inserted['client_id'] as String?,
         siteAddress: inserted['site_address'] as String?,
@@ -121,7 +134,10 @@ class QuotesRepository {
         managerName: inserted['manager_name'] as String?,
       );
     } catch (error) {
-      AppLogger.error('projects_create_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'projects_create_failed',
+        data: {'error': error.toString()},
+      );
       final local = ProjectLookup(
         id: 'seed-project-${DateTime.now().millisecondsSinceEpoch}',
         code: code,
@@ -178,7 +194,10 @@ class QuotesRepository {
       }
       await client.from('projects').update(payload).eq('id', projectId);
     } catch (error) {
-      AppLogger.error('projects_update_context_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'projects_update_context_failed',
+        data: {'error': error.toString()},
+      );
       _upsertLocalProject(normalized);
     }
   }
@@ -195,10 +214,7 @@ class QuotesRepository {
           .select(_quoteSelectFields)
           .order('created_at', ascending: false);
 
-      final quotes = [
-        for (final row in rows)
-          _quoteFromRow(row),
-      ];
+      final quotes = [for (final row in rows) _quoteFromRow(row)];
       if (quotes.isEmpty) {
         return _sortedLocalQuotes;
       }
@@ -223,8 +239,7 @@ class QuotesRepository {
       projectKey: projectKey,
     );
 
-    if (
-        client == null ||
+    if (client == null ||
         !_isUuid(projectId) ||
         !_isUuid(universeId) ||
         !_isUuid(projectTypeId)) {
@@ -263,7 +278,10 @@ class QuotesRepository {
 
       return _quoteFromRow(inserted);
     } catch (error) {
-      AppLogger.error('quotes_create_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quotes_create_failed',
+        data: {'error': error.toString()},
+      );
       final local = QuoteRecord(
         id: 'seed-quote-${DateTime.now().millisecondsSinceEpoch}',
         projectId: projectId,
@@ -300,14 +318,16 @@ class QuotesRepository {
     }
 
     try {
-      await client.from('quotes').update({
-        'subtotal': subtotal,
-        'tax': tax,
-        'total': total,
-      }).eq('id', quote.id);
+      await client
+          .from('quotes')
+          .update({'subtotal': subtotal, 'tax': tax, 'total': total})
+          .eq('id', quote.id);
       return updated;
     } catch (error) {
-      AppLogger.error('quotes_update_totals_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quotes_update_totals_failed',
+        data: {'error': error.toString()},
+      );
       _replaceLocalQuote(updated);
       return updated;
     }
@@ -319,7 +339,9 @@ class QuotesRepository {
   }) async {
     final client = SupabaseBootstrap.client;
     if (client == null) {
-      throw StateError('Supabase no esta disponible para consultar tipo de cambio.');
+      throw StateError(
+        'Supabase no esta disponible para consultar tipo de cambio.',
+      );
     }
 
     // Función es pública (no requiere autenticación), pero incluir token si existe
@@ -331,10 +353,7 @@ class QuotesRepository {
     final response = await client.functions.invoke(
       'exchange-rate',
       headers: headers,
-      body: {
-        'base': base,
-        'target': target,
-      },
+      body: {'base': base, 'target': target},
     );
 
     final data = response.data;
@@ -390,19 +409,27 @@ class QuotesRepository {
     }
 
     try {
-      await client.from('quotes').update({
-        'final_exchange_rate': rate.rate,
-        'final_exchange_base': rate.base,
-        'final_exchange_target': rate.target,
-        'final_exchange_provider': rate.provider,
-        'final_exchange_captured_at': rate.fetchedAt.toUtc().toIso8601String(),
-        'final_subtotal_usd': subtotalUsd,
-        'final_tax_usd': taxUsd,
-        'final_total_usd': totalUsd,
-      }).eq('id', quote.id);
+      await client
+          .from('quotes')
+          .update({
+            'final_exchange_rate': rate.rate,
+            'final_exchange_base': rate.base,
+            'final_exchange_target': rate.target,
+            'final_exchange_provider': rate.provider,
+            'final_exchange_captured_at': rate.fetchedAt
+                .toUtc()
+                .toIso8601String(),
+            'final_subtotal_usd': subtotalUsd,
+            'final_tax_usd': taxUsd,
+            'final_total_usd': totalUsd,
+          })
+          .eq('id', quote.id);
       return updated;
     } catch (error) {
-      AppLogger.error('quotes_persist_final_usd_snapshot_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quotes_persist_final_usd_snapshot_failed',
+        data: {'error': error.toString()},
+      );
       _replaceLocalQuote(updated);
       return updated;
     }
@@ -420,7 +447,9 @@ class QuotesRepository {
     if (quote.isActaFinalizada &&
         status != QuoteStatus.actaFinalizada &&
         status != QuoteStatus.paid) {
-      throw StateError('No puedes modificar una cotizacion con acta finalizada.');
+      throw StateError(
+        'No puedes modificar una cotizacion con acta finalizada.',
+      );
     }
 
     if (status == QuoteStatus.concluded) {
@@ -428,7 +457,9 @@ class QuotesRepository {
     }
     if (status == QuoteStatus.approved) {
       if (!quote.isConcluded) {
-        throw StateError('La cotizacion debe estar concluida antes de aprobarse.');
+        throw StateError(
+          'La cotizacion debe estar concluida antes de aprobarse.',
+        );
       }
       if (!quote.hasApprovalPdf) {
         final quoteClient = await _fetchClientSnapshotForQuote(quote.projectId);
@@ -443,7 +474,9 @@ class QuotesRepository {
       }
     }
     if (status == QuoteStatus.paid && !quote.isActaFinalizada) {
-      throw StateError('La cotizacion debe estar por cobrar antes de marcarse como pagada.');
+      throw StateError(
+        'La cotizacion debe estar por cobrar antes de marcarse como pagada.',
+      );
     }
 
     final shouldClearApprovalPdf =
@@ -452,7 +485,9 @@ class QuotesRepository {
     final updated = quote.copyWith(
       status: status,
       approvalPdfPath: shouldClearApprovalPdf ? '' : quote.approvalPdfPath,
-      approvalPdfUploadedAt: shouldClearApprovalPdf ? null : quote.approvalPdfUploadedAt,
+      approvalPdfUploadedAt: shouldClearApprovalPdf
+          ? null
+          : quote.approvalPdfUploadedAt,
     );
     final client = SupabaseBootstrap.client;
 
@@ -470,17 +505,20 @@ class QuotesRepository {
       await client.from('quotes').update(payload).eq('id', quote.id);
       return updated;
     } catch (error) {
-      AppLogger.error('quotes_update_status_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quotes_update_status_failed',
+        data: {'error': error.toString()},
+      );
       _replaceLocalQuote(updated);
       return updated;
     }
   }
 
   Future<String?> fetchRecipientEmailForQuote({required String quoteId}) async {
-    final quote = _localQuotes.where((item) => item.id == quoteId).cast<QuoteRecord?>().firstWhere(
-          (item) => item != null,
-          orElse: () => null,
-        );
+    final quote = _localQuotes
+        .where((item) => item.id == quoteId)
+        .cast<QuoteRecord?>()
+        .firstWhere((item) => item != null, orElse: () => null);
     final localEmail = (quote?.recipientEmail ?? '').trim();
     if (localEmail.isNotEmpty) {
       return localEmail;
@@ -546,15 +584,18 @@ class QuotesRepository {
     }
 
     try {
-      await client.from('quotes').update({'recipient_email': email}).eq('id', quoteId);
+      await client
+          .from('quotes')
+          .update({'recipient_email': email})
+          .eq('id', quoteId);
     } catch (_) {
       // Staging can run without recipient_email migration applied yet.
     }
 
-    final current = _localQuotes.where((item) => item.id == quoteId).cast<QuoteRecord?>().firstWhere(
-          (item) => item != null,
-          orElse: () => null,
-        );
+    final current = _localQuotes
+        .where((item) => item.id == quoteId)
+        .cast<QuoteRecord?>()
+        .firstWhere((item) => item != null, orElse: () => null);
     if (current != null) {
       _replaceLocalQuote(current.copyWith(recipientEmail: email));
     }
@@ -570,7 +611,9 @@ class QuotesRepository {
     }
 
     if (!quote.isConcluded) {
-      throw StateError('Debes concluir la cotizacion antes de adjuntar el PDF de aprobacion.');
+      throw StateError(
+        'Debes concluir la cotizacion antes de adjuntar el PDF de aprobacion.',
+      );
     }
 
     await _ensureApprovalPdfCanBeAttached(quote);
@@ -593,22 +636,34 @@ class QuotesRepository {
     }
 
     try {
-      await client.storage.from('quote-approvals').uploadBinary(
+      await client.storage
+          .from('quote-approvals')
+          .uploadBinary(
             objectPath,
             bytes,
-            fileOptions: const FileOptions(contentType: 'application/pdf', upsert: true),
+            fileOptions: const FileOptions(
+              contentType: 'application/pdf',
+              upsert: true,
+            ),
           );
 
-      await client.from('quotes').update({
-        'approval_pdf_path': objectPath,
-        'approval_pdf_uploaded_at': now.toUtc().toIso8601String(),
-      }).eq('id', quote.id);
+      await client
+          .from('quotes')
+          .update({
+            'approval_pdf_path': objectPath,
+            'approval_pdf_uploaded_at': now.toUtc().toIso8601String(),
+          })
+          .eq('id', quote.id);
 
       return updated;
     } catch (error) {
-      AppLogger.error('quotes_attach_approval_pdf_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quotes_attach_approval_pdf_failed',
+        data: {'error': error.toString()},
+      );
       final message = error.toString().toLowerCase();
-      if (message.contains('row-level security') || message.contains('unauthorized')) {
+      if (message.contains('row-level security') ||
+          message.contains('unauthorized')) {
         throw StateError(
           'No se pudo adjuntar el PDF del pedido. Revisa permisos del bucket quote-approvals en storage.',
         );
@@ -621,6 +676,8 @@ class QuotesRepository {
     required String quoteId,
     required Uint8List bytes,
     required String fileName,
+    DateTime? startDate,
+    DateTime? conclusionDate,
     List<ActaPhotoAssetInput> photos = const <ActaPhotoAssetInput>[],
   }) async {
     if (bytes.isEmpty) {
@@ -633,8 +690,10 @@ class QuotesRepository {
       fileName: fileName,
       bytes: bytes,
       createdAt: now,
+      startDate: startDate,
+      conclusionDate: conclusionDate,
     );
-    _localActaDocuments[quoteId] = localRecord;
+    _localActaDocuments['local_${quoteId}_$now'] = localRecord;
 
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(quoteId)) {
@@ -643,11 +702,17 @@ class QuotesRepository {
 
     try {
       final timestamp = now.millisecondsSinceEpoch;
-      final pdfObjectPath = '$quoteId/pdf/${timestamp}_${_sanitizeStorageName(fileName)}';
-      await client.storage.from(_actaBucket).uploadBinary(
+      final pdfObjectPath =
+          '$quoteId/pdf/${timestamp}_${_sanitizeStorageName(fileName)}';
+      await client.storage
+          .from(_actaBucket)
+          .uploadBinary(
             pdfObjectPath,
             bytes,
-            fileOptions: const FileOptions(contentType: 'application/pdf', upsert: true),
+            fileOptions: const FileOptions(
+              contentType: 'application/pdf',
+              upsert: true,
+            ),
           );
 
       final photoMetaMaps = <Map<String, Object?>>[];
@@ -657,8 +722,11 @@ class QuotesRepository {
           continue;
         }
         final ext = _guessImageExtension(photo.fileName);
-        final photoObjectPath = '$quoteId/photos/${timestamp}_${index}_${photo.slot}.$ext';
-        await client.storage.from(_actaBucket).uploadBinary(
+        final photoObjectPath =
+            '$quoteId/photos/${timestamp}_${index}_${photo.slot}.$ext';
+        await client.storage
+            .from(_actaBucket)
+            .uploadBinary(
               photoObjectPath,
               photo.bytes,
               fileOptions: FileOptions(
@@ -675,33 +743,55 @@ class QuotesRepository {
         });
       }
 
-      await client.from('quote_acta_assets').upsert({
-        'quote_id': quoteId,
-        'pdf_object_path': pdfObjectPath,
-        'pdf_file_name': fileName,
-        'pdf_file_size_bytes': bytes.length,
-        'photo_meta': photoMetaMaps,
-        'created_at': now.toUtc().toIso8601String(),
-        'updated_at': now.toUtc().toIso8601String(),
-      });
+      final row = await client
+          .from('quote_acta_assets')
+          .insert({
+            'quote_id': quoteId,
+            'pdf_object_path': pdfObjectPath,
+            'pdf_file_name': fileName,
+            'pdf_file_size_bytes': bytes.length,
+            'photo_meta': photoMetaMaps,
+            'start_date': startDate?.toIso8601String().substring(0, 10),
+            'conclusion_date': conclusionDate?.toIso8601String().substring(
+              0,
+              10,
+            ),
+            'created_at': now.toUtc().toIso8601String(),
+            'updated_at': now.toUtc().toIso8601String(),
+          })
+          .select('id')
+          .single();
 
       _localActaDocuments[quoteId] = ActaDocumentRecord(
+        id: row['id'] as String?,
         quoteId: quoteId,
         fileName: fileName,
         bytes: bytes,
         createdAt: now,
+        startDate: startDate,
+        conclusionDate: conclusionDate,
         objectPath: pdfObjectPath,
-        photoAssets: [for (final item in photoMetaMaps) _actaPhotoMetaFromMap(item)],
+        photoAssets: [
+          for (final item in photoMetaMaps) _actaPhotoMetaFromMap(item),
+        ],
       );
       return true;
     } catch (error) {
-      AppLogger.error('acta_document_save_failed', data: {'quoteId': quoteId, 'error': error.toString()});
+      AppLogger.error(
+        'acta_document_save_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
       return false;
     }
   }
 
-  Future<ActaDocumentRecord?> fetchActaDocument(String quoteId) async {
-    final local = _localActaDocuments[quoteId];
+  Future<ActaDocumentRecord?> fetchActaDocument(
+    String quoteId, {
+    String? actaId,
+  }) async {
+    final local = actaId == null
+        ? _localActaDocuments[quoteId]
+        : _localActaDocuments[actaId];
     if (local != null) {
       return local;
     }
@@ -712,11 +802,17 @@ class QuotesRepository {
     }
 
     try {
-      final row = await client
+      var query = client
           .from('quote_acta_assets')
-          .select('quote_id, pdf_object_path, pdf_file_name, created_at, photo_meta')
-          .eq('quote_id', quoteId)
-          .maybeSingle();
+          .select(
+            'id, quote_id, pdf_object_path, pdf_file_name, created_at, start_date, conclusion_date, photo_meta',
+          )
+          .eq('quote_id', quoteId);
+      if (actaId != null && actaId.isNotEmpty) {
+        query = query.eq('id', actaId);
+      }
+      final rows = await query.order('created_at', ascending: false).limit(1);
+      final row = rows.isEmpty ? null : rows.first;
       if (row == null) {
         return null;
       }
@@ -732,24 +828,33 @@ class QuotesRepository {
       }
 
       final record = ActaDocumentRecord(
+        id: row['id'] as String?,
         quoteId: row['quote_id'] as String? ?? quoteId,
-        fileName: row['pdf_file_name'] as String? ?? 'acta_entrega_$quoteId.pdf',
+        fileName:
+            row['pdf_file_name'] as String? ?? 'acta_entrega_$quoteId.pdf',
         bytes: bytes,
         createdAt: _toDateTime(row['created_at']) ?? DateTime.now(),
+        startDate: _toDateTime(row['start_date']),
+        conclusionDate: _toDateTime(row['conclusion_date']),
         objectPath: objectPath,
         photoAssets: _parseActaPhotoMeta(row['photo_meta']),
       );
-      _localActaDocuments[quoteId] = record;
+      _localActaDocuments[record.id ?? quoteId] = record;
       return record;
     } catch (error) {
-      AppLogger.error('acta_document_fetch_failed', data: {'quoteId': quoteId, 'error': error.toString()});
+      AppLogger.error(
+        'acta_document_fetch_failed',
+        data: {'quoteId': quoteId, 'error': error.toString()},
+      );
       return null;
     }
   }
 
   /// Fetches lightweight acta metadata for multiple quotes in a single DB call.
   /// Returns only the rows that exist in quote_acta_assets — no bytes downloaded.
-  Future<List<ActaDocumentMeta>> fetchActaDocumentMetasForQuotes(List<String> quoteIds) async {
+  Future<List<ActaDocumentMeta>> fetchActaDocumentMetasForQuotes(
+    List<String> quoteIds,
+  ) async {
     if (quoteIds.isEmpty) return const [];
     final validIds = quoteIds.where(_isUuid).toList();
     if (validIds.isEmpty) return const [];
@@ -760,19 +865,27 @@ class QuotesRepository {
     try {
       final rows = await client
           .from('quote_acta_assets')
-          .select('quote_id, pdf_file_name, created_at, pdf_object_path')
+          .select(
+            'id, quote_id, pdf_file_name, created_at, start_date, conclusion_date, pdf_object_path',
+          )
           .inFilter('quote_id', validIds);
       return [
         for (final row in rows)
           ActaDocumentMeta(
+            id: row['id'] as String? ?? '',
             quoteId: row['quote_id'] as String? ?? '',
             fileName: row['pdf_file_name'] as String? ?? 'acta.pdf',
             createdAt: _toDateTime(row['created_at']) ?? DateTime.now(),
+            startDate: _toDateTime(row['start_date']),
+            conclusionDate: _toDateTime(row['conclusion_date']),
             objectPath: row['pdf_object_path'] as String?,
           ),
-      ].where((m) => m.quoteId.isNotEmpty).toList();
+      ].where((m) => m.id.isNotEmpty && m.quoteId.isNotEmpty).toList();
     } catch (error) {
-      AppLogger.error('acta_metas_fetch_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'acta_metas_fetch_failed',
+        data: {'error': error.toString()},
+      );
       return const [];
     }
   }
@@ -798,7 +911,10 @@ class QuotesRepository {
 
     final items = await fetchItemsByQuoteId(quote.id);
     final hasValidItems = items.any(
-      (item) => item.lineTotal > 0 && item.quantity > 0 && item.concept.trim().isNotEmpty,
+      (item) =>
+          item.lineTotal > 0 &&
+          item.quantity > 0 &&
+          item.concept.trim().isNotEmpty,
     );
     if (!hasValidItems || quote.total <= 0) {
       issues.add('la cotizacion no esta concluida con conceptos e importe');
@@ -822,7 +938,10 @@ class QuotesRepository {
 
     final items = await fetchItemsByQuoteId(quote.id);
     final hasValidItems = items.any(
-      (item) => item.lineTotal > 0 && item.quantity > 0 && item.concept.trim().isNotEmpty,
+      (item) =>
+          item.lineTotal > 0 &&
+          item.quantity > 0 &&
+          item.concept.trim().isNotEmpty,
     );
     if (!hasValidItems || quote.total <= 0) {
       issues.add('la cotizacion no tiene conceptos concluidos con importe');
@@ -836,10 +955,10 @@ class QuotesRepository {
   }
 
   Future<ProjectLookup?> _findProjectById(String projectId) async {
-    final local = _localProjects.where((project) => project.id == projectId).cast<ProjectLookup?>().firstWhere(
-          (project) => project != null,
-          orElse: () => null,
-        );
+    final local = _localProjects
+        .where((project) => project.id == projectId)
+        .cast<ProjectLookup?>()
+        .firstWhere((project) => project != null, orElse: () => null);
     if (local != null) {
       return local;
     }
@@ -852,7 +971,9 @@ class QuotesRepository {
     try {
       final row = await client
           .from('projects')
-          .select('id, code, name, client_id, site_address, description, manager_name')
+          .select(
+            'id, code, name, client_id, site_address, description, manager_name',
+          )
           .eq('id', projectId)
           .maybeSingle();
       if (row == null) {
@@ -860,7 +981,10 @@ class QuotesRepository {
       }
       return ProjectLookup(
         id: row['id'] as String? ?? projectId,
-        code: _normalizeProjectCode(row['code'] as String?, row['id'] as String? ?? projectId),
+        code: _normalizeProjectCode(
+          row['code'] as String?,
+          row['id'] as String? ?? projectId,
+        ),
         name: (row['name'] as String? ?? '').trim(),
         clientId: row['client_id'] as String?,
         siteAddress: row['site_address'] as String?,
@@ -868,7 +992,10 @@ class QuotesRepository {
         managerName: row['manager_name'] as String?,
       );
     } catch (error) {
-      AppLogger.error('project_lookup_for_approval_failed', data: {'projectId': projectId, 'error': error.toString()});
+      AppLogger.error(
+        'project_lookup_for_approval_failed',
+        data: {'projectId': projectId, 'error': error.toString()},
+      );
       return null;
     }
   }
@@ -905,7 +1032,9 @@ class QuotesRepository {
     );
   }
 
-  Future<({String? sectorLabel})?> _fetchClientSnapshotForQuote(String projectId) async {
+  Future<({String? sectorLabel})?> _fetchClientSnapshotForQuote(
+    String projectId,
+  ) async {
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(projectId)) {
       return null;
@@ -936,7 +1065,9 @@ class QuotesRepository {
     try {
       final rows = await client
           .from('quote_items')
-          .select('id, quote_id, template_id, concept, generated_data, unit, quantity, unit_price, line_total')
+          .select(
+            'id, quote_id, template_id, concept, generated_data, unit, quantity, unit_price, line_total',
+          )
           .eq('quote_id', quoteId);
 
       return [
@@ -954,7 +1085,10 @@ class QuotesRepository {
           ),
       ];
     } catch (error) {
-      AppLogger.error('quote_items_fetch_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quote_items_fetch_failed',
+        data: {'error': error.toString()},
+      );
       return List<QuoteItemRecord>.from(_localItems[quoteId] ?? const []);
     }
   }
@@ -1006,10 +1140,10 @@ class QuotesRepository {
           ),
       ];
     } catch (error) {
-      AppLogger.error('quote_items_recent_by_template_failed', data: {
-        'template_id': cleanTemplateId,
-        'error': error.toString(),
-      });
+      AppLogger.error(
+        'quote_items_recent_by_template_failed',
+        data: {'template_id': cleanTemplateId, 'error': error.toString()},
+      );
       return const [];
     }
   }
@@ -1017,7 +1151,9 @@ class QuotesRepository {
   Future<List<QuoteItemRecord>> saveItem(QuoteItemRecord item) async {
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(item.quoteId)) {
-      final items = List<QuoteItemRecord>.from(_localItems[item.quoteId] ?? const []);
+      final items = List<QuoteItemRecord>.from(
+        _localItems[item.quoteId] ?? const [],
+      );
       final next = [
         for (final current in items)
           if (current.id != item.id) current,
@@ -1047,8 +1183,13 @@ class QuotesRepository {
 
       return fetchItemsByQuoteId(item.quoteId);
     } catch (error) {
-      AppLogger.error('quote_items_save_failed', data: {'error': error.toString()});
-      final items = List<QuoteItemRecord>.from(_localItems[item.quoteId] ?? const []);
+      AppLogger.error(
+        'quote_items_save_failed',
+        data: {'error': error.toString()},
+      );
+      final items = List<QuoteItemRecord>.from(
+        _localItems[item.quoteId] ?? const [],
+      );
       final next = [
         for (final current in items)
           if (current.id != item.id) current,
@@ -1065,8 +1206,13 @@ class QuotesRepository {
   }) async {
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(itemId)) {
-      final items = List<QuoteItemRecord>.from(_localItems[quoteId] ?? const []);
-      final next = [for (final item in items) if (item.id != itemId) item];
+      final items = List<QuoteItemRecord>.from(
+        _localItems[quoteId] ?? const [],
+      );
+      final next = [
+        for (final item in items)
+          if (item.id != itemId) item,
+      ];
       _localItems[quoteId] = next;
       return next;
     }
@@ -1075,15 +1221,25 @@ class QuotesRepository {
       await client.from('quote_items').delete().eq('id', itemId);
       return fetchItemsByQuoteId(quoteId);
     } catch (error) {
-      AppLogger.error('quote_items_delete_failed', data: {'error': error.toString()});
-      final items = List<QuoteItemRecord>.from(_localItems[quoteId] ?? const []);
-      final next = [for (final item in items) if (item.id != itemId) item];
+      AppLogger.error(
+        'quote_items_delete_failed',
+        data: {'error': error.toString()},
+      );
+      final items = List<QuoteItemRecord>.from(
+        _localItems[quoteId] ?? const [],
+      );
+      final next = [
+        for (final item in items)
+          if (item.id != itemId) item,
+      ];
       _localItems[quoteId] = next;
       return next;
     }
   }
 
-  Future<QuoteContextInfo> fetchQuoteContext({required String projectId}) async {
+  Future<QuoteContextInfo> fetchQuoteContext({
+    required String projectId,
+  }) async {
     final client = SupabaseBootstrap.client;
     if (client == null || !_isUuid(projectId)) {
       final project = _localProjects.firstWhere(
@@ -1091,7 +1247,9 @@ class QuotesRepository {
         orElse: () => const ProjectLookup(id: '', code: '', name: ''),
       );
       final localClientId = project.clientId?.trim() ?? '';
-      final localClient = localClientId.isEmpty ? null : findClientById(localClientId);
+      final localClient = localClientId.isEmpty
+          ? null
+          : findClientById(localClientId);
       if (localClient != null) {
         final location = _composeLocation(
           city: localClient.city,
@@ -1104,10 +1262,7 @@ class QuotesRepository {
             businessName: localClient.name,
           ),
           address: _normalizeAddressForQuote(
-            address: _firstNonEmpty([
-              project.siteAddress,
-              localClient.address,
-            ]),
+            address: _firstNonEmpty([project.siteAddress, localClient.address]),
             location: location,
             city: localClient.city,
             state: localClient.state,
@@ -1117,7 +1272,9 @@ class QuotesRepository {
         );
       }
 
-      if (client != null && localClientId.isNotEmpty && _isUuid(localClientId)) {
+      if (client != null &&
+          localClientId.isNotEmpty &&
+          _isUuid(localClientId)) {
         try {
           final clientRow = await client
               .from('clients')
@@ -1139,12 +1296,11 @@ class QuotesRepository {
           );
           return QuoteContextInfo(
             projectName: project.name,
-            clientName: clientName.isEmpty ? 'Cliente no disponible' : clientName,
+            clientName: clientName.isEmpty
+                ? 'Cliente no disponible'
+                : clientName,
             address: _normalizeAddressForQuote(
-              address: _firstNonEmpty([
-                project.siteAddress,
-                addressLine,
-              ]),
+              address: _firstNonEmpty([project.siteAddress, addressLine]),
               location: location,
               city: normalizedLocation.city,
               state: normalizedLocation.state,
@@ -1157,7 +1313,9 @@ class QuotesRepository {
 
       return QuoteContextInfo(
         projectName: project.name,
-        clientName: localClientId.isEmpty ? 'Cliente no asignado' : 'Cliente no disponible',
+        clientName: localClientId.isEmpty
+            ? 'Cliente no asignado'
+            : 'Cliente no disponible',
         address: (project.siteAddress ?? '').trim(),
         location: '',
         description: project.description ?? '',
@@ -1219,7 +1377,10 @@ class QuotesRepository {
         description: description,
       );
     } catch (error) {
-      AppLogger.error('quote_context_fetch_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'quote_context_fetch_failed',
+        data: {'error': error.toString()},
+      );
       return const QuoteContextInfo(
         projectName: '',
         clientName: '',
@@ -1274,10 +1435,7 @@ class QuotesRepository {
       return (city: rawCity, state: rawState);
     }
 
-    return (
-      city: parts.sublist(1).join(', '),
-      state: parts.first,
-    );
+    return (city: parts.sublist(1).join(', '), state: parts.first);
   }
 
   String _composeLocation({String? city, String? state}) {
@@ -1311,7 +1469,9 @@ class QuotesRepository {
       for (final token in trailingTokens) {
         final suffix = ', $token';
         if (normalized.toLowerCase().endsWith(suffix.toLowerCase())) {
-          normalized = normalized.substring(0, normalized.length - suffix.length).trimRight();
+          normalized = normalized
+              .substring(0, normalized.length - suffix.length)
+              .trimRight();
           normalized = normalized.replaceAll(RegExp(r'[\s,]+$'), '');
           updated = true;
         }
@@ -1332,8 +1492,9 @@ class QuotesRepository {
       for (final input in evidenceInputs)
         if (input.bytes.isNotEmpty) input,
     ];
-    final limitedInputs =
-        sanitizedInputs.length <= 2 ? sanitizedInputs : sanitizedInputs.sublist(0, 2);
+    final limitedInputs = sanitizedInputs.length <= 2
+        ? sanitizedInputs
+        : sanitizedInputs.sublist(0, 2);
     final hasEvidence = limitedInputs.isNotEmpty;
     if (!hasText && !hasEvidence) {
       return null;
@@ -1355,7 +1516,8 @@ class QuotesRepository {
         evidenceMetadata: [
           for (var index = 0; index < limitedInputs.length; index++)
             SurveyEvidenceMeta(
-              objectPath: 'local://$projectId/${DateTime.now().millisecondsSinceEpoch}_$index',
+              objectPath:
+                  'local://$projectId/${DateTime.now().millisecondsSinceEpoch}_$index',
               originalName: limitedInputs[index].originalName,
               fileSizeBytes: limitedInputs[index].fileSizeBytes,
               sortOrder: index,
@@ -1364,7 +1526,9 @@ class QuotesRepository {
         ],
         createdAt: DateTime.now(),
       );
-      final items = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+      final items = List<SurveyEntryRecord>.from(
+        _localSurveyEntries[projectId] ?? const [],
+      );
       items.add(local);
       _localSurveyEntries[projectId] = items;
       return local;
@@ -1377,34 +1541,39 @@ class QuotesRepository {
       final failedUploads = <int>[];
 
       final evidenceMetaMaps = <Map<String, Object?>>[];
-      
+
       // Upload with automatic retry for network resilience
       for (var index = 0; index < limitedInputs.length; index++) {
         final input = limitedInputs[index];
         final ext = _guessImageExtension(input.originalName);
         final objectPath = '$projectId/$quoteFolder/${timestamp}_$index.$ext';
-        
+
         var uploadSucceeded = false;
         var retryCount = 0;
         const maxRetries = 2;
-        
+
         while (retryCount <= maxRetries && !uploadSucceeded) {
           try {
-            await client.storage.from('survey-photos').uploadBinary(
-              objectPath,
-              input.bytes,
-              fileOptions: const FileOptions(upsert: true),
-            );
+            await client.storage
+                .from('survey-photos')
+                .uploadBinary(
+                  objectPath,
+                  input.bytes,
+                  fileOptions: const FileOptions(upsert: true),
+                );
             uploadSucceeded = true;
             evidencePaths.add(objectPath);
           } catch (e) {
             retryCount++;
             if (retryCount > maxRetries) {
-              AppLogger.error('evidence_upload_failed_after_retries', data: {
-                'objectPath': objectPath,
-                'retries': retryCount,
-                'error': e.toString(),
-              });
+              AppLogger.error(
+                'evidence_upload_failed_after_retries',
+                data: {
+                  'objectPath': objectPath,
+                  'retries': retryCount,
+                  'error': e.toString(),
+                },
+              );
               failedUploads.add(index);
             } else {
               // Brief delay before retry (exponential backoff)
@@ -1412,7 +1581,7 @@ class QuotesRepository {
             }
           }
         }
-        
+
         if (uploadSucceeded) {
           evidenceMetaMaps.add({
             'object_path': objectPath,
@@ -1430,7 +1599,7 @@ class QuotesRepository {
       // Get current user for ownership tracking
       final currentUser = client.auth.currentUser;
       final currentUserId = currentUser?.id;
-      
+
       final payload = <String, Object?>{
         'project_id': projectId,
         'description': _asNullable(trimmed),
@@ -1458,7 +1627,9 @@ class QuotesRepository {
         evidenceMetadata: [
           for (var index = 0; index < limitedInputs.length; index++)
             SurveyEvidenceMeta(
-              objectPath: index < evidencePaths.length ? evidencePaths[index] : '',
+              objectPath: index < evidencePaths.length
+                  ? evidencePaths[index]
+                  : '',
               originalName: limitedInputs[index].originalName,
               fileSizeBytes: limitedInputs[index].fileSizeBytes,
               sortOrder: index,
@@ -1468,7 +1639,10 @@ class QuotesRepository {
         createdAt: _toDateTime(inserted['created_at']),
       );
     } catch (error) {
-      AppLogger.error('survey_entry_append_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'survey_entry_append_failed',
+        data: {'error': error.toString()},
+      );
       final local = SurveyEntryRecord(
         id: 'local-entry-${DateTime.now().millisecondsSinceEpoch}',
         projectId: projectId,
@@ -1482,7 +1656,8 @@ class QuotesRepository {
         evidenceMetadata: [
           for (var index = 0; index < limitedInputs.length; index++)
             SurveyEvidenceMeta(
-              objectPath: 'local://$projectId/${DateTime.now().millisecondsSinceEpoch}_$index',
+              objectPath:
+                  'local://$projectId/${DateTime.now().millisecondsSinceEpoch}_$index',
               originalName: limitedInputs[index].originalName,
               fileSizeBytes: limitedInputs[index].fileSizeBytes,
               sortOrder: index,
@@ -1491,16 +1666,22 @@ class QuotesRepository {
         ],
         createdAt: DateTime.now(),
       );
-      final items = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+      final items = List<SurveyEntryRecord>.from(
+        _localSurveyEntries[projectId] ?? const [],
+      );
       items.add(local);
       _localSurveyEntries[projectId] = items;
       return local;
     }
   }
 
-  Future<List<SurveyEntryRecord>> fetchSurveyEntries({required String projectId}) async {
+  Future<List<SurveyEntryRecord>> fetchSurveyEntries({
+    required String projectId,
+  }) async {
     final client = SupabaseBootstrap.client;
-    final localItems = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+    final localItems = List<SurveyEntryRecord>.from(
+      _localSurveyEntries[projectId] ?? const [],
+    );
 
     if (client == null || !_isUuid(projectId)) {
       return localItems;
@@ -1509,7 +1690,9 @@ class QuotesRepository {
     try {
       final rows = await client
           .from('project_survey_entries')
-          .select('id, quote_id, description, evidence_paths, evidence_meta, created_at')
+          .select(
+            'id, quote_id, description, evidence_paths, evidence_meta, created_at',
+          )
           .eq('project_id', projectId)
           .order('created_at', ascending: true);
 
@@ -1533,8 +1716,11 @@ class QuotesRepository {
                 SurveyEvidenceMeta(
                   objectPath: objectPath,
                   originalName: item['original_name'] as String? ?? objectPath,
-                  fileSizeBytes: (item['file_size_bytes'] as num?)?.toInt() ?? 0,
-                  sortOrder: (item['sort_order'] as num?)?.toInt() ?? evidenceMeta.length,
+                  fileSizeBytes:
+                      (item['file_size_bytes'] as num?)?.toInt() ?? 0,
+                  sortOrder:
+                      (item['sort_order'] as num?)?.toInt() ??
+                      evidenceMeta.length,
                   mimeType: item['mime_type'] as String?,
                   widthPx: (item['width_px'] as num?)?.toInt(),
                   heightPx: (item['height_px'] as num?)?.toInt(),
@@ -1554,7 +1740,9 @@ class QuotesRepository {
           final downloads = await Future.wait(
             sources.map((path) async {
               try {
-                final bytes = await client.storage.from('survey-photos').download(path);
+                final bytes = await client.storage
+                    .from('survey-photos')
+                    .download(path);
                 return bytes.isNotEmpty ? bytes : null;
               } catch (_) {
                 return null;
@@ -1565,20 +1753,21 @@ class QuotesRepository {
             final bytes = downloads[i];
             if (bytes != null) {
               evidence.add(bytes);
-            } else if (i < sources.length && sources[i].startsWith('local://')) {
+            } else if (i < sources.length &&
+                sources[i].startsWith('local://')) {
               // Fallback: Si la imagen no se puede descargar pero está marcada como local,
               // intenta recuperar desde _localSurveyEntries si existe
               final entryId = row['id'] as String?;
               if (entryId != null) {
-                final localItems = _localSurveyEntries[projectId] ?? const <SurveyEntryRecord>[];
+                final localItems =
+                    _localSurveyEntries[projectId] ??
+                    const <SurveyEntryRecord>[];
                 final localEntry = localItems
                     .where((item) => item.id == entryId)
                     .cast<SurveyEntryRecord?>()
-                    .firstWhere(
-                      (item) => item != null,
-                      orElse: () => null,
-                    );
-                if (localEntry != null && i < localEntry.evidencePreviewList.length) {
+                    .firstWhere((item) => item != null, orElse: () => null);
+                if (localEntry != null &&
+                    i < localEntry.evidencePreviewList.length) {
                   evidence.add(localEntry.evidencePreviewList[i]);
                 }
               }
@@ -1605,7 +1794,10 @@ class QuotesRepository {
       }
       return [...entries, ...localItems];
     } catch (error) {
-      AppLogger.error('survey_entries_fetch_failed', data: {'error': error.toString()});
+      AppLogger.error(
+        'survey_entries_fetch_failed',
+        data: {'error': error.toString()},
+      );
       return localItems;
     }
   }
@@ -1634,7 +1826,9 @@ class QuotesRepository {
     final client = SupabaseBootstrap.client;
     final canRemote = client != null && _isUuid(projectId) && _isUuid(entryId);
     if (!canRemote) {
-      final items = List<SurveyEntryRecord>.from(_localSurveyEntries[projectId] ?? const []);
+      final items = List<SurveyEntryRecord>.from(
+        _localSurveyEntries[projectId] ?? const [],
+      );
       final index = items.indexWhere((item) => item.id == entryId);
       if (index < 0) {
         return null;
@@ -1664,8 +1858,9 @@ class QuotesRepository {
         quoteId: current.quoteId,
         description: trimmed,
         evidencePaths: nextEvidencePaths,
-        evidencePreviewList:
-            shouldReplaceEvidence ? [for (final input in limitedInputs) input.bytes] : current.evidencePreviewList,
+        evidencePreviewList: shouldReplaceEvidence
+            ? [for (final input in limitedInputs) input.bytes]
+            : current.evidencePreviewList,
         evidenceMetadata: nextEvidenceMeta,
         createdAt: current.createdAt,
       );
@@ -1675,9 +1870,7 @@ class QuotesRepository {
     }
 
     try {
-      final payload = <String, Object?>{
-        'description': _asNullable(trimmed),
-      };
+      final payload = <String, Object?>{'description': _asNullable(trimmed)};
 
       final uploadedPaths = <String>[];
       final uploadedMeta = <Map<String, Object?>>[];
@@ -1687,8 +1880,11 @@ class QuotesRepository {
         for (var index = 0; index < limitedInputs.length; index++) {
           final input = limitedInputs[index];
           final ext = _guessImageExtension(input.originalName);
-          final objectPath = '$projectId/$quoteFolder/${timestamp}_edit_$index.$ext';
-          await client.storage.from('survey-photos').uploadBinary(
+          final objectPath =
+              '$projectId/$quoteFolder/${timestamp}_edit_$index.$ext';
+          await client.storage
+              .from('survey-photos')
+              .uploadBinary(
                 objectPath,
                 input.bytes,
                 fileOptions: const FileOptions(upsert: true),
@@ -1714,12 +1910,16 @@ class QuotesRepository {
           .from('project_survey_entries')
           .update(payload)
           .eq('id', entryId)
-          .select('id, project_id, quote_id, description, evidence_paths, evidence_meta, created_at')
+          .select(
+            'id, project_id, quote_id, description, evidence_paths, evidence_meta, created_at',
+          )
           .single();
 
       if (shouldReplaceEvidence && existingEvidencePaths.isNotEmpty) {
         try {
-          await client.storage.from('survey-photos').remove(existingEvidencePaths);
+          await client.storage
+              .from('survey-photos')
+              .remove(existingEvidencePaths);
         } catch (_) {
           // Best effort cleanup for replaced files.
         }
@@ -1746,7 +1946,8 @@ class QuotesRepository {
                 objectPath: objectPath,
                 originalName: item['original_name'] as String? ?? objectPath,
                 fileSizeBytes: (item['file_size_bytes'] as num?)?.toInt() ?? 0,
-                sortOrder: (item['sort_order'] as num?)?.toInt() ?? updatedMeta.length,
+                sortOrder:
+                    (item['sort_order'] as num?)?.toInt() ?? updatedMeta.length,
                 mimeType: item['mime_type'] as String?,
                 widthPx: (item['width_px'] as num?)?.toInt(),
                 heightPx: (item['height_px'] as num?)?.toInt(),
@@ -1770,7 +1971,10 @@ class QuotesRepository {
         createdAt: _toDateTime(updated['created_at']),
       );
     } catch (error) {
-      AppLogger.error('survey_entry_update_failed', data: {'error': error.toString(), 'entry_id': entryId});
+      AppLogger.error(
+        'survey_entry_update_failed',
+        data: {'error': error.toString(), 'entry_id': entryId},
+      );
       return null;
     }
   }
@@ -1824,7 +2028,10 @@ class QuotesRepository {
       return extractedStructured;
     }
 
-    final clientCode = await _resolveClientCode(projectId: projectId, client: client);
+    final clientCode = await _resolveClientCode(
+      projectId: projectId,
+      client: client,
+    );
     final projectTypeKey = await _resolveProjectTypeKey(
       projectTypeId: projectTypeId,
       client: client,
@@ -1866,7 +2073,8 @@ class QuotesRepository {
 
     final normalizedClientId = (clientId ?? '').trim();
     final normalizedProjectTypeId = (projectTypeId ?? '').trim();
-    final hasStructuredParams = _isUuid(normalizedClientId) && _isUuid(normalizedProjectTypeId);
+    final hasStructuredParams =
+        _isUuid(normalizedClientId) && _isUuid(normalizedProjectTypeId);
 
     try {
       if (hasStructuredParams) {
@@ -1877,7 +2085,8 @@ class QuotesRepository {
             'p_project_type_id': normalizedProjectTypeId,
           },
         );
-        if (structuredResponse is String && structuredResponse.trim().isNotEmpty) {
+        if (structuredResponse is String &&
+            structuredResponse.trim().isNotEmpty) {
           return structuredResponse.trim().toUpperCase();
         }
       }
@@ -1899,7 +2108,9 @@ class QuotesRepository {
       return null;
     }
     String? lastMatch;
-    for (final match in RegExp(r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}').allMatches(normalized)) {
+    for (final match in RegExp(
+      r'RM-[A-Z]{3}[0-9]{2,}-[A-Z]{4}-PRJ[0-9]{4,}',
+    ).allMatches(normalized)) {
       lastMatch = match.group(0);
     }
     return lastMatch;
@@ -1929,7 +2140,11 @@ class QuotesRepository {
     }
 
     try {
-      final projectRow = await client.from('projects').select('client_id').eq('id', projectId).single();
+      final projectRow = await client
+          .from('projects')
+          .select('client_id')
+          .eq('id', projectId)
+          .single();
       final clientId = projectRow['client_id'] as String?;
       if (clientId == null || clientId.isEmpty) {
         return 'CL001';
@@ -1937,7 +2152,9 @@ class QuotesRepository {
 
       // Derive a stable 4-hex code from the UUID — no ordering, no race condition
       final clean = clientId.replaceAll('-', '').toUpperCase();
-      final suffix = clean.length >= 4 ? clean.substring(0, 4) : clean.padLeft(4, '0');
+      final suffix = clean.length >= 4
+          ? clean.substring(0, 4)
+          : clean.padLeft(4, '0');
       return 'CL$suffix';
     } catch (_) {
       return 'CL001';
@@ -1953,7 +2170,11 @@ class QuotesRepository {
     }
 
     try {
-      final row = await client.from('project_types').select('name').eq('id', projectTypeId).single();
+      final row = await client
+          .from('project_types')
+          .select('name')
+          .eq('id', projectTypeId)
+          .single();
       return _projectTypeKeyFromRaw(row['name'] as String? ?? projectTypeId);
     } catch (_) {
       return _projectTypeKeyFromRaw(projectTypeId);
@@ -2009,7 +2230,9 @@ class QuotesRepository {
         items.add(_actaPhotoMetaFromMap(item));
       } else if (item is Map) {
         items.add(
-          _actaPhotoMetaFromMap(item.map((key, value) => MapEntry('$key', value))),
+          _actaPhotoMetaFromMap(
+            item.map((key, value) => MapEntry('$key', value)),
+          ),
         );
       }
     }
@@ -2032,7 +2255,9 @@ class QuotesRepository {
     if (extractedStructured != null) {
       return extractedStructured;
     }
-    final digits = RegExp(r'\d+').allMatches(source).map((m) => m.group(0)!).join();
+    final digits = RegExp(
+      r'\d+',
+    ).allMatches(source).map((m) => m.group(0)!).join();
     if (digits.isNotEmpty) {
       return 'PRJ${digits.padLeft(3, '0').substring(digits.length > 3 ? digits.length - 3 : 0)}';
     }
@@ -2041,7 +2266,9 @@ class QuotesRepository {
 
   String _fallbackProjectCode(String projectId) {
     final clean = projectId.replaceAll('-', '');
-    final tail = clean.length >= 3 ? clean.substring(clean.length - 3) : clean.padLeft(3, '0');
+    final tail = clean.length >= 3
+        ? clean.substring(clean.length - 3)
+        : clean.padLeft(3, '0');
     return 'PRJ${tail.toUpperCase()}';
   }
 
