@@ -132366,9 +132366,9 @@ break
 case 6:case 1:return A.p(q,r)
 case 2:return A.o(o.at(-1),r)}})
 return A.q($async$CK,r)},
-aLR(a,b){var s,r=A.X("(?im)^\\s*facturado\\s*a\\s*:\\s*.*$",!0,!1,!1),q=A.ar(a,r,"Facturado a: {razon_social_del_cliente}")
-r=A.X("(?im)^\\s*facturado\\s*a\\s*:",!0,!1,!1)
-if(!r.b.test(q)){s=A.X("(?im)^\\s*confirmado\\s+con\\s+el\\s+pedido[^\\n]*$",!0,!1,!1).fT(q)
+aLR(a,b){var s,r=A.X("^\\s*facturado\\s*a\\s*:\\s*.*$",!1,!0,!1),q=A.ar(a,r,"Facturado a: {razon_social_del_cliente}")
+r=A.X("^\\s*facturado\\s*a\\s*:",!1,!0,!1)
+if(!r.b.test(q)){s=A.X("^\\s*confirmado\\s+con\\s+el\\s+pedido[^\\n]*$",!1,!0,!1).fT(q)
 if(s!=null){r=s.b[0]
 r.toString
 q=B.f.qU(q,r,r+"\nFacturado a: {razon_social_del_cliente}")}}return A.akO(q,A.X("\\{[^{}]+\\}",!0,!1,!1),new A.aPj(b),null)},
