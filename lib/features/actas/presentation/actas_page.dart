@@ -1869,14 +1869,24 @@ class _ActasPageState extends ConsumerState<ActasPage> {
 
     // Normaliza cualquier variante legacy para forzar razon social en facturacion.
     normalizedTemplate = normalizedTemplate.replaceAll(
-      RegExp(r'(?im)^\s*facturado\s*a\s*:\s*.*$'),
+      RegExp(
+        r'^\s*facturado\s*a\s*:\s*.*$',
+        caseSensitive: false,
+        multiLine: true,
+      ),
       'Facturado a: {razon_social_del_cliente}',
     );
 
     // Si la linea no existe en una plantilla vieja, se inserta junto al bloque de pedido.
-    if (!RegExp(r'(?im)^\s*facturado\s*a\s*:').hasMatch(normalizedTemplate)) {
+    if (!RegExp(
+      r'^\s*facturado\s*a\s*:',
+      caseSensitive: false,
+      multiLine: true,
+    ).hasMatch(normalizedTemplate)) {
       final confirmedMatch = RegExp(
-        r'(?im)^\s*confirmado\s+con\s+el\s+pedido[^\n]*$',
+        r'^\s*confirmado\s+con\s+el\s+pedido[^\n]*$',
+        caseSensitive: false,
+        multiLine: true,
       ).firstMatch(normalizedTemplate);
       if (confirmedMatch != null) {
         final line = confirmedMatch.group(0)!;
